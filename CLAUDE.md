@@ -17,6 +17,7 @@ A 2D arcade survival game built with Godot 4.5+. Player avoids enemy entities to
 ├── enemy.tscn/gd      # Enemy entity - AI pathfinding
 ├── powerup.tscn/gd    # Power-up collectibles
 ├── projectile.tscn/gd # Player projectiles
+├── obstacle.tscn      # Static obstacles
 └── icon.svg           # Project icon
 ```
 
@@ -68,6 +69,7 @@ add_child(enemy)
 - Player starts with 3 lives
 - WASD to shoot projectiles in four directions (0.3s cooldown)
 - Projectiles destroy enemies on contact
+- Gray obstacles block player and enemy movement
 - Multiple enemy types with different behaviors
 - Score +10 per second
 - Enemy spawn rate increases with score
