@@ -4,10 +4,14 @@ signal hit
 
 @export var speed: float = 300.0
 @export var boosted_speed: float = 500.0
+@export var shoot_cooldown: float = 0.3
 var is_hit: bool = false
 var is_invincible: bool = false
 var is_speed_boosted: bool = false
 var base_color: Color = Color(0.2, 0.6, 1, 1)
+var can_shoot: bool = true
+
+var projectile_scene: PackedScene = preload("res://projectile.tscn")
 
 @onready var color_rect: ColorRect = $ColorRect
 
@@ -32,6 +36,31 @@ func _physics_process(delta: float) -> void:
 	var current_speed = boosted_speed if is_speed_boosted else speed
 	velocity = direction * current_speed
 	move_and_slide()
+
+	# Shooting with WASD
+	if can_shoot:
+		var shoot_dir := Vector2.ZERO
+		if Input.is_action_just_pressed("shoot_up"):
+			shoot_dir = Vector2.UP
+		elif Input.is_action_just_pressed("shoot_down"):
+			shoot_dir = Vector2.DOWN
+		elif Input.is_action_just_pressed("shoot_left"):
+			shoot_dir = Vector2.LEFT
+		elif Input.is_action_just_pressed("shoot_right"):
+			shoot_dir = Vector2.RIGHT
+
+		if shoot_dir != Vector2.ZERO:
+			shoot(shoot_dir)
+
+func shoot(direction: Vector2) -> void:
+	var projectile = projectile_scene.instantiate()
+	projectile.position = global_position
+	projectile.direction = direction
+	get_parent().add_child(projectile)
+
+	can_shoot = false
+	await get_tree().create_timer(shoot_cooldown).timeout
+	can_shoot = true
 
 	# Check collisions after movement
 	for i in get_slide_collision_count():
