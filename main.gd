@@ -23,6 +23,10 @@ enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
 const POWERUP_DURATION: float = 5.0
 const SLOW_MULTIPLIER: float = 0.5
 const RESPAWN_INVINCIBILITY: float = 2.0
+
+# Power-up timer tracking
+var slow_enemies_time: float = 0.0
+var powerup_timers: Dictionary = {}
 const MAX_HIGH_SCORES: int = 5
 const SAVE_PATH: String = "user://highscores.save"
 
@@ -44,6 +48,7 @@ const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxe
 @onready var lives_label: Label = $CanvasLayer/UI/LivesLabel
 @onready var game_over_label: Label = $CanvasLayer/UI/GameOverLabel
 @onready var powerup_label: Label = $CanvasLayer/UI/PowerUpLabel
+@onready var powerup_timer_label: Label = $CanvasLayer/UI/PowerUpTimerLabel
 @onready var scoreboard_label: Label = $CanvasLayer/UI/ScoreboardLabel
 @onready var name_entry: LineEdit = $CanvasLayer/UI/NameEntry
 @onready var name_prompt: Label = $CanvasLayer/UI/NamePrompt
@@ -54,8 +59,10 @@ func _ready() -> void:
 	get_tree().paused = false
 	player.hit.connect(_on_player_hit)
 	player.enemy_killed.connect(_on_enemy_killed)
+	player.powerup_timer_updated.connect(_on_powerup_timer_updated)
 	game_over_label.visible = false
 	powerup_label.visible = false
+	powerup_timer_label.visible = false
 	name_entry.visible = false
 	name_prompt.visible = false
 	load_high_scores()
@@ -75,6 +82,15 @@ func _process(delta: float) -> void:
 
 	score += delta * 10
 	score_label.text = "Score: %d" % int(score)
+
+	# Update slow enemies timer
+	if slow_enemies_time > 0:
+		slow_enemies_time -= delta
+		powerup_timers["SLOW"] = slow_enemies_time
+		if slow_enemies_time <= 0:
+			end_slow_enemies()
+
+	update_powerup_timer_display()
 
 	if score >= next_spawn_score:
 		spawn_enemy()
@@ -197,15 +213,41 @@ func show_powerup_message(type: String) -> void:
 	await get_tree().create_timer(2.0).timeout
 	powerup_label.visible = false
 
+func _on_powerup_timer_updated(powerup_type: String, time_left: float) -> void:
+	if time_left > 0:
+		powerup_timers[powerup_type] = time_left
+	else:
+		powerup_timers.erase(powerup_type)
+
+func update_powerup_timer_display() -> void:
+	var display_lines: Array = []
+
+	if powerup_timers.has("SPEED") and powerup_timers["SPEED"] > 0:
+		display_lines.append("SPEED: %.1fs" % powerup_timers["SPEED"])
+	if powerup_timers.has("INVINCIBLE") and powerup_timers["INVINCIBLE"] > 0:
+		display_lines.append("INVINCIBLE: %.1fs" % powerup_timers["INVINCIBLE"])
+	if powerup_timers.has("SLOW") and powerup_timers["SLOW"] > 0:
+		display_lines.append("SLOW: %.1fs" % powerup_timers["SLOW"])
+
+	if display_lines.size() > 0:
+		powerup_timer_label.text = "\n".join(display_lines)
+		powerup_timer_label.visible = true
+	else:
+		powerup_timer_label.visible = false
+
 func activate_slow_enemies() -> void:
+	# If already active, just reset the timer
+	if slow_enemies_time <= 0:
+		var enemies = get_tree().get_nodes_in_group("enemy")
+		for enemy in enemies:
+			enemy.speed *= SLOW_MULTIPLIER
+	slow_enemies_time = POWERUP_DURATION
+	powerup_timers["SLOW"] = slow_enemies_time
+
+func end_slow_enemies() -> void:
+	slow_enemies_time = 0.0
+	powerup_timers.erase("SLOW")
 	var enemies = get_tree().get_nodes_in_group("enemy")
-	for enemy in enemies:
-		enemy.speed *= SLOW_MULTIPLIER
-
-	await get_tree().create_timer(POWERUP_DURATION).timeout
-
-	# Restore enemy speeds
-	enemies = get_tree().get_nodes_in_group("enemy")
 	for enemy in enemies:
 		enemy.speed /= SLOW_MULTIPLIER
 

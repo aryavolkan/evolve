@@ -2,6 +2,7 @@ extends CharacterBody2D
 
 signal hit
 signal enemy_killed(pos: Vector2, points: int)
+signal powerup_timer_updated(powerup_type: String, time_left: float)
 
 @export var speed: float = 300.0
 @export var boosted_speed: float = 500.0
@@ -11,13 +12,26 @@ var is_invincible: bool = false
 var is_speed_boosted: bool = false
 var can_shoot: bool = true
 
+# Power-up timers
+var speed_boost_time: float = 0.0
+var invincibility_time: float = 0.0
+
 var projectile_scene: PackedScene = preload("res://projectile.tscn")
 
 @onready var sprite: Sprite2D = $Sprite2D
+@onready var speed_particles: CPUParticles2D = $SpeedParticles
+@onready var invincibility_particles: CPUParticles2D = $InvincibilityParticles
+
+func _ready() -> void:
+	speed_particles.emitting = false
+	invincibility_particles.emitting = false
 
 func _physics_process(delta: float) -> void:
 	if is_hit:
 		return
+
+	# Update power-up timers
+	update_powerup_timers(delta)
 
 	var direction := Vector2.ZERO
 
@@ -51,6 +65,19 @@ func _physics_process(delta: float) -> void:
 
 		if shoot_dir != Vector2.ZERO:
 			shoot(shoot_dir)
+
+func update_powerup_timers(delta: float) -> void:
+	if speed_boost_time > 0:
+		speed_boost_time -= delta
+		powerup_timer_updated.emit("SPEED", speed_boost_time)
+		if speed_boost_time <= 0:
+			end_speed_boost()
+
+	if invincibility_time > 0:
+		invincibility_time -= delta
+		powerup_timer_updated.emit("INVINCIBLE", invincibility_time)
+		if invincibility_time <= 0:
+			end_invincibility()
 
 func shoot(direction: Vector2) -> void:
 	var projectile = projectile_scene.instantiate()
@@ -87,17 +114,29 @@ func _trigger_hit() -> void:
 
 func activate_speed_boost(duration: float) -> void:
 	is_speed_boosted = true
+	speed_boost_time = duration
 	sprite.modulate = Color(0.5, 1, 0.8, 1)  # Cyan-green tint
-	await get_tree().create_timer(duration).timeout
+	speed_particles.emitting = true
+
+func end_speed_boost() -> void:
 	is_speed_boosted = false
+	speed_boost_time = 0.0
+	speed_particles.emitting = false
+	powerup_timer_updated.emit("SPEED", 0.0)
 	if not is_invincible:
 		sprite.modulate = Color(1, 1, 1, 1)
 
 func activate_invincibility(duration: float) -> void:
 	is_invincible = true
+	invincibility_time = duration
 	sprite.modulate = Color(1, 0.9, 0.3, 1)  # Gold tint
-	await get_tree().create_timer(duration).timeout
+	invincibility_particles.emitting = true
+
+func end_invincibility() -> void:
 	is_invincible = false
+	invincibility_time = 0.0
+	invincibility_particles.emitting = false
+	powerup_timer_updated.emit("INVINCIBLE", 0.0)
 	if not is_speed_boosted:
 		sprite.modulate = Color(1, 1, 1, 1)
 
@@ -105,3 +144,9 @@ func respawn(pos: Vector2, invincibility_duration: float) -> void:
 	position = pos
 	is_hit = false
 	activate_invincibility(invincibility_duration)
+
+func get_active_powerups() -> Dictionary:
+	return {
+		"SPEED": speed_boost_time,
+		"INVINCIBLE": invincibility_time
+	}
