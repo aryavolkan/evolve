@@ -10,6 +10,13 @@ var powerup_scene: PackedScene = preload("res://powerup.tscn")
 const POWERUP_DURATION: float = 5.0
 const SLOW_MULTIPLIER: float = 0.5
 
+# Difficulty scaling
+const BASE_ENEMY_SPEED: float = 150.0
+const MAX_ENEMY_SPEED: float = 300.0
+const BASE_SPAWN_INTERVAL: float = 50.0
+const MIN_SPAWN_INTERVAL: float = 20.0
+const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxed
+
 @onready var score_label: Label = $CanvasLayer/UI/ScoreLabel
 @onready var game_over_label: Label = $CanvasLayer/UI/GameOverLabel
 @onready var powerup_label: Label = $CanvasLayer/UI/PowerUpLabel
@@ -33,14 +40,27 @@ func _process(delta: float) -> void:
 
 	if score >= next_spawn_score:
 		spawn_enemy()
-		next_spawn_score += 50.0
+		var spawn_interval = get_scaled_spawn_interval()
+		next_spawn_score += spawn_interval
 
 	if score >= next_powerup_score:
 		spawn_powerup()
 		next_powerup_score += 40.0
 
+func get_difficulty_factor() -> float:
+	return clampf(score / DIFFICULTY_SCALE_SCORE, 0.0, 1.0)
+
+func get_scaled_enemy_speed() -> float:
+	var factor = get_difficulty_factor()
+	return lerpf(BASE_ENEMY_SPEED, MAX_ENEMY_SPEED, factor)
+
+func get_scaled_spawn_interval() -> float:
+	var factor = get_difficulty_factor()
+	return lerpf(BASE_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, factor)
+
 func spawn_enemy() -> void:
 	var enemy = enemy_scene.instantiate()
+	enemy.speed = get_scaled_enemy_speed()
 
 	# Spawn at random edge position
 	var side = randi() % 4

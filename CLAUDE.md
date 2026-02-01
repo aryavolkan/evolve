@@ -64,11 +64,22 @@ add_child(enemy)
 ## Game Mechanics
 
 - Player (blue, 40x40) moves with arrow keys at speed 300
-- Enemies (red, 30x30) chase player at speed 150
+- Enemies (red, 30x30) chase player, speed scales with difficulty
 - Score +10 per second
-- New enemy spawns every 50 points at random screen edge
+- Enemy spawn rate increases with score
 - Power-up spawns every 40 points at random position
 - Collision = game over, SPACE to restart
+
+## Difficulty Scaling
+
+Difficulty increases linearly from score 0 to 500, then maxes out:
+
+| Metric | Start | Max (500+ pts) |
+|--------|-------|----------------|
+| Enemy speed | 150 | 300 |
+| Spawn interval | 50 pts | 20 pts |
+
+Scaling uses linear interpolation: `lerp(base, max, score / 500)`
 
 ## Power-Up System
 

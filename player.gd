@@ -38,11 +38,17 @@ func _physics_process(delta: float) -> void:
 		var collision = get_slide_collision(i)
 		var collider = collision.get_collider()
 		if collider.is_in_group("enemy"):
-			_trigger_hit()
+			on_enemy_collision(collider)
 			return
 
+func on_enemy_collision(enemy: Node) -> void:
+	if is_invincible:
+		enemy.queue_free()
+		return
+	_trigger_hit()
+
 func _trigger_hit() -> void:
-	if is_hit or is_invincible:
+	if is_hit:
 		return
 	is_hit = true
 	hit.emit()

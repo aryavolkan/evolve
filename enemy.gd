@@ -19,5 +19,5 @@ func _physics_process(delta: float) -> void:
 		var collision = get_slide_collision(i)
 		var collider = collision.get_collider()
 		if collider.is_in_group("player"):
-			player.hit.emit()
+			player.on_enemy_collision(self)
 			return
