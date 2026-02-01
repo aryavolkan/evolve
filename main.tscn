@@ -40,6 +40,21 @@ offset_bottom = 50.0
 theme_override_font_sizes/font_size = 24
 text = "Score: 0"
 
+[node name="PowerUpLabel" type="Label" parent="CanvasLayer/UI"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -150.0
+offset_top = 60.0
+offset_right = 150.0
+offset_bottom = 100.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0, 1, 0.5, 1)
+theme_override_font_sizes/font_size = 32
+text = "POWER UP!"
+horizontal_alignment = 1
+
 [node name="GameOverLabel" type="Label" parent="CanvasLayer/UI"]
 layout_mode = 1
 anchors_preset = 8

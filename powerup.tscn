@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3 uid="uid://cpowerup1234"]
+
+[ext_resource type="Script" path="res://powerup.gd" id="1_powerup"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_powerup"]
+size = Vector2(25, 25)
+
+[node name="PowerUp" type="Area2D"]
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("1_powerup")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+offset_left = -12.5
+offset_top = -12.5
+offset_right = 12.5
+offset_bottom = 12.5
+color = Color(0, 1, 0.5, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_powerup")
