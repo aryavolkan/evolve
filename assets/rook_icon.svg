@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Black border -->
+  <rect x="2" y="2" width="60" height="60" rx="4" fill="#1a1a1a"/>
+  <!-- Dark red body -->
+  <rect x="5" y="5" width="54" height="54" rx="3" fill="#992222"/>
+  <!-- Rook castle shape -->
+  <!-- Battlements -->
+  <rect x="14" y="10" width="8" height="10" fill="#cc3333"/>
+  <rect x="28" y="10" width="8" height="10" fill="#cc3333"/>
+  <rect x="42" y="10" width="8" height="10" fill="#cc3333"/>
+  <!-- Body -->
+  <rect x="16" y="18" width="32" height="8" fill="#cc3333"/>
+  <path d="M18 26 L20 42 L18 52 L46 52 L44 42 L46 26 Z" fill="#cc3333"/>
+  <!-- Base -->
+  <rect x="14" y="50" width="36" height="8" rx="2" fill="#cc3333"/>
+  <!-- Window -->
+  <rect x="28" y="32" width="8" height="12" rx="1" fill="#881111"/>
+</svg>

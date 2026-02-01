@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Black border -->
+  <rect x="2" y="2" width="60" height="60" rx="4" fill="#1a1a1a"/>
+  <!-- Dark red body -->
+  <rect x="5" y="5" width="54" height="54" rx="3" fill="#992222"/>
+  <!-- Pawn shape -->
+  <ellipse cx="32" cy="18" rx="10" ry="10" fill="#cc3333"/>
+  <path d="M22 28 L22 42 L18 52 L46 52 L42 42 L42 28 Z" fill="#cc3333"/>
+  <rect x="16" y="50" width="32" height="8" rx="2" fill="#cc3333"/>
+  <!-- Highlight -->
+  <ellipse cx="30" cy="15" rx="4" ry="4" fill="#ff6666" opacity="0.5"/>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Black border -->
+  <rect x="2" y="2" width="60" height="60" rx="4" fill="#1a1a1a"/>
+  <!-- Dark red body -->
+  <rect x="5" y="5" width="54" height="54" rx="3" fill="#992222"/>
+  <!-- Crown points -->
+  <ellipse cx="12" cy="14" rx="4" ry="4" fill="#cc3333"/>
+  <ellipse cx="24" cy="10" rx="4" ry="4" fill="#cc3333"/>
+  <ellipse cx="32" cy="8" rx="5" ry="5" fill="#cc3333"/>
+  <ellipse cx="40" cy="10" rx="4" ry="4" fill="#cc3333"/>
+  <ellipse cx="52" cy="14" rx="4" ry="4" fill="#cc3333"/>
+  <!-- Crown base -->
+  <path d="M12 16 L14 32 L16 42 L14 52 L50 52 L48 42 L50 32 L52 16 L40 22 L32 18 L24 22 Z" fill="#cc3333"/>
+  <!-- Crown jewels -->
+  <ellipse cx="32" cy="8" rx="2" ry="2" fill="#ffcc00"/>
+  <ellipse cx="24" cy="10" rx="1.5" ry="1.5" fill="#ffcc00"/>
+  <ellipse cx="40" cy="10" rx="1.5" ry="1.5" fill="#ffcc00"/>
+  <!-- Base -->
+  <rect x="12" y="50" width="40" height="8" rx="2" fill="#cc3333"/>
+</svg>

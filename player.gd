@@ -13,7 +13,7 @@ var can_shoot: bool = true
 
 var projectile_scene: PackedScene = preload("res://projectile.tscn")
 
-@onready var color_rect: ColorRect = $ColorRect
+@onready var sprite: Sprite2D = $Sprite2D
 
 func _physics_process(delta: float) -> void:
 	if is_hit:
@@ -87,19 +87,19 @@ func _trigger_hit() -> void:
 
 func activate_speed_boost(duration: float) -> void:
 	is_speed_boosted = true
-	color_rect.modulate = Color(0.5, 1, 0.8, 1)  # Cyan-green tint
+	sprite.modulate = Color(0.5, 1, 0.8, 1)  # Cyan-green tint
 	await get_tree().create_timer(duration).timeout
 	is_speed_boosted = false
 	if not is_invincible:
-		color_rect.modulate = Color(1, 1, 1, 1)
+		sprite.modulate = Color(1, 1, 1, 1)
 
 func activate_invincibility(duration: float) -> void:
 	is_invincible = true
-	color_rect.modulate = Color(1, 0.9, 0.3, 1)  # Gold tint
+	sprite.modulate = Color(1, 0.9, 0.3, 1)  # Gold tint
 	await get_tree().create_timer(duration).timeout
 	is_invincible = false
 	if not is_speed_boosted:
-		color_rect.modulate = Color(1, 1, 1, 1)
+		sprite.modulate = Color(1, 1, 1, 1)
 
 func respawn(pos: Vector2, invincibility_duration: float) -> void:
 	position = pos

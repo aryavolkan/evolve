@@ -18,13 +18,13 @@ var move_start: Vector2
 var move_progress: float = 0.0
 const MOVE_DURATION: float = 0.3
 
-# Chess piece symbols (letters)
-const PIECE_SYMBOLS = {
-	Type.PAWN: "P",
-	Type.KNIGHT: "N",
-	Type.BISHOP: "B",
-	Type.ROOK: "R",
-	Type.QUEEN: "Q"
+# Chess piece textures
+var PIECE_TEXTURES = {
+	Type.PAWN: preload("res://assets/pawn_icon.svg"),
+	Type.KNIGHT: preload("res://assets/knight_icon.svg"),
+	Type.BISHOP: preload("res://assets/bishop_icon.svg"),
+	Type.ROOK: preload("res://assets/rook_icon.svg"),
+	Type.QUEEN: preload("res://assets/queen_icon.svg")
 }
 
 # Chess piece config: points, size, speed multiplier, move cooldown
@@ -49,35 +49,16 @@ func apply_type_config() -> void:
 	move_cooldown = config["cooldown"]
 	speed *= config["speed_mult"]
 
-	var half_size = config["size"] / 2.0
-	var border_half = half_size + 2.0
-
 	# Update collision shape (duplicate to avoid sharing between instances)
 	var new_shape = RectangleShape2D.new()
 	new_shape.size = Vector2(config["size"], config["size"])
 	$CollisionShape2D.shape = new_shape
 
-	# Update border (black background for chess piece)
-	$Border.offset_left = -border_half
-	$Border.offset_top = -border_half
-	$Border.offset_right = border_half
-	$Border.offset_bottom = border_half
-	$Border.color = Color(0.1, 0.1, 0.1, 1)
-
-	# Update inner rect (dark red for enemy pieces)
-	$ColorRect.offset_left = -half_size
-	$ColorRect.offset_top = -half_size
-	$ColorRect.offset_right = half_size
-	$ColorRect.offset_bottom = half_size
-	$ColorRect.color = Color(0.6, 0.15, 0.15, 1)
-
-	# Update symbol label
-	$Symbol.text = PIECE_SYMBOLS[type]
-	$Symbol.add_theme_font_size_override("font_size", int(config["size"] * 0.85))
-	$Symbol.offset_left = -half_size
-	$Symbol.offset_top = -half_size
-	$Symbol.offset_right = half_size
-	$Symbol.offset_bottom = half_size
+	# Update sprite texture and scale
+	$Sprite2D.texture = PIECE_TEXTURES[type]
+	var texture_size = $Sprite2D.texture.get_size()
+	var target_scale = config["size"] / texture_size.x
+	$Sprite2D.scale = Vector2(target_scale, target_scale)
 
 func _physics_process(delta: float) -> void:
 	if not player:
