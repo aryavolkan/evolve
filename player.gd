@@ -9,7 +9,6 @@ signal enemy_killed(pos: Vector2, points: int)
 var is_hit: bool = false
 var is_invincible: bool = false
 var is_speed_boosted: bool = false
-var base_color: Color = Color(0.2, 0.6, 1, 1)
 var can_shoot: bool = true
 
 var projectile_scene: PackedScene = preload("res://projectile.tscn")
@@ -88,19 +87,19 @@ func _trigger_hit() -> void:
 
 func activate_speed_boost(duration: float) -> void:
 	is_speed_boosted = true
-	color_rect.color = Color(0, 1, 0.5, 1)  # Cyan-green
+	color_rect.modulate = Color(0.5, 1, 0.8, 1)  # Cyan-green tint
 	await get_tree().create_timer(duration).timeout
 	is_speed_boosted = false
 	if not is_invincible:
-		color_rect.color = base_color
+		color_rect.modulate = Color(1, 1, 1, 1)
 
 func activate_invincibility(duration: float) -> void:
 	is_invincible = true
-	color_rect.color = Color(1, 0.8, 0, 1)  # Gold
+	color_rect.modulate = Color(1, 0.9, 0.3, 1)  # Gold tint
 	await get_tree().create_timer(duration).timeout
 	is_invincible = false
 	if not is_speed_boosted:
-		color_rect.color = base_color
+		color_rect.modulate = Color(1, 1, 1, 1)
 
 func respawn(pos: Vector2, invincibility_duration: float) -> void:
 	position = pos

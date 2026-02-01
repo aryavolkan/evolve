@@ -18,13 +18,13 @@ var move_start: Vector2
 var move_progress: float = 0.0
 const MOVE_DURATION: float = 0.3
 
-# Chess piece symbols (Unicode)
+# Chess piece symbols (letters)
 const PIECE_SYMBOLS = {
-	Type.PAWN: "♟",
-	Type.KNIGHT: "♞",
-	Type.BISHOP: "♝",
-	Type.ROOK: "♜",
-	Type.QUEEN: "♛"
+	Type.PAWN: "P",
+	Type.KNIGHT: "N",
+	Type.BISHOP: "B",
+	Type.ROOK: "R",
+	Type.QUEEN: "Q"
 }
 
 # Chess piece config: points, size, speed multiplier, move cooldown
