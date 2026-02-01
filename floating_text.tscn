@@ -1,0 +1,16 @@
+[gd_scene load_steps=2 format=3 uid="uid://cfloatingtext1"]
+
+[ext_resource type="Script" path="res://floating_text.gd" id="1_floating"]
+
+[node name="FloatingText" type="Node2D"]
+script = ExtResource("1_floating")
+
+[node name="Label" type="Label" parent="."]
+offset_left = -50.0
+offset_top = -15.0
+offset_right = 50.0
+offset_bottom = 15.0
+theme_override_font_sizes/font_size = 20
+text = "+10"
+horizontal_alignment = 1
+vertical_alignment = 1

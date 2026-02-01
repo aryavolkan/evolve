@@ -69,7 +69,8 @@ add_child(enemy)
 - Player starts with 3 lives
 - WASD to shoot projectiles in four directions (0.3s cooldown)
 - Projectiles destroy enemies on contact
-- Gray obstacles block player and enemy movement
+- Camera follows player (infinite world)
+- Gray obstacles procedurally generated around player
 - Multiple enemy types with different behaviors
 - Score +10 per second
 - Enemy spawn rate increases with score
@@ -77,16 +78,27 @@ add_child(enemy)
 - Collision = lose a life, respawn at center with 2s invincibility
 - Game over when lives reach 0, SPACE to restart
 
-## Enemy Types
+## Chess Piece Enemies
 
-| Type | Color | Size | Speed | Movement Pattern |
-|------|-------|------|-------|------------------|
-| Chaser | Red | 30 | 1.0x | Direct pursuit, always homes on player |
-| Speedster | Orange | 20 | 1.8x | Dash behavior: fast bursts with brief pauses |
-| Tank | Dark red | 45 | 0.5x | Slow turning, can't change direction quickly |
-| Zigzag | Magenta | 25 | 1.1x | Erratic side-to-side while pursuing |
+Enemies are chess pieces with chess-like movement patterns and standard chess point values:
 
-Enemy variety increases with difficulty - more special types spawn at higher scores.
+| Piece | Symbol | Points | Size | Movement Pattern |
+|-------|--------|--------|------|------------------|
+| Pawn | ♟ | 1 | 28 | One tile toward player (straight lines) |
+| Knight | ♞ | 3 | 32 | L-shaped jumps (2+1 tiles), hops over obstacles |
+| Bishop | ♝ | 3 | 32 | Diagonal movement (1-2 tiles) |
+| Rook | ♜ | 5 | 36 | Straight lines (1-3 tiles horizontal/vertical) |
+| Queen | ♛ | 9 | 40 | Combines bishop and rook movement |
+
+**Movement System:**
+- Pieces move on a virtual 50px grid
+- Each piece waits between moves (cooldown varies by type)
+- Movement is animated with smooth interpolation
+- Knights have a hop animation when moving
+
+**Spawn Weights:**
+- Early game: Mostly pawns
+- Higher difficulty: More knights, bishops, rooks, and rare queens
 
 ## Difficulty Scaling
 

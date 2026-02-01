@@ -1,103 +1,114 @@
 extends CharacterBody2D
 
-enum Type { CHASER, SPEEDSTER, TANK, ZIGZAG }
+# Chess piece types with their point values
+enum Type { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
 
 @export var speed: float = 150.0
-@export var type: Type = Type.CHASER
+@export var type: Type = Type.PAWN
 
 var player: CharacterBody2D
+var point_value: int = 1
 
-# Zigzag state
-var zigzag_timer: float = 0.0
-var zigzag_direction: float = 1.0
+# Movement state
+var move_timer: float = 0.0
+var move_cooldown: float = 0.8
+var is_moving: bool = false
+var move_target: Vector2
+var move_start: Vector2
+var move_progress: float = 0.0
+const MOVE_DURATION: float = 0.3
 
-# Speedster state (dash behavior)
-var dash_timer: float = 0.0
-var is_dashing: bool = true
-const DASH_DURATION: float = 0.8
-const PAUSE_DURATION: float = 0.3
-
-# Tank state (slow turning)
-var current_direction: Vector2 = Vector2.ZERO
-const TANK_TURN_SPEED: float = 1.5  # Radians per second
-
-const TYPE_CONFIG = {
-	Type.CHASER: { "color": Color(0.9, 0.2, 0.2, 1), "size": 30.0, "speed_mult": 1.0 },
-	Type.SPEEDSTER: { "color": Color(1.0, 0.5, 0.0, 1), "size": 20.0, "speed_mult": 1.8 },
-	Type.TANK: { "color": Color(0.5, 0.1, 0.1, 1), "size": 45.0, "speed_mult": 0.5 },
-	Type.ZIGZAG: { "color": Color(0.9, 0.2, 0.9, 1), "size": 25.0, "speed_mult": 1.1 }
+# Chess piece symbols (Unicode)
+const PIECE_SYMBOLS = {
+	Type.PAWN: "♟",
+	Type.KNIGHT: "♞",
+	Type.BISHOP: "♝",
+	Type.ROOK: "♜",
+	Type.QUEEN: "♛"
 }
+
+# Chess piece config: points, size, speed multiplier, move cooldown
+const TYPE_CONFIG = {
+	Type.PAWN: { "points": 1, "size": 28.0, "speed_mult": 1.0, "cooldown": 1.0 },
+	Type.KNIGHT: { "points": 3, "size": 32.0, "speed_mult": 1.2, "cooldown": 1.2 },
+	Type.BISHOP: { "points": 3, "size": 32.0, "speed_mult": 1.3, "cooldown": 0.9 },
+	Type.ROOK: { "points": 5, "size": 36.0, "speed_mult": 1.1, "cooldown": 1.1 },
+	Type.QUEEN: { "points": 9, "size": 40.0, "speed_mult": 1.4, "cooldown": 0.7 }
+}
+
+const TILE_SIZE: float = 50.0  # Virtual grid size for chess-like movement
 
 func _ready() -> void:
 	player = get_tree().get_first_node_in_group("player")
 	apply_type_config()
+	move_timer = randf() * move_cooldown  # Stagger initial moves
 
 func apply_type_config() -> void:
 	var config = TYPE_CONFIG[type]
-	$ColorRect.color = config["color"]
+	point_value = config["points"]
+	move_cooldown = config["cooldown"]
+	speed *= config["speed_mult"]
+
 	var half_size = config["size"] / 2.0
 	var border_half = half_size + 2.0
+
+	# Update collision shape (duplicate to avoid sharing between instances)
+	var new_shape = RectangleShape2D.new()
+	new_shape.size = Vector2(config["size"], config["size"])
+	$CollisionShape2D.shape = new_shape
+
+	# Update border (black background for chess piece)
 	$Border.offset_left = -border_half
 	$Border.offset_top = -border_half
 	$Border.offset_right = border_half
 	$Border.offset_bottom = border_half
+	$Border.color = Color(0.1, 0.1, 0.1, 1)
+
+	# Update inner rect (dark red for enemy pieces)
 	$ColorRect.offset_left = -half_size
 	$ColorRect.offset_top = -half_size
 	$ColorRect.offset_right = half_size
 	$ColorRect.offset_bottom = half_size
-	$CollisionShape2D.shape.size = Vector2(config["size"], config["size"])
-	speed *= config["speed_mult"]
+	$ColorRect.color = Color(0.6, 0.15, 0.15, 1)
+
+	# Update symbol label
+	$Symbol.text = PIECE_SYMBOLS[type]
+	$Symbol.add_theme_font_size_override("font_size", int(config["size"] * 0.85))
+	$Symbol.offset_left = -half_size
+	$Symbol.offset_top = -half_size
+	$Symbol.offset_right = half_size
+	$Symbol.offset_bottom = half_size
 
 func _physics_process(delta: float) -> void:
 	if not player:
 		return
 
-	var target_direction = (player.global_position - global_position).normalized()
-	var final_velocity: Vector2
+	if is_moving:
+		# Animate the move
+		move_progress += delta / MOVE_DURATION
+		if move_progress >= 1.0:
+			position = move_target
+			is_moving = false
+			move_progress = 0.0
+		else:
+			# Smooth interpolation with slight arc for knight
+			var t = ease(move_progress, 0.5)  # Ease in-out
+			position = move_start.lerp(move_target, t)
+			if type == Type.KNIGHT:
+				# Add a hop effect for knight
+				var hop_height = 20.0 * sin(move_progress * PI)
+				position.y -= hop_height
+	else:
+		# Wait for next move
+		move_timer += delta
+		if move_timer >= move_cooldown:
+			move_timer = 0.0
+			calculate_next_move()
 
-	# Apply movement pattern based on type
-	match type:
-		Type.CHASER:
-			# Direct pursuit - always moves toward player
-			final_velocity = target_direction * speed
-
-		Type.SPEEDSTER:
-			# Dash behavior - bursts of speed with pauses
-			dash_timer += delta
-			if is_dashing:
-				if dash_timer >= DASH_DURATION:
-					dash_timer = 0.0
-					is_dashing = false
-				final_velocity = target_direction * speed
-			else:
-				if dash_timer >= PAUSE_DURATION:
-					dash_timer = 0.0
-					is_dashing = true
-				final_velocity = target_direction * speed * 0.2  # Slow down during pause
-
-		Type.TANK:
-			# Slow turning - can't change direction quickly
-			if current_direction == Vector2.ZERO:
-				current_direction = target_direction
-			else:
-				var angle_diff = current_direction.angle_to(target_direction)
-				var max_turn = TANK_TURN_SPEED * delta
-				if abs(angle_diff) > max_turn:
-					angle_diff = sign(angle_diff) * max_turn
-				current_direction = current_direction.rotated(angle_diff).normalized()
-			final_velocity = current_direction * speed
-
-		Type.ZIGZAG:
-			# Erratic side-to-side movement
-			zigzag_timer += delta
-			if zigzag_timer >= 0.3:
-				zigzag_timer = 0.0
-				zigzag_direction *= -1.0
-			var perpendicular = Vector2(-target_direction.y, target_direction.x)
-			var zigzag_dir = (target_direction + perpendicular * zigzag_direction * 0.7).normalized()
-			final_velocity = zigzag_dir * speed
-
-	velocity = final_velocity
+	# Still use move_and_slide for collision detection
+	velocity = Vector2.ZERO
+	if is_moving:
+		velocity = (move_target - position).normalized() * speed * 3
 	move_and_slide()
 
 	# Check if we hit the player
@@ -107,3 +118,93 @@ func _physics_process(delta: float) -> void:
 		if collider.is_in_group("player"):
 			player.on_enemy_collision(self)
 			return
+
+func calculate_next_move() -> void:
+	var to_player = player.global_position - global_position
+	var move_offset: Vector2
+
+	match type:
+		Type.PAWN:
+			# Pawn: moves one square toward player (straight lines only)
+			move_offset = get_pawn_move(to_player)
+
+		Type.KNIGHT:
+			# Knight: L-shaped move (2+1 squares)
+			move_offset = get_knight_move(to_player)
+
+		Type.BISHOP:
+			# Bishop: diagonal movement only
+			move_offset = get_bishop_move(to_player)
+
+		Type.ROOK:
+			# Rook: straight lines (horizontal/vertical)
+			move_offset = get_rook_move(to_player)
+
+		Type.QUEEN:
+			# Queen: can move like bishop or rook
+			move_offset = get_queen_move(to_player)
+
+	if move_offset != Vector2.ZERO:
+		move_start = position
+		move_target = position + move_offset
+		is_moving = true
+
+func get_pawn_move(to_player: Vector2) -> Vector2:
+	# Move one tile in the dominant direction toward player
+	if abs(to_player.x) > abs(to_player.y):
+		return Vector2(sign(to_player.x) * TILE_SIZE, 0)
+	else:
+		return Vector2(0, sign(to_player.y) * TILE_SIZE)
+
+func get_knight_move(to_player: Vector2) -> Vector2:
+	# L-shaped: 2 squares in one direction, 1 in perpendicular
+	var moves = [
+		Vector2(2, 1), Vector2(2, -1), Vector2(-2, 1), Vector2(-2, -1),
+		Vector2(1, 2), Vector2(1, -2), Vector2(-1, 2), Vector2(-1, -2)
+	]
+
+	# Find the L-move that gets closest to player
+	var best_move = moves[0]
+	var best_dist = INF
+	for move in moves:
+		var new_pos = position + move * TILE_SIZE
+		var dist = new_pos.distance_to(player.global_position)
+		if dist < best_dist:
+			best_dist = dist
+			best_move = move
+
+	return best_move * TILE_SIZE
+
+func get_bishop_move(to_player: Vector2) -> Vector2:
+	# Diagonal movement: pick the diagonal direction closest to player
+	var dx = sign(to_player.x) if to_player.x != 0 else 1
+	var dy = sign(to_player.y) if to_player.y != 0 else 1
+
+	# Move 1-2 tiles diagonally
+	var tiles = 1 + randi() % 2
+	return Vector2(dx, dy) * TILE_SIZE * tiles
+
+func get_rook_move(to_player: Vector2) -> Vector2:
+	# Straight line movement: pick dominant axis
+	var tiles = 1 + randi() % 3  # 1-3 tiles
+
+	if abs(to_player.x) > abs(to_player.y):
+		return Vector2(sign(to_player.x) * TILE_SIZE * tiles, 0)
+	else:
+		return Vector2(0, sign(to_player.y) * TILE_SIZE * tiles)
+
+func get_queen_move(to_player: Vector2) -> Vector2:
+	# Queen can move like bishop or rook - pick whichever gets closer
+	var bishop_move = get_bishop_move(to_player)
+	var rook_move = get_rook_move(to_player)
+
+	var bishop_dist = (position + bishop_move).distance_to(player.global_position)
+	var rook_dist = (position + rook_move).distance_to(player.global_position)
+
+	if bishop_dist < rook_dist:
+		return bishop_move
+	else:
+		return rook_move
+
+func get_point_value() -> int:
+	return point_value

@@ -6,6 +6,8 @@
 size = Vector2(40, 40)
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
+collision_layer = 1
+collision_mask = 6
 script = ExtResource("1_player")
 
 [node name="Border" type="ColorRect" parent="."]
@@ -24,3 +26,8 @@ color = Color(0.2, 0.6, 1, 1)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_player")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(1, 1)
+position_smoothing_enabled = true
+position_smoothing_speed = 5.0

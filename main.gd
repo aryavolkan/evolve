@@ -8,13 +8,30 @@ var next_spawn_score: float = 50.0
 var next_powerup_score: float = 30.0
 var enemy_scene: PackedScene = preload("res://enemy.tscn")
 var powerup_scene: PackedScene = preload("res://powerup.tscn")
+var obstacle_scene: PackedScene = preload("res://obstacle.tscn")
+var floating_text_scene: PackedScene = preload("res://floating_text.tscn")
 var high_scores: Array = []
+var spawned_obstacle_positions: Array = []
+
+# Bonus points (chess piece values used for kills)
+const POWERUP_COLLECT_BONUS: int = 10
+const SCREEN_CLEAR_BONUS: int = 25
+
+# Chess piece types for spawning
+enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
 
 const POWERUP_DURATION: float = 5.0
 const SLOW_MULTIPLIER: float = 0.5
 const RESPAWN_INVINCIBILITY: float = 2.0
 const MAX_HIGH_SCORES: int = 5
 const SAVE_PATH: String = "user://highscores.save"
+
+# Obstacle generation
+const OBSTACLE_SPAWN_RADIUS: float = 600.0
+const OBSTACLE_MIN_DISTANCE: float = 100.0
+const OBSTACLE_CLEANUP_RADIUS: float = 900.0
+const OBSTACLE_DENSITY: int = 25  # Target number of obstacles around player
+const OBSTACLE_MIN_SPAWN_DIST: float = 150.0  # Min distance from player when spawning
 
 # Difficulty scaling
 const BASE_ENEMY_SPEED: float = 150.0
@@ -36,6 +53,7 @@ func _ready() -> void:
 	print("Evolve app started!")
 	get_tree().paused = false
 	player.hit.connect(_on_player_hit)
+	player.enemy_killed.connect(_on_enemy_killed)
 	game_over_label.visible = false
 	powerup_label.visible = false
 	name_entry.visible = false
@@ -43,6 +61,7 @@ func _ready() -> void:
 	load_high_scores()
 	update_lives_display()
 	update_scoreboard_display()
+	spawn_initial_obstacles()
 
 func _process(delta: float) -> void:
 	if game_over:
@@ -64,7 +83,9 @@ func _process(delta: float) -> void:
 
 	if score >= next_powerup_score:
 		spawn_powerup()
-		next_powerup_score += 40.0
+		next_powerup_score += 80.0  # Rarer power-ups (was 40)
+
+	manage_obstacles()
 
 func get_difficulty_factor() -> float:
 	return clampf(score / DIFFICULTY_SCALE_SCORE, 0.0, 1.0)
@@ -81,26 +102,28 @@ func spawn_enemy() -> void:
 	var enemy = enemy_scene.instantiate()
 	enemy.speed = get_scaled_enemy_speed()
 
-	# Random enemy type (weighted: chasers more common early, variety later)
+	# Chess piece type (weighted: pawns common, higher pieces rarer)
+	# As difficulty increases, better pieces spawn more often
 	var type_roll = randf()
 	var difficulty = get_difficulty_factor()
-	if type_roll < 0.4 - difficulty * 0.2:
-		enemy.type = 0  # CHASER
-	elif type_roll < 0.6:
-		enemy.type = 1  # SPEEDSTER
-	elif type_roll < 0.8:
-		enemy.type = 2  # TANK
-	else:
-		enemy.type = 3  # ZIGZAG
 
-	# Spawn at random edge position
-	var side = randi() % 4
-	var pos: Vector2
-	match side:
-		0: pos = Vector2(randf_range(0, 1280), 0)        # Top
-		1: pos = Vector2(randf_range(0, 1280), 720)      # Bottom
-		2: pos = Vector2(0, randf_range(0, 720))         # Left
-		3: pos = Vector2(1280, randf_range(0, 720))      # Right
+	# Weighted spawning based on difficulty
+	# Early game: mostly pawns, Late game: more variety
+	if type_roll < 0.5 - difficulty * 0.3:
+		enemy.type = ChessPiece.PAWN      # 1 point
+	elif type_roll < 0.7 - difficulty * 0.1:
+		enemy.type = ChessPiece.KNIGHT    # 3 points
+	elif type_roll < 0.85:
+		enemy.type = ChessPiece.BISHOP    # 3 points
+	elif type_roll < 0.95:
+		enemy.type = ChessPiece.ROOK      # 5 points
+	else:
+		enemy.type = ChessPiece.QUEEN     # 9 points
+
+	# Spawn at random position around player (outside view)
+	var angle = randf() * TAU
+	var distance = randf_range(500, 700)
+	var pos = player.position + Vector2(cos(angle), sin(angle)) * distance
 
 	enemy.position = pos
 	add_child(enemy)
@@ -108,11 +131,13 @@ func spawn_enemy() -> void:
 func spawn_powerup() -> void:
 	var powerup = powerup_scene.instantiate()
 
-	# Random position away from edges
-	powerup.position = Vector2(
-		randf_range(100, 1180),
-		randf_range(100, 620)
-	)
+	# Find a valid position not overlapping obstacles
+	var pos = find_valid_powerup_position()
+	if pos == Vector2.ZERO:
+		powerup.queue_free()
+		return  # Couldn't find valid position
+
+	powerup.position = pos
 
 	# Random power-up type
 	var type_index = randi() % 4
@@ -120,8 +145,32 @@ func spawn_powerup() -> void:
 	powerup.collected.connect(_on_powerup_collected)
 	add_child(powerup)
 
+func find_valid_powerup_position() -> Vector2:
+	const POWERUP_OBSTACLE_MIN_DIST: float = 80.0  # Obstacle size + buffer
+
+	for attempt in range(15):
+		var angle = randf() * TAU
+		var distance = randf_range(200, 400)
+		var pos = player.position + Vector2(cos(angle), sin(angle)) * distance
+
+		# Check distance from all obstacles
+		var valid = true
+		for obstacle_pos in spawned_obstacle_positions:
+			if pos.distance_to(obstacle_pos) < POWERUP_OBSTACLE_MIN_DIST:
+				valid = false
+				break
+
+		if valid:
+			return pos
+
+	return Vector2.ZERO  # Failed to find valid position
+
 func _on_powerup_collected(type: String) -> void:
 	show_powerup_message(type)
+
+	# Bonus for collecting powerup
+	score += POWERUP_COLLECT_BONUS
+	spawn_floating_text("+%d" % POWERUP_COLLECT_BONUS, Color(0, 1, 0.5, 1), player.position)
 
 	match type:
 		"SPEED BOOST":
@@ -132,6 +181,15 @@ func _on_powerup_collected(type: String) -> void:
 			activate_slow_enemies()
 		"SCREEN CLEAR":
 			clear_all_enemies()
+
+func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
+	score += points
+	spawn_floating_text("+%d" % points, Color(1, 1, 0, 1), pos)
+
+func spawn_floating_text(text: String, color: Color, pos: Vector2) -> void:
+	var floating = floating_text_scene.instantiate()
+	add_child(floating)
+	floating.setup(text, color, pos)
 
 func show_powerup_message(type: String) -> void:
 	powerup_label.text = type + "!"
@@ -153,10 +211,18 @@ func activate_slow_enemies() -> void:
 
 func clear_all_enemies() -> void:
 	var enemies = get_tree().get_nodes_in_group("enemy")
+	var total_points = 0
 	for enemy in enemies:
+		if enemy.has_method("get_point_value"):
+			total_points += enemy.get_point_value()
+		else:
+			total_points += 1
 		enemy.queue_free()
-	# Bonus points for screen clear
-	score += 25
+	# Bonus points for screen clear (piece values + flat bonus)
+	if total_points > 0:
+		total_points += SCREEN_CLEAR_BONUS
+		score += total_points
+		spawn_floating_text("+%d CLEAR!" % total_points, Color(1, 0.3, 0.3, 1), player.position + Vector2(0, -50))
 
 func update_lives_display() -> void:
 	lives_label.text = "Lives: %d" % lives
@@ -164,6 +230,9 @@ func update_lives_display() -> void:
 func _on_player_hit() -> void:
 	lives -= 1
 	update_lives_display()
+
+	# Show life lost indicator
+	spawn_floating_text("-1 LIFE", Color(1, 0.2, 0.2, 1), player.position + Vector2(0, -30))
 
 	if lives <= 0:
 		game_over = true
@@ -181,8 +250,8 @@ func _on_player_hit() -> void:
 			game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
 			game_over_label.visible = true
 	else:
-		# Respawn player at center with brief invincibility
-		player.respawn(Vector2(640, 360), RESPAWN_INVINCIBILITY)
+		# Respawn player at current position with brief invincibility
+		player.respawn(player.position, RESPAWN_INVINCIBILITY)
 
 # High score functions
 func load_high_scores() -> void:
@@ -224,3 +293,45 @@ func update_scoreboard_display() -> void:
 	for i in range(high_scores.size(), MAX_HIGH_SCORES):
 		text += "%d. ---\n" % [i + 1]
 	scoreboard_label.text = text
+
+# Obstacle generation functions
+func spawn_initial_obstacles() -> void:
+	for i in range(OBSTACLE_DENSITY):
+		try_spawn_obstacle()
+
+func manage_obstacles() -> void:
+	# Clean up far obstacles
+	var obstacles = get_tree().get_nodes_in_group("obstacle")
+	for obstacle in obstacles:
+		if obstacle.position.distance_to(player.position) > OBSTACLE_CLEANUP_RADIUS:
+			spawned_obstacle_positions.erase(obstacle.position)
+			obstacle.queue_free()
+
+	# Spawn new obstacles if needed
+	var current_count = get_tree().get_nodes_in_group("obstacle").size()
+	if current_count < OBSTACLE_DENSITY:
+		try_spawn_obstacle()
+
+func try_spawn_obstacle() -> void:
+	for attempt in range(10):
+		var angle = randf() * TAU
+		var distance = randf_range(300, OBSTACLE_SPAWN_RADIUS)
+		var pos = player.position + Vector2(cos(angle), sin(angle)) * distance
+
+		# Check minimum distance from player
+		if pos.distance_to(player.position) < OBSTACLE_MIN_DISTANCE:
+			continue
+
+		# Check minimum distance from other obstacles
+		var too_close = false
+		for existing_pos in spawned_obstacle_positions:
+			if pos.distance_to(existing_pos) < OBSTACLE_MIN_DISTANCE:
+				too_close = true
+				break
+
+		if not too_close:
+			var obstacle = obstacle_scene.instantiate()
+			obstacle.position = pos
+			add_child(obstacle)
+			spawned_obstacle_positions.append(pos)
+			return

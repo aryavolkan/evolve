@@ -1,6 +1,7 @@
 extends CharacterBody2D
 
 signal hit
+signal enemy_killed(pos: Vector2, points: int)
 
 @export var speed: float = 300.0
 @export var boosted_speed: float = 500.0
@@ -72,7 +73,10 @@ func shoot(direction: Vector2) -> void:
 
 func on_enemy_collision(enemy: Node) -> void:
 	if is_invincible:
+		var enemy_pos = enemy.global_position
+		var points = enemy.get_point_value() if enemy.has_method("get_point_value") else 1
 		enemy.queue_free()
+		enemy_killed.emit(enemy_pos, points)
 		return
 	_trigger_hit()
 
