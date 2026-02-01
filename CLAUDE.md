@@ -107,6 +107,15 @@ Four power-up types spawn during gameplay (5 second duration each):
 
 Power-ups use `Area2D` with `body_entered` signal for collection detection.
 
+## High Score System
+
+- Top 5 scores saved to `user://highscores.save`
+- Displayed on right side during gameplay
+- On game over, if score qualifies:
+  - Prompts for name entry (max 10 characters)
+  - Press ENTER to submit
+- Scores persist between sessions using `FileAccess`
+
 ## Key Node References
 
 - `$Player` - Player CharacterBody2D
@@ -114,3 +123,6 @@ Power-ups use `Area2D` with `body_entered` signal for collection detection.
 - `$CanvasLayer/UI/LivesLabel` - Lives counter
 - `$CanvasLayer/UI/GameOverLabel` - Game over message
 - `$CanvasLayer/UI/PowerUpLabel` - Power-up notification
+- `$CanvasLayer/UI/ScoreboardLabel` - High scores display
+- `$CanvasLayer/UI/NameEntry` - Name input field
+- `$CanvasLayer/UI/NamePrompt` - Name entry prompt
