@@ -68,3 +68,8 @@ func activate_invincibility(duration: float) -> void:
 	is_invincible = false
 	if not is_speed_boosted:
 		color_rect.color = base_color
+
+func respawn(pos: Vector2, invincibility_duration: float) -> void:
+	position = pos
+	is_hit = false
+	activate_invincibility(invincibility_duration)

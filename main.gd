@@ -1,6 +1,7 @@
 extends Node2D
 
 var score: float = 0.0
+var lives: int = 3
 var game_over: bool = false
 var next_spawn_score: float = 50.0
 var next_powerup_score: float = 30.0
@@ -9,6 +10,7 @@ var powerup_scene: PackedScene = preload("res://powerup.tscn")
 
 const POWERUP_DURATION: float = 5.0
 const SLOW_MULTIPLIER: float = 0.5
+const RESPAWN_INVINCIBILITY: float = 2.0
 
 # Difficulty scaling
 const BASE_ENEMY_SPEED: float = 150.0
@@ -18,6 +20,7 @@ const MIN_SPAWN_INTERVAL: float = 20.0
 const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxed
 
 @onready var score_label: Label = $CanvasLayer/UI/ScoreLabel
+@onready var lives_label: Label = $CanvasLayer/UI/LivesLabel
 @onready var game_over_label: Label = $CanvasLayer/UI/GameOverLabel
 @onready var powerup_label: Label = $CanvasLayer/UI/PowerUpLabel
 @onready var player: CharacterBody2D = $Player
@@ -28,6 +31,7 @@ func _ready() -> void:
 	player.hit.connect(_on_player_hit)
 	game_over_label.visible = false
 	powerup_label.visible = false
+	update_lives_display()
 
 func _process(delta: float) -> void:
 	if game_over:
@@ -61,6 +65,18 @@ func get_scaled_spawn_interval() -> float:
 func spawn_enemy() -> void:
 	var enemy = enemy_scene.instantiate()
 	enemy.speed = get_scaled_enemy_speed()
+
+	# Random enemy type (weighted: chasers more common early, variety later)
+	var type_roll = randf()
+	var difficulty = get_difficulty_factor()
+	if type_roll < 0.4 - difficulty * 0.2:
+		enemy.type = 0  # CHASER
+	elif type_roll < 0.6:
+		enemy.type = 1  # SPEEDSTER
+	elif type_roll < 0.8:
+		enemy.type = 2  # TANK
+	else:
+		enemy.type = 3  # ZIGZAG
 
 	# Spawn at random edge position
 	var side = randi() % 4
@@ -127,8 +143,18 @@ func clear_all_enemies() -> void:
 	# Bonus points for screen clear
 	score += 25
 
+func update_lives_display() -> void:
+	lives_label.text = "Lives: %d" % lives
+
 func _on_player_hit() -> void:
-	game_over = true
-	game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
-	game_over_label.visible = true
-	get_tree().paused = true
+	lives -= 1
+	update_lives_display()
+
+	if lives <= 0:
+		game_over = true
+		game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
+		game_over_label.visible = true
+		get_tree().paused = true
+	else:
+		# Respawn player at center with brief invincibility
+		player.respawn(Vector2(640, 360), RESPAWN_INVINCIBILITY)

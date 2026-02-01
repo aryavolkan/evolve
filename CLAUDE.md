@@ -64,11 +64,24 @@ add_child(enemy)
 ## Game Mechanics
 
 - Player (blue, 40x40) moves with arrow keys at speed 300
-- Enemies (red, 30x30) chase player, speed scales with difficulty
+- Player starts with 3 lives
+- Multiple enemy types with different behaviors
 - Score +10 per second
 - Enemy spawn rate increases with score
 - Power-up spawns every 40 points at random position
-- Collision = game over, SPACE to restart
+- Collision = lose a life, respawn at center with 2s invincibility
+- Game over when lives reach 0, SPACE to restart
+
+## Enemy Types
+
+| Type | Color | Size | Speed | Behavior |
+|------|-------|------|-------|----------|
+| Chaser | Red | 30 | 1.0x | Direct pursuit |
+| Speedster | Orange | 20 | 1.5x | Fast, direct pursuit |
+| Tank | Dark red | 45 | 0.6x | Slow but large |
+| Zigzag | Magenta | 25 | 1.1x | Erratic side-to-side movement |
+
+Enemy variety increases with difficulty - more special types spawn at higher scores.
 
 ## Difficulty Scaling
 
@@ -98,5 +111,6 @@ Power-ups use `Area2D` with `body_entered` signal for collection detection.
 
 - `$Player` - Player CharacterBody2D
 - `$CanvasLayer/UI/ScoreLabel` - Score display
+- `$CanvasLayer/UI/LivesLabel` - Lives counter
 - `$CanvasLayer/UI/GameOverLabel` - Game over message
 - `$CanvasLayer/UI/PowerUpLabel` - Power-up notification
