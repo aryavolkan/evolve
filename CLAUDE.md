@@ -143,3 +143,83 @@ Power-ups use `Area2D` with `body_entered` signal for collection detection.
 - `$CanvasLayer/UI/ScoreboardLabel` - High scores display
 - `$CanvasLayer/UI/NameEntry` - Name input field
 - `$CanvasLayer/UI/NamePrompt` - Name entry prompt
+
+## Neuroevolution AI System
+
+Neural network agents that learn to play the game through evolutionary algorithms.
+
+### Architecture
+
+```
+ai/
+├── neural_network.gd   # Feedforward network with evolvable weights
+├── sensor.gd           # Raycast-based perception (16 rays × 4 values)
+├── ai_controller.gd    # Converts network outputs to game actions
+├── evolution.gd        # Population management and selection
+└── trainer.gd          # Training loop orchestration
+training_manager.gd     # Main scene integration
+```
+
+### Network Architecture
+
+- **Inputs (70 total):**
+  - 16 rays × 4 values each = 64 ray inputs
+    - Enemy distance (normalized 0-1, closer = higher)
+    - Enemy type (pawn=0.2 to queen=1.0)
+    - Obstacle distance
+    - Power-up distance
+  - 6 player state inputs (velocity, power-up flags, can_shoot)
+
+- **Hidden Layer:** 32 neurons with tanh activation
+- **Outputs (6):** move_x, move_y, shoot_up, shoot_down, shoot_left, shoot_right
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| T | Start/Stop training |
+| P | Start/Stop playback (watch best AI) |
+| H | Return to human control |
+
+### Fitness Function
+
+Uses game score directly:
+- +10 points per second survived
+- +N points per enemy killed (chess piece values)
+- +10 points per power-up collected
+- +25 bonus for screen clear
+
+### Evolution Parameters
+
+| Parameter | Value |
+|-----------|-------|
+| Population size | 50 |
+| Elite count | 5 (top performers kept unchanged) |
+| Selection | Tournament (best of 3 random) |
+| Crossover rate | 70% |
+| Mutation rate | 15% per weight |
+| Mutation strength | σ = 0.3 |
+| Max eval time | 60 seconds per individual |
+
+### Saved Files
+
+- `user://best_network.nn` - Best performing network
+- `user://population.evo` - Full population state for resuming
+
+### Headless Training
+
+Run training without GUI for faster evolution:
+
+```bash
+./train.sh                           # Default: 50 pop, 100 gen, 10 parallel
+./train.sh -p 100 -g 200 -j 20       # Larger population, more parallel
+./train.sh -t 30                     # Shorter evaluation time (30s)
+```
+
+Options:
+- `-p, --population N` - Population size (default: 50)
+- `-g, --generations N` - Max generations (default: 100)
+- `-j, --parallel N` - Parallel evaluations (default: 10)
+- `-t, --eval-time N` - Max eval time per individual in seconds (default: 60)
+
+Progress auto-saves every generation. Press Ctrl+C to stop safely.

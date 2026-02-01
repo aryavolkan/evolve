@@ -18,39 +18,89 @@ texture = ExtResource("2_icon")
 [node name="SpeedParticles" type="CPUParticles2D" parent="."]
 z_index = -1
 emitting = false
-amount = 30
-lifetime = 0.5
-speed_scale = 2.0
+amount = 40
+lifetime = 0.4
+speed_scale = 2.5
 local_coords = false
 emission_shape = 1
-emission_sphere_radius = 20.0
+emission_sphere_radius = 25.0
 direction = Vector2(0, 0)
 spread = 180.0
 gravity = Vector2(0, 0)
-initial_velocity_min = 50.0
-initial_velocity_max = 100.0
-scale_amount_min = 3.0
-scale_amount_max = 6.0
-color = Color(0.3, 1, 0.7, 0.8)
+initial_velocity_min = 80.0
+initial_velocity_max = 150.0
+scale_amount_min = 4.0
+scale_amount_max = 8.0
+color = Color(0, 1, 0.8, 0.9)
 
 [node name="InvincibilityParticles" type="CPUParticles2D" parent="."]
 z_index = -1
 emitting = false
-amount = 20
-lifetime = 0.8
-speed_scale = 1.5
+amount = 25
+lifetime = 0.6
+speed_scale = 1.8
 emission_shape = 1
-emission_sphere_radius = 30.0
+emission_sphere_radius = 35.0
 direction = Vector2(0, -1)
 spread = 180.0
-gravity = Vector2(0, -20)
-initial_velocity_min = 20.0
-initial_velocity_max = 50.0
-angular_velocity_min = -180.0
-angular_velocity_max = 180.0
-scale_amount_min = 4.0
-scale_amount_max = 8.0
-color = Color(1, 0.85, 0.2, 0.9)
+gravity = Vector2(0, -30)
+initial_velocity_min = 30.0
+initial_velocity_max = 70.0
+angular_velocity_min = -360.0
+angular_velocity_max = 360.0
+scale_amount_min = 5.0
+scale_amount_max = 10.0
+color = Color(1, 0.85, 0.1, 1)
+
+[node name="SlowParticles" type="CPUParticles2D" parent="."]
+z_index = -1
+emitting = false
+amount = 30
+lifetime = 1.0
+speed_scale = 1.0
+emission_shape = 1
+emission_sphere_radius = 40.0
+direction = Vector2(0, 0)
+spread = 180.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 15.0
+initial_velocity_max = 40.0
+angular_velocity_min = -90.0
+angular_velocity_max = 90.0
+orbit_velocity_min = 0.3
+orbit_velocity_max = 0.5
+scale_amount_min = 6.0
+scale_amount_max = 12.0
+color = Color(0.7, 0.3, 1, 0.8)
+
+[node name="ScreenClearParticles" type="CPUParticles2D" parent="."]
+z_index = 10
+emitting = false
+amount = 60
+lifetime = 0.6
+one_shot = true
+explosiveness = 1.0
+emission_shape = 1
+emission_sphere_radius = 10.0
+direction = Vector2(0, 0)
+spread = 180.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 200.0
+initial_velocity_max = 400.0
+scale_amount_min = 6.0
+scale_amount_max = 12.0
+color = Color(1, 0.4, 0.2, 1)
+
+[node name="TimerLabel" type="RichTextLabel" parent="."]
+offset_left = -60.0
+offset_top = -100.0
+offset_right = 60.0
+offset_bottom = -40.0
+theme_override_font_sizes/normal_font_size = 22
+bbcode_enabled = true
+text = "SPEED 5.0"
+fit_content = true
+scroll_active = false
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_player")

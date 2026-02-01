@@ -13,6 +13,10 @@ var floating_text_scene: PackedScene = preload("res://floating_text.tscn")
 var high_scores: Array = []
 var spawned_obstacle_positions: Array = []
 
+# AI Training
+var training_manager: Node
+var ai_status_label: Label
+
 # Bonus points (chess piece values used for kills)
 const POWERUP_COLLECT_BONUS: int = 10
 const SCREEN_CLEAR_BONUS: int = 25
@@ -24,9 +28,6 @@ const POWERUP_DURATION: float = 5.0
 const SLOW_MULTIPLIER: float = 0.5
 const RESPAWN_INVINCIBILITY: float = 2.0
 
-# Power-up timer tracking
-var slow_enemies_time: float = 0.0
-var powerup_timers: Dictionary = {}
 const MAX_HIGH_SCORES: int = 5
 const SAVE_PATH: String = "user://highscores.save"
 
@@ -44,33 +45,39 @@ const BASE_SPAWN_INTERVAL: float = 50.0
 const MIN_SPAWN_INTERVAL: float = 20.0
 const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxed
 
+# Slow enemies tracking
+var slow_active: bool = false
+
 @onready var score_label: Label = $CanvasLayer/UI/ScoreLabel
 @onready var lives_label: Label = $CanvasLayer/UI/LivesLabel
 @onready var game_over_label: Label = $CanvasLayer/UI/GameOverLabel
 @onready var powerup_label: Label = $CanvasLayer/UI/PowerUpLabel
-@onready var powerup_timer_label: Label = $CanvasLayer/UI/PowerUpTimerLabel
 @onready var scoreboard_label: Label = $CanvasLayer/UI/ScoreboardLabel
 @onready var name_entry: LineEdit = $CanvasLayer/UI/NameEntry
 @onready var name_prompt: Label = $CanvasLayer/UI/NamePrompt
 @onready var player: CharacterBody2D = $Player
 
 func _ready() -> void:
-	print("Evolve app started!")
+	if DisplayServer.get_name() != "headless":
+		print("Evolve app started!")
 	get_tree().paused = false
 	player.hit.connect(_on_player_hit)
 	player.enemy_killed.connect(_on_enemy_killed)
 	player.powerup_timer_updated.connect(_on_powerup_timer_updated)
 	game_over_label.visible = false
 	powerup_label.visible = false
-	powerup_timer_label.visible = false
 	name_entry.visible = false
 	name_prompt.visible = false
 	load_high_scores()
 	update_lives_display()
 	update_scoreboard_display()
 	spawn_initial_obstacles()
+	setup_training_manager()
 
 func _process(delta: float) -> void:
+	# Handle AI training controls (always check these)
+	handle_training_input()
+
 	if game_over:
 		if entering_name:
 			if Input.is_action_just_pressed("ui_accept") and name_entry.text.strip_edges() != "":
@@ -82,15 +89,7 @@ func _process(delta: float) -> void:
 
 	score += delta * 10
 	score_label.text = "Score: %d" % int(score)
-
-	# Update slow enemies timer
-	if slow_enemies_time > 0:
-		slow_enemies_time -= delta
-		powerup_timers["SLOW"] = slow_enemies_time
-		if slow_enemies_time <= 0:
-			end_slow_enemies()
-
-	update_powerup_timer_display()
+	update_ai_status_display()
 
 	if score >= next_spawn_score:
 		spawn_enemy()
@@ -117,6 +116,10 @@ func get_scaled_spawn_interval() -> float:
 func spawn_enemy() -> void:
 	var enemy = enemy_scene.instantiate()
 	enemy.speed = get_scaled_enemy_speed()
+
+	# Apply slow if active
+	if slow_active:
+		enemy.speed *= SLOW_MULTIPLIER
 
 	# Chess piece type (weighted: pawns common, higher pieces rarer)
 	# As difficulty increases, better pieces spawn more often
@@ -214,44 +217,28 @@ func show_powerup_message(type: String) -> void:
 	powerup_label.visible = false
 
 func _on_powerup_timer_updated(powerup_type: String, time_left: float) -> void:
-	if time_left > 0:
-		powerup_timers[powerup_type] = time_left
-	else:
-		powerup_timers.erase(powerup_type)
-
-func update_powerup_timer_display() -> void:
-	var display_lines: Array = []
-
-	if powerup_timers.has("SPEED") and powerup_timers["SPEED"] > 0:
-		display_lines.append("SPEED: %.1fs" % powerup_timers["SPEED"])
-	if powerup_timers.has("INVINCIBLE") and powerup_timers["INVINCIBLE"] > 0:
-		display_lines.append("INVINCIBLE: %.1fs" % powerup_timers["INVINCIBLE"])
-	if powerup_timers.has("SLOW") and powerup_timers["SLOW"] > 0:
-		display_lines.append("SLOW: %.1fs" % powerup_timers["SLOW"])
-
-	if display_lines.size() > 0:
-		powerup_timer_label.text = "\n".join(display_lines)
-		powerup_timer_label.visible = true
-	else:
-		powerup_timer_label.visible = false
+	# Handle slow enemies ending
+	if powerup_type == "SLOW" and time_left <= 0:
+		end_slow_enemies()
 
 func activate_slow_enemies() -> void:
-	# If already active, just reset the timer
-	if slow_enemies_time <= 0:
+	# Apply slow to all current enemies if not already active
+	if not slow_active:
 		var enemies = get_tree().get_nodes_in_group("enemy")
 		for enemy in enemies:
 			enemy.speed *= SLOW_MULTIPLIER
-	slow_enemies_time = POWERUP_DURATION
-	powerup_timers["SLOW"] = slow_enemies_time
+	slow_active = true
+	player.activate_slow_effect(POWERUP_DURATION)
 
 func end_slow_enemies() -> void:
-	slow_enemies_time = 0.0
-	powerup_timers.erase("SLOW")
-	var enemies = get_tree().get_nodes_in_group("enemy")
-	for enemy in enemies:
-		enemy.speed /= SLOW_MULTIPLIER
+	if slow_active:
+		slow_active = false
+		var enemies = get_tree().get_nodes_in_group("enemy")
+		for enemy in enemies:
+			enemy.speed /= SLOW_MULTIPLIER
 
 func clear_all_enemies() -> void:
+	player.trigger_screen_clear_effect()
 	var enemies = get_tree().get_nodes_in_group("enemy")
 	var total_points = 0
 	for enemy in enemies:
@@ -377,3 +364,95 @@ func try_spawn_obstacle() -> void:
 			add_child(obstacle)
 			spawned_obstacle_positions.append(pos)
 			return
+
+
+# AI Training functions
+func setup_training_manager() -> void:
+	var TrainingManager = load("res://training_manager.gd")
+	training_manager = TrainingManager.new()
+	add_child(training_manager)
+	training_manager.initialize(self)
+
+	# Create AI status label
+	ai_status_label = Label.new()
+	ai_status_label.position = Vector2(10, 10)
+	ai_status_label.add_theme_color_override("font_color", Color.WHITE)
+	ai_status_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	ai_status_label.add_theme_constant_override("shadow_offset_x", 1)
+	ai_status_label.add_theme_constant_override("shadow_offset_y", 1)
+	$CanvasLayer/UI.add_child(ai_status_label)
+	ai_status_label.text = "T=Train | P=Playback | H=Human"
+
+
+func handle_training_input() -> void:
+	if not training_manager:
+		return
+
+	# T = Start/Stop Training
+	if Input.is_action_just_pressed("ui_text_submit"):  # We'll use a different key
+		pass
+
+	if Input.is_key_pressed(KEY_T) and Input.is_action_just_pressed("ui_focus_next"):
+		# Avoid accidental triggers
+		pass
+
+	# Check for key presses (using _unhandled_key_input would be cleaner but this works)
+	if Input.is_physical_key_pressed(KEY_T) and not Input.is_physical_key_pressed(KEY_SHIFT):
+		if not _key_just_pressed("train"):
+			return
+		if training_manager.get_mode() == training_manager.Mode.TRAINING:
+			training_manager.stop_training()
+		else:
+			training_manager.start_training(50, 100)
+
+	elif Input.is_physical_key_pressed(KEY_P):
+		if not _key_just_pressed("playback"):
+			return
+		if training_manager.get_mode() == training_manager.Mode.PLAYBACK:
+			training_manager.stop_playback()
+		else:
+			training_manager.start_playback()
+
+	elif Input.is_physical_key_pressed(KEY_H):
+		if not _key_just_pressed("human"):
+			return
+		if training_manager.get_mode() == training_manager.Mode.TRAINING:
+			training_manager.stop_training()
+		elif training_manager.get_mode() == training_manager.Mode.PLAYBACK:
+			training_manager.stop_playback()
+
+
+var _pressed_keys: Dictionary = {}
+
+func _key_just_pressed(key_name: String) -> bool:
+	var is_pressed := true
+	if _pressed_keys.get(key_name, false):
+		return false  # Already pressed
+	_pressed_keys[key_name] = true
+	# Reset after a short delay
+	get_tree().create_timer(0.3).timeout.connect(func(): _pressed_keys[key_name] = false)
+	return true
+
+
+func update_ai_status_display() -> void:
+	if not training_manager or not ai_status_label:
+		return
+
+	var stats: Dictionary = training_manager.get_stats()
+	var mode_str: String = stats.get("mode", "HUMAN")
+
+	if mode_str == "TRAINING":
+		ai_status_label.text = "TRAINING | Gen: %d | Individual: %d/%d\nBest: %.0f | All-time: %.0f\n[T]=Stop [H]=Human" % [
+			stats.get("generation", 0),
+			stats.get("individual", 0) + 1,
+			stats.get("population_size", 0),
+			stats.get("best_fitness", 0),
+			stats.get("all_time_best", 0)
+		]
+		ai_status_label.add_theme_color_override("font_color", Color.YELLOW)
+	elif mode_str == "PLAYBACK":
+		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human"
+		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
+	else:
+		ai_status_label.text = "[T]=Train | [P]=Playback"
+		ai_status_label.add_theme_color_override("font_color", Color.WHITE)
