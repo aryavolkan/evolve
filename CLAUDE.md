@@ -74,12 +74,12 @@ add_child(enemy)
 
 ## Enemy Types
 
-| Type | Color | Size | Speed | Behavior |
-|------|-------|------|-------|----------|
-| Chaser | Red | 30 | 1.0x | Direct pursuit |
-| Speedster | Orange | 20 | 1.5x | Fast, direct pursuit |
-| Tank | Dark red | 45 | 0.6x | Slow but large |
-| Zigzag | Magenta | 25 | 1.1x | Erratic side-to-side movement |
+| Type | Color | Size | Speed | Movement Pattern |
+|------|-------|------|-------|------------------|
+| Chaser | Red | 30 | 1.0x | Direct pursuit, always homes on player |
+| Speedster | Orange | 20 | 1.8x | Dash behavior: fast bursts with brief pauses |
+| Tank | Dark red | 45 | 0.5x | Slow turning, can't change direction quickly |
+| Zigzag | Magenta | 25 | 1.1x | Erratic side-to-side while pursuing |
 
 Enemy variety increases with difficulty - more special types spawn at higher scores.
 
