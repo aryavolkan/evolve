@@ -257,13 +257,16 @@ func reset_game() -> void:
 	main_scene.entering_name = false
 	main_scene.next_spawn_score = 50.0
 	main_scene.next_powerup_score = 30.0
+	main_scene.slow_active = false
 
 	# Hide game over UI elements
 	main_scene.game_over_label.visible = false
 	main_scene.name_entry.visible = false
 	main_scene.name_prompt.visible = false
 
-	player.position = Vector2.ZERO
+	# Position player at arena center
+	var arena_center = Vector2(main_scene.ARENA_WIDTH / 2, main_scene.ARENA_HEIGHT / 2)
+	player.position = arena_center
 	player.is_hit = false
 	player.is_speed_boosted = false
 	player.is_slow_active = false

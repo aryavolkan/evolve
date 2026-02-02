@@ -5,13 +5,16 @@ extends RefCounted
 
 const NUM_RAYS: int = 16
 const RAY_LENGTH: float = 500.0
-const INPUTS_PER_RAY: int = 4  # (enemy_dist, enemy_type, obstacle_dist, powerup_dist)
+const INPUTS_PER_RAY: int = 5  # (enemy_dist, enemy_type, obstacle_dist, powerup_dist, wall_dist)
 
 # Total inputs: rays + player state
-# 16 rays × 4 values = 64 ray inputs
-# + 6 player state inputs = 70 total
+# 16 rays × 5 values = 80 ray inputs
+# + 6 player state inputs = 86 total
 const PLAYER_STATE_INPUTS: int = 6
 const TOTAL_INPUTS: int = NUM_RAYS * INPUTS_PER_RAY + PLAYER_STATE_INPUTS
+
+# Arena bounds (will be set from main scene)
+var arena_bounds: Rect2 = Rect2(40, 40, 2480, 1360)  # Default matching wall thickness for 2560x1440 arena
 
 var player: CharacterBody2D
 var ray_angles: PackedFloat32Array
@@ -26,6 +29,11 @@ func _init() -> void:
 
 func set_player(p: CharacterBody2D) -> void:
 	player = p
+	# Try to get arena bounds from main scene
+	if player:
+		var main = player.get_parent()
+		if main and main.has_method("get_arena_bounds"):
+			arena_bounds = main.get_arena_bounds()
 
 
 func get_inputs() -> PackedFloat32Array:
@@ -70,6 +78,11 @@ func get_inputs() -> PackedFloat32Array:
 
 		# Power-up distance
 		inputs[input_idx] = 1.0 - (powerup_result.distance / RAY_LENGTH) if powerup_result.hit else 0.0
+		input_idx += 1
+
+		# Wall distance (distance to arena boundary in this direction)
+		var wall_dist := get_wall_distance(player_pos, ray_dir)
+		inputs[input_idx] = 1.0 - (wall_dist / RAY_LENGTH) if wall_dist < RAY_LENGTH else 0.0
 		input_idx += 1
 
 	# Player state inputs
@@ -129,3 +142,30 @@ func cast_ray_to_group(origin: Vector2, direction: Vector2, entities: Array, hit
 					result.type_value = float(entity.get_point_value()) / 9.0
 
 	return result
+
+
+func get_wall_distance(origin: Vector2, direction: Vector2) -> float:
+	## Calculate distance to arena wall in the given direction.
+	## Uses ray-rectangle intersection.
+	var min_dist := RAY_LENGTH
+
+	# Check intersection with each wall
+	if direction.x > 0.001:  # Moving right
+		var dist := (arena_bounds.end.x - origin.x) / direction.x
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+	elif direction.x < -0.001:  # Moving left
+		var dist := (arena_bounds.position.x - origin.x) / direction.x
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+
+	if direction.y > 0.001:  # Moving down
+		var dist := (arena_bounds.end.y - origin.y) / direction.y
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+	elif direction.y < -0.001:  # Moving up
+		var dist := (arena_bounds.position.y - origin.y) / direction.y
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+
+	return min_dist

@@ -83,6 +83,13 @@ func _physics_process(delta: float) -> void:
 	velocity = direction * current_speed
 	move_and_slide()
 
+	# Clamp position to arena bounds (get from main scene)
+	var main = get_parent()
+	if main and main.has_method("get_arena_bounds"):
+		var bounds: Rect2 = main.get_arena_bounds()
+		position.x = clampf(position.x, bounds.position.x, bounds.end.x)
+		position.y = clampf(position.y, bounds.position.y, bounds.end.y)
+
 	# Handle shooting
 	if can_shoot and shoot_dir != Vector2.ZERO:
 		shoot(shoot_dir)

@@ -69,14 +69,22 @@ add_child(enemy)
 - Player starts with 3 lives
 - WASD to shoot projectiles in four directions (0.3s cooldown)
 - Projectiles destroy enemies on contact
-- Camera follows player (infinite world)
-- Gray obstacles procedurally generated around player
 - Multiple enemy types with different behaviors
 - Score +10 per second
 - Enemy spawn rate increases with score
-- Power-up spawns every 40 points at random position
+- Power-up spawns every 80 points at random position
 - Collision = lose a life, respawn at center with 2s invincibility
 - Game over when lives reach 0, SPACE to restart
+
+## Arena System
+
+- **Fixed Arena Size:** 2560x1440 pixels (2x viewport, zoomed out to fit)
+- **Static Camera:** Centered on arena, 0.5x zoom to show entire arena
+- **Arena Walls:** Solid boundaries prevent player/enemies from leaving
+- **Permanent Obstacles:** 50 obstacles placed randomly at game start (fixed layout per run)
+- **Safe Zone:** 250px radius around center kept clear for player spawn
+- **Enemy Spawning:** Enemies spawn along arena edges
+- **Grid Floor:** Visual grid lines (160px) for spatial reference
 
 ## Chess Piece Enemies
 
@@ -153,7 +161,7 @@ Neural network agents that learn to play the game through evolutionary algorithm
 ```
 ai/
 ├── neural_network.gd   # Feedforward network with evolvable weights
-├── sensor.gd           # Raycast-based perception (16 rays × 4 values)
+├── sensor.gd           # Raycast-based perception (16 rays × 5 values)
 ├── ai_controller.gd    # Converts network outputs to game actions
 ├── evolution.gd        # Population management and selection
 └── trainer.gd          # Training loop orchestration
@@ -162,12 +170,13 @@ training_manager.gd     # Main scene integration
 
 ### Network Architecture
 
-- **Inputs (70 total):**
-  - 16 rays × 4 values each = 64 ray inputs
+- **Inputs (86 total):**
+  - 16 rays × 5 values each = 80 ray inputs
     - Enemy distance (normalized 0-1, closer = higher)
     - Enemy type (pawn=0.2 to queen=1.0)
     - Obstacle distance
     - Power-up distance
+    - Wall distance (arena boundary)
   - 6 player state inputs (velocity, power-up flags, can_shoot)
 
 - **Hidden Layer:** 32 neurons with tanh activation
