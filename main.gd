@@ -17,9 +17,10 @@ var spawned_obstacle_positions: Array = []
 var training_manager: Node
 var ai_status_label: Label
 
-# Bonus points (chess piece values used for kills)
-const POWERUP_COLLECT_BONUS: int = 10
-const SCREEN_CLEAR_BONUS: int = 25
+# Bonus points - made significant so AI learns to prioritize kills and power-ups
+const POWERUP_COLLECT_BONUS: int = 50      # Was 10 - now worth 5 seconds of survival
+const SCREEN_CLEAR_BONUS: int = 100        # Was 25 - big reward for clearing screen
+const KILL_MULTIPLIER: int = 10            # Multiply chess piece values (1-9 -> 10-90)
 
 # Chess piece types for spawning
 enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
@@ -117,10 +118,6 @@ func spawn_enemy() -> void:
 	var enemy = enemy_scene.instantiate()
 	enemy.speed = get_scaled_enemy_speed()
 
-	# Apply slow if active
-	if slow_active:
-		enemy.speed *= SLOW_MULTIPLIER
-
 	# Chess piece type (weighted: pawns common, higher pieces rarer)
 	# As difficulty increases, better pieces spawn more often
 	var type_roll = randf()
@@ -146,6 +143,10 @@ func spawn_enemy() -> void:
 
 	enemy.position = pos
 	add_child(enemy)
+
+	# Apply slow after adding to tree (so apply_type_config has run)
+	if slow_active:
+		enemy.apply_slow(SLOW_MULTIPLIER)
 
 func spawn_powerup() -> void:
 	var powerup = powerup_scene.instantiate()
@@ -202,8 +203,9 @@ func _on_powerup_collected(type: String) -> void:
 			clear_all_enemies()
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
-	score += points
-	spawn_floating_text("+%d" % points, Color(1, 1, 0, 1), pos)
+	var bonus = points * KILL_MULTIPLIER  # Scale up kill rewards (pawn=10, queen=90)
+	score += bonus
+	spawn_floating_text("+%d" % bonus, Color(1, 1, 0, 1), pos)
 
 func spawn_floating_text(text: String, color: Color, pos: Vector2) -> void:
 	var floating = floating_text_scene.instantiate()
@@ -226,7 +228,7 @@ func activate_slow_enemies() -> void:
 	if not slow_active:
 		var enemies = get_tree().get_nodes_in_group("enemy")
 		for enemy in enemies:
-			enemy.speed *= SLOW_MULTIPLIER
+			enemy.apply_slow(SLOW_MULTIPLIER)
 	slow_active = true
 	player.activate_slow_effect(POWERUP_DURATION)
 
@@ -235,7 +237,7 @@ func end_slow_enemies() -> void:
 		slow_active = false
 		var enemies = get_tree().get_nodes_in_group("enemy")
 		for enemy in enemies:
-			enemy.speed /= SLOW_MULTIPLIER
+			enemy.remove_slow(SLOW_MULTIPLIER)
 
 func clear_all_enemies() -> void:
 	player.trigger_screen_clear_effect()
@@ -243,11 +245,11 @@ func clear_all_enemies() -> void:
 	var total_points = 0
 	for enemy in enemies:
 		if enemy.has_method("get_point_value"):
-			total_points += enemy.get_point_value()
+			total_points += enemy.get_point_value() * KILL_MULTIPLIER
 		else:
-			total_points += 1
+			total_points += KILL_MULTIPLIER
 		enemy.queue_free()
-	# Bonus points for screen clear (piece values + flat bonus)
+	# Bonus points for screen clear (scaled piece values + flat bonus)
 	if total_points > 0:
 		total_points += SCREEN_CLEAR_BONUS
 		score += total_points
@@ -420,6 +422,21 @@ func handle_training_input() -> void:
 			training_manager.stop_training()
 		elif training_manager.get_mode() == training_manager.Mode.PLAYBACK:
 			training_manager.stop_playback()
+		elif training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
+			training_manager.stop_playback()
+
+	elif Input.is_physical_key_pressed(KEY_G):
+		if not _key_just_pressed("gen_playback"):
+			return
+		if training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
+			training_manager.stop_playback()
+		else:
+			training_manager.start_generation_playback()
+
+	# SPACE to advance generation playback (only when game over)
+	if training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
+		if Input.is_action_just_pressed("ui_accept") and game_over:
+			training_manager.advance_generation_playback()
 
 
 var _pressed_keys: Dictionary = {}
@@ -453,6 +470,12 @@ func update_ai_status_display() -> void:
 	elif mode_str == "PLAYBACK":
 		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human"
 		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
+	elif mode_str == "GENERATION_PLAYBACK":
+		ai_status_label.text = "GENERATION %d/%d\n[SPACE]=Next [G]=Restart [H]=Human" % [
+			stats.get("playback_generation", 1),
+			stats.get("max_playback_generation", 1)
+		]
+		ai_status_label.add_theme_color_override("font_color", Color.GREEN)
 	else:
-		ai_status_label.text = "[T]=Train | [P]=Playback"
+		ai_status_label.text = "[T]=Train | [P]=Playback | [G]=Gen Playback"
 		ai_status_label.add_theme_color_override("font_color", Color.WHITE)

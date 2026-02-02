@@ -12,11 +12,13 @@ var point_value: int = 1
 # Movement state
 var move_timer: float = 0.0
 var move_cooldown: float = 0.8
+var base_move_cooldown: float = 0.8  # Store original cooldown for slow effect
 var is_moving: bool = false
 var move_target: Vector2
 var move_start: Vector2
 var move_progress: float = 0.0
-const MOVE_DURATION: float = 0.3
+var move_duration: float = 0.3  # Changed from const to allow slowing
+var base_move_duration: float = 0.3  # Store original for slow effect
 
 # Chess piece textures
 var PIECE_TEXTURES = {
@@ -47,6 +49,7 @@ func apply_type_config() -> void:
 	var config = TYPE_CONFIG[type]
 	point_value = config["points"]
 	move_cooldown = config["cooldown"]
+	base_move_cooldown = move_cooldown  # Store original
 	speed *= config["speed_mult"]
 
 	# Update collision shape (duplicate to avoid sharing between instances)
@@ -66,7 +69,7 @@ func _physics_process(delta: float) -> void:
 
 	if is_moving:
 		# Animate the move
-		move_progress += delta / MOVE_DURATION
+		move_progress += delta / move_duration
 		if move_progress >= 1.0:
 			position = move_target
 			is_moving = false
@@ -189,3 +192,17 @@ func get_queen_move(to_player: Vector2) -> Vector2:
 
 func get_point_value() -> int:
 	return point_value
+
+
+func apply_slow(multiplier: float) -> void:
+	## Apply slow effect - increases cooldown and move duration (slower movement)
+	move_cooldown = base_move_cooldown / multiplier  # Higher cooldown = slower
+	move_duration = base_move_duration / multiplier  # Longer animation = slower
+	speed *= multiplier
+
+
+func remove_slow(multiplier: float) -> void:
+	## Remove slow effect - restore original timing
+	move_cooldown = base_move_cooldown
+	move_duration = base_move_duration
+	speed /= multiplier

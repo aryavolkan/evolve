@@ -6,7 +6,7 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK }
+enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK }
 
 var current_mode: Mode = Mode.HUMAN
 
@@ -34,6 +34,11 @@ const POPULATION_PATH := "user://population.evo"
 var generation: int = 0
 var best_fitness: float = 0.0
 var all_time_best: float = 0.0
+
+# Generation playback state
+var playback_generation: int = 1
+var max_playback_generation: int = 1
+var generation_networks: Array = []  # Array of loaded networks
 
 
 # Preloaded scripts
@@ -177,6 +182,62 @@ func stop_playback() -> void:
 	training_status_changed.emit("Playback stopped")
 
 
+func start_generation_playback() -> void:
+	## Play back all generations starting from gen 1.
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	# Find all generation networks
+	generation_networks.clear()
+	var gen := 1
+	while true:
+		var path := BEST_NETWORK_PATH.replace(".nn", "_gen_%03d.nn" % gen)
+		var network = NeuralNetworkScript.load_from_file(path)
+		if not network:
+			break
+		generation_networks.append(network)
+		print("Loaded gen %d network: input=%d hidden=%d output=%d weights=%d" % [
+			gen, network.input_size, network.hidden_size, network.output_size,
+			network.get_weights().size()
+		])
+		gen += 1
+
+	if generation_networks.is_empty():
+		push_error("No generation networks found")
+		training_status_changed.emit("No generation networks found")
+		return
+
+	max_playback_generation = generation_networks.size()
+	playback_generation = 1
+
+	current_mode = Mode.GENERATION_PLAYBACK
+	Engine.time_scale = 1.0
+
+	ai_controller.set_network(generation_networks[0])
+	player.enable_ai_control(true)
+
+	reset_game()
+	training_status_changed.emit("Generation playback started")
+	print("Playing back generation 1 of %d" % max_playback_generation)
+
+
+func advance_generation_playback() -> void:
+	## Move to the next generation in playback.
+	if playback_generation >= max_playback_generation:
+		# Finished all generations
+		main_scene.game_over_label.text = "ALL GENERATIONS COMPLETE\n\nPress [G] to restart\nPress [H] for human mode"
+		main_scene.game_over_label.visible = true
+		player.enable_ai_control(false)
+		return
+
+	playback_generation += 1
+	ai_controller.set_network(generation_networks[playback_generation - 1])
+	player.enable_ai_control(true)
+	reset_game()
+	print("Playing back generation %d of %d" % [playback_generation, max_playback_generation])
+
+
 func load_individual(index: int) -> void:
 	## Load a network for evaluation.
 	var network = evolution.get_individual(index)
@@ -221,6 +282,8 @@ func reset_game() -> void:
 	player.activate_invincibility(1.0)
 
 
+var _debug_frame_count: int = 0
+
 func _physics_process(delta: float) -> void:
 	if current_mode == Mode.HUMAN:
 		return
@@ -229,10 +292,28 @@ func _physics_process(delta: float) -> void:
 	var action: Dictionary = ai_controller.get_action()
 	player.set_ai_action(action.move_direction, action.shoot_direction)
 
+	# Debug: print first few frames of output
+	_debug_frame_count += 1
+	if _debug_frame_count <= 3 and current_mode == Mode.GENERATION_PLAYBACK:
+		var inputs = ai_controller.get_inputs()
+		var outputs = ai_controller.get_outputs()
+		# Print first 10 inputs (ray data) and player state
+		print("Frame %d: inputs[0:10]=%s state=%s" % [
+			_debug_frame_count,
+			[inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]],
+			[inputs[64], inputs[65], inputs[66], inputs[67], inputs[68], inputs[69]]
+		])
+		print("  outputs=%s move=%s shoot=%s" % [
+			[outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5]],
+			action.move_direction, action.shoot_direction
+		])
+
 	if current_mode == Mode.TRAINING:
 		_process_training(delta)
 	elif current_mode == Mode.PLAYBACK:
 		_process_playback()
+	elif current_mode == Mode.GENERATION_PLAYBACK:
+		_process_generation_playback()
 
 
 func _process_training(delta: float) -> void:
@@ -273,6 +354,15 @@ func _process_playback() -> void:
 		player.enable_ai_control(false)
 
 
+func _process_generation_playback() -> void:
+	## Handle generation playback mode - show result, then advance to next generation.
+	if main_scene.game_over:
+		# Show generation result
+		main_scene.game_over_label.text = "GENERATION %d\nScore: %d\n\nPress [SPACE] for next gen\nPress [H] for human mode" % [playback_generation, int(main_scene.score)]
+		main_scene.game_over_label.visible = true
+		player.enable_ai_control(false)
+
+
 func _on_generation_complete(gen: int, best: float, avg: float) -> void:
 	generation = gen
 	best_fitness = best
@@ -296,7 +386,9 @@ func get_stats() -> Dictionary:
 		"max_eval_time": max_eval_time,
 		"best_fitness": best_fitness,
 		"all_time_best": all_time_best,
-		"current_score": main_scene.score if main_scene else 0.0
+		"current_score": main_scene.score if main_scene else 0.0,
+		"playback_generation": playback_generation,
+		"max_playback_generation": max_playback_generation
 	}
 
 

@@ -80,15 +80,15 @@ add_child(enemy)
 
 ## Chess Piece Enemies
 
-Enemies are chess pieces with chess-like movement patterns and standard chess point values:
+Enemies are chess pieces with chess-like movement patterns. Kill points are 10× chess values:
 
-| Piece | Symbol | Points | Size | Movement Pattern |
-|-------|--------|--------|------|------------------|
-| Pawn | ♟ | 1 | 28 | One tile toward player (straight lines) |
-| Knight | ♞ | 3 | 32 | L-shaped jumps (2+1 tiles), hops over obstacles |
-| Bishop | ♝ | 3 | 32 | Diagonal movement (1-2 tiles) |
-| Rook | ♜ | 5 | 36 | Straight lines (1-3 tiles horizontal/vertical) |
-| Queen | ♛ | 9 | 40 | Combines bishop and rook movement |
+| Piece | Symbol | Kill Points | Size | Movement Pattern |
+|-------|--------|-------------|------|------------------|
+| Pawn | ♟ | 10 | 28 | One tile toward player (straight lines) |
+| Knight | ♞ | 30 | 32 | L-shaped jumps (2+1 tiles), hops over obstacles |
+| Bishop | ♝ | 30 | 32 | Diagonal movement (1-2 tiles) |
+| Rook | ♜ | 50 | 36 | Straight lines (1-3 tiles horizontal/vertical) |
+| Queen | ♛ | 90 | 40 | Combines bishop and rook movement |
 
 **Movement System:**
 - Pieces move on a virtual 50px grid
@@ -185,9 +185,9 @@ training_manager.gd     # Main scene integration
 
 Uses game score directly:
 - +10 points per second survived
-- +N points per enemy killed (chess piece values)
-- +10 points per power-up collected
-- +25 bonus for screen clear
+- +N×10 points per enemy killed (pawn=10, knight/bishop=30, rook=50, queen=90)
+- +50 points per power-up collected
+- +100 bonus for screen clear (plus scaled enemy values)
 
 ### Evolution Parameters
 

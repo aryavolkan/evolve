@@ -171,6 +171,14 @@ func save_best(path: String) -> void:
 		all_time_best_network.save_to_file(path)
 
 
+func save_generation_best(base_path: String) -> void:
+	## Save the best network for the current generation.
+	## Creates files like user://gen_001.nn, user://gen_002.nn, etc.
+	if best_network:
+		var gen_path := base_path.replace(".nn", "_gen_%03d.nn" % generation)
+		best_network.save_to_file(gen_path)
+
+
 func load_best(path: String) -> void:
 	## Load a network and set it as the best.
 	var net = NeuralNetworkScript.load_from_file(path)

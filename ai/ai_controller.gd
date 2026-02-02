@@ -19,8 +19,8 @@ const OUT_SHOOT_LEFT := 4
 const OUT_SHOOT_RIGHT := 5
 
 # Thresholds
-const SHOOT_THRESHOLD := 0.3
-const MOVE_DEADZONE := 0.1
+const SHOOT_THRESHOLD := 0.0  # Shoot if any direction is positive
+const MOVE_DEADZONE := 0.01   # Very small deadzone to allow subtle movements
 
 
 func _init(p_network = null) -> void:
@@ -49,8 +49,8 @@ func get_action() -> Dictionary:
 	var inputs: PackedFloat32Array = sensor.get_inputs()
 	var outputs: PackedFloat32Array = network.forward(inputs)
 
-	# Movement direction
-	var move_dir := Vector2(outputs[OUT_MOVE_X], outputs[OUT_MOVE_Y])
+	# Movement direction (scale up small outputs since tanh outputs are often small)
+	var move_dir := Vector2(outputs[OUT_MOVE_X], outputs[OUT_MOVE_Y]) * 5.0  # Scale factor
 	if move_dir.length() < MOVE_DEADZONE:
 		move_dir = Vector2.ZERO
 	elif move_dir.length() > 1.0:

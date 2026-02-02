@@ -199,6 +199,7 @@ func _on_generation_complete(gen: int, best: float, avg: float) -> void:
 
 	# Auto-save
 	evolution.save_best(BEST_NETWORK_PATH)
+	evolution.save_generation_best(BEST_NETWORK_PATH)  # Save per-generation best
 	evolution.save_population(POPULATION_PATH)
 
 
