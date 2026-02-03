@@ -18,11 +18,11 @@ var main_scene: Node2D
 var player: CharacterBody2D
 
 # Configuration
-var population_size: int = 50
+var population_size: int = 48
 var max_generations: int = 100
 var max_eval_time: float = 60.0
-var time_scale: float = 4.0
-var parallel_count: int = 10  # Number of parallel arenas
+var time_scale: float = 1.0
+var parallel_count: int = 48  # Number of parallel arenas (6x8 grid)
 
 # Paths
 const BEST_NETWORK_PATH := "user://best_network.nn"
@@ -201,8 +201,8 @@ func _on_training_window_resized() -> void:
 		return
 
 	var viewport_size = main_scene.get_viewport().get_visible_rect().size
-	var cols = 5
-	var rows = 2
+	var cols = 6
+	var rows = 8
 	var padding = 5
 	var top_margin = 40
 	var arena_width = (viewport_size.x - padding * (cols + 1)) / cols
@@ -224,8 +224,8 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 	var viewport_size = main_scene.get_viewport().get_visible_rect().size
 
 	# Calculate size for each arena (5 columns, 2 rows)
-	var cols = 5
-	var rows = 2
+	var cols = 6
+	var rows = 8
 	var padding = 5
 	var top_margin = 40  # Space for stats
 	var arena_width = (viewport_size.x - padding * (cols + 1)) / cols
@@ -299,8 +299,8 @@ func start_next_batch() -> void:
 
 	var grid_index = 0
 	for i in range(current_batch_start, batch_end):
-		var grid_x = grid_index % 5
-		var grid_y = grid_index / 5
+		var grid_x = grid_index % 6
+		var grid_y = grid_index / 6
 		var instance = create_eval_instance(i, grid_x, grid_y)
 		eval_instances.append(instance)
 		grid_index += 1
@@ -595,6 +595,6 @@ func is_ai_active() -> bool:
 
 func adjust_speed(delta: float) -> void:
 	## Adjust training speed up or down.
-	time_scale = clampf(time_scale + delta, 1.0, 10.0)
+	time_scale = clampf(time_scale + delta, 1.0, 8.0)
 	Engine.time_scale = time_scale
 	print("Training speed: %.1fx" % time_scale)

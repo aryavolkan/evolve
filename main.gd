@@ -303,8 +303,11 @@ func end_slow_enemies() -> void:
 
 func clear_all_enemies() -> void:
 	player.trigger_screen_clear_effect()
+	var local_enemies = get_local_enemies()
+	var all_enemies = get_tree().get_nodes_in_group("enemy")
+	print("Screen clear: %d local enemies / %d total enemies" % [local_enemies.size(), all_enemies.size()])
 	var total_points = 0
-	for enemy in get_local_enemies():
+	for enemy in local_enemies:
 		if enemy.has_method("get_point_value"):
 			total_points += enemy.get_point_value() * KILL_MULTIPLIER
 		else:
@@ -620,7 +623,7 @@ func handle_training_input() -> void:
 		if training_manager.get_mode() == training_manager.Mode.TRAINING:
 			training_manager.stop_training()
 		else:
-			training_manager.start_training(50, 100)
+			training_manager.start_training(48, 100)
 
 	elif Input.is_physical_key_pressed(KEY_P):
 		if not _key_just_pressed("playback"):

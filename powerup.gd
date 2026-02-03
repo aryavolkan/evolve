@@ -30,6 +30,7 @@ func get_type_name() -> String:
 	return ""
 
 func _on_body_entered(body: Node2D) -> void:
-	if body.is_in_group("player"):
+	# Check if it's a player AND in the same scene (for parallel training)
+	if body.is_in_group("player") and body.get_parent() == get_parent():
 		collected.emit(get_type_name())
 		queue_free()
