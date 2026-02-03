@@ -672,14 +672,20 @@ func handle_training_input() -> void:
 		if Input.is_action_just_pressed("ui_accept") and game_over:
 			training_manager.advance_generation_playback()
 
-	# Speed controls during training ([ and ] or - and =)
+	# Training mode controls
 	if training_manager.get_mode() == training_manager.Mode.TRAINING:
-		if Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS):
-			if _key_just_pressed("speed_down"):
-				training_manager.adjust_speed(-1.0)
-		elif Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL):
-			if _key_just_pressed("speed_up"):
-				training_manager.adjust_speed(1.0)
+		# SPACE to toggle pause (with graph view)
+		if Input.is_action_just_pressed("ui_accept"):
+			training_manager.toggle_pause()
+
+		# Speed controls ([ and ] or - and =) - only when not paused
+		if not training_manager.is_paused:
+			if Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS):
+				if _key_just_pressed("speed_down"):
+					training_manager.adjust_speed(-1.0)
+			elif Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL):
+				if _key_just_pressed("speed_up"):
+					training_manager.adjust_speed(1.0)
 
 
 var _pressed_keys: Dictionary = {}

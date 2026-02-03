@@ -37,7 +37,7 @@ var best_fitness: float = 0.0
 var all_time_best: float = 0.0
 
 # Early stopping
-var stagnation_limit: int = 3
+var stagnation_limit: int = 10
 var generations_without_improvement: int = 0
 var previous_all_time_best: float = 0.0
 
@@ -50,6 +50,16 @@ var generation_networks: Array = []
 var eval_instances: Array = []  # Array of {viewport, scene, controller, index, time, done}
 var training_container: Control  # Container for all training viewports
 var ai_controller = null  # For playback mode
+
+# Metric history for graphing
+var history_best_fitness: Array[float] = []
+var history_avg_fitness: Array[float] = []
+var history_min_fitness: Array[float] = []
+
+# Pause state
+var is_paused: bool = false
+var pause_overlay: Control = null
+var saved_time_scale: float = 1.0
 
 # Preloaded scripts
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
@@ -105,7 +115,13 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 	generation = 0
 	generations_without_improvement = 0
 	previous_all_time_best = 0.0
+	is_paused = false
 	Engine.time_scale = time_scale
+
+	# Clear metric history
+	history_best_fitness.clear()
+	history_avg_fitness.clear()
+	history_min_fitness.clear()
 
 	# Hide the main game and show training arenas
 	hide_main_game()
@@ -429,7 +445,7 @@ func update_training_stats_display() -> void:
 			if not eval.done and eval.scene.score > best_current:
 				best_current = eval.scene.score
 
-		stats_label.text = "Gen %d | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.2fx | [-/+] [T]=Stop [H]=Human" % [
+		stats_label.text = "Gen %d | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.2fx | [SPACE]=Pause [-/+]=Speed [T]=Stop" % [
 			generation,
 			evaluated_count,
 			population_size,
@@ -445,6 +461,12 @@ func _on_generation_complete(gen: int, best: float, avg: float) -> void:
 	generation = gen
 	best_fitness = best
 	all_time_best = evolution.get_all_time_best_fitness()
+
+	# Record metrics for graphing
+	history_best_fitness.append(best)
+	history_avg_fitness.append(avg)
+	var stats = evolution.get_stats()
+	history_min_fitness.append(stats.get("current_min", 0.0))
 
 	# Track stagnation for early stopping
 	if all_time_best > previous_all_time_best:
@@ -645,3 +667,255 @@ func adjust_speed(delta: float) -> void:
 	time_scale = SPEED_STEPS[current_idx]
 	Engine.time_scale = time_scale
 	print("Training speed: %.2fx" % time_scale)
+
+
+# Pause functionality with metric graphs
+func toggle_pause() -> void:
+	if current_mode != Mode.TRAINING:
+		return
+
+	if is_paused:
+		resume_training()
+	else:
+		pause_training()
+
+
+func pause_training() -> void:
+	if is_paused:
+		return
+
+	is_paused = true
+	saved_time_scale = Engine.time_scale
+	Engine.time_scale = 0.0
+	create_pause_overlay()
+	print("Training paused")
+
+
+func resume_training() -> void:
+	if not is_paused:
+		return
+
+	is_paused = false
+	Engine.time_scale = saved_time_scale
+	destroy_pause_overlay()
+	print("Training resumed")
+
+
+func create_pause_overlay() -> void:
+	if pause_overlay:
+		return
+
+	pause_overlay = Control.new()
+	pause_overlay.name = "PauseOverlay"
+	pause_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	# Semi-transparent background
+	var bg = ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0, 0, 0, 0.85)
+	pause_overlay.add_child(bg)
+
+	# Title
+	var title = Label.new()
+	title.text = "TRAINING PAUSED"
+	title.position = Vector2(40, 30)
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override("font_color", Color.YELLOW)
+	pause_overlay.add_child(title)
+
+	# Instructions
+	var instructions = Label.new()
+	instructions.text = "[SPACE] Resume  |  [T] Stop Training  |  [H] Human Mode"
+	instructions.position = Vector2(40, 75)
+	instructions.add_theme_font_size_override("font_size", 16)
+	instructions.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	pause_overlay.add_child(instructions)
+
+	# Stats summary
+	var stats_label = Label.new()
+	stats_label.name = "StatsLabel"
+	stats_label.position = Vector2(40, 120)
+	stats_label.add_theme_font_size_override("font_size", 18)
+	stats_label.add_theme_color_override("font_color", Color.WHITE)
+	stats_label.text = "Generation: %d\nBest Fitness: %.1f\nAll-time Best: %.1f\nAvg Fitness: %.1f\nStagnation: %d/%d" % [
+		generation,
+		best_fitness,
+		all_time_best,
+		history_avg_fitness[-1] if history_avg_fitness.size() > 0 else 0.0,
+		generations_without_improvement,
+		stagnation_limit
+	]
+	pause_overlay.add_child(stats_label)
+
+	# Create graph panel
+	var graph_panel = create_graph_panel()
+	graph_panel.position = Vector2(40, 260)
+	pause_overlay.add_child(graph_panel)
+
+	# Add to training canvas layer
+	if training_container:
+		var canvas = training_container.get_parent()
+		canvas.add_child(pause_overlay)
+
+
+func destroy_pause_overlay() -> void:
+	if pause_overlay:
+		pause_overlay.queue_free()
+		pause_overlay = null
+
+
+func create_graph_panel() -> Control:
+	var panel = Control.new()
+	panel.name = "GraphPanel"
+
+	var window_size = get_window_size()
+	var graph_width = window_size.x - 80
+	var graph_height = window_size.y - 320
+
+	# Graph background
+	var graph_bg = ColorRect.new()
+	graph_bg.size = Vector2(graph_width, graph_height)
+	graph_bg.color = Color(0.1, 0.1, 0.15, 1)
+	panel.add_child(graph_bg)
+
+	# Graph border
+	var border = ColorRect.new()
+	border.size = Vector2(graph_width, graph_height)
+	border.color = Color(0.3, 0.3, 0.4, 1)
+	panel.add_child(border)
+
+	var inner = ColorRect.new()
+	inner.position = Vector2(2, 2)
+	inner.size = Vector2(graph_width - 4, graph_height - 4)
+	inner.color = Color(0.08, 0.08, 0.12, 1)
+	panel.add_child(inner)
+
+	# Graph title
+	var graph_title = Label.new()
+	graph_title.text = "Fitness Over Generations"
+	graph_title.position = Vector2(10, 5)
+	graph_title.add_theme_font_size_override("font_size", 16)
+	graph_title.add_theme_color_override("font_color", Color.WHITE)
+	panel.add_child(graph_title)
+
+	# Legend
+	var legend = create_legend()
+	legend.position = Vector2(graph_width - 200, 5)
+	panel.add_child(legend)
+
+	# Draw the graph lines
+	if history_best_fitness.size() > 1:
+		var graph_area = Rect2(50, 35, graph_width - 70, graph_height - 60)
+		var max_val = get_max_history_value()
+		var min_val = 0.0
+
+		# Y-axis labels
+		for i in range(5):
+			var y_val = lerpf(min_val, max_val, 1.0 - float(i) / 4.0)
+			var y_pos = graph_area.position.y + graph_area.size.y * (float(i) / 4.0)
+			var y_label = Label.new()
+			y_label.text = "%.0f" % y_val
+			y_label.position = Vector2(5, y_pos - 8)
+			y_label.add_theme_font_size_override("font_size", 12)
+			y_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+			panel.add_child(y_label)
+
+			# Grid line
+			var grid_line = ColorRect.new()
+			grid_line.position = Vector2(graph_area.position.x, y_pos)
+			grid_line.size = Vector2(graph_area.size.x, 1)
+			grid_line.color = Color(0.2, 0.2, 0.25, 0.5)
+			panel.add_child(grid_line)
+
+		# X-axis labels
+		var x_step = maxi(1, history_best_fitness.size() / 10)
+		for i in range(0, history_best_fitness.size(), x_step):
+			var x_pos = graph_area.position.x + graph_area.size.x * (float(i) / (history_best_fitness.size() - 1))
+			var x_label = Label.new()
+			x_label.text = "%d" % (i + 1)
+			x_label.position = Vector2(x_pos - 10, graph_area.position.y + graph_area.size.y + 5)
+			x_label.add_theme_font_size_override("font_size", 12)
+			x_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+			panel.add_child(x_label)
+
+		# Draw lines using Line2D
+		var best_line = create_graph_line(history_best_fitness, graph_area, min_val, max_val, Color.GREEN)
+		panel.add_child(best_line)
+
+		var avg_line = create_graph_line(history_avg_fitness, graph_area, min_val, max_val, Color.YELLOW)
+		panel.add_child(avg_line)
+
+		var min_line = create_graph_line(history_min_fitness, graph_area, min_val, max_val, Color.RED)
+		panel.add_child(min_line)
+	else:
+		var no_data = Label.new()
+		no_data.text = "Not enough data yet (need at least 2 generations)"
+		no_data.position = Vector2(graph_width / 2 - 180, graph_height / 2)
+		no_data.add_theme_font_size_override("font_size", 16)
+		no_data.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		panel.add_child(no_data)
+
+	return panel
+
+
+func create_legend() -> Control:
+	var legend = Control.new()
+
+	var items = [
+		{"label": "Best", "color": Color.GREEN},
+		{"label": "Avg", "color": Color.YELLOW},
+		{"label": "Min", "color": Color.RED}
+	]
+
+	var x_offset = 0
+	for item in items:
+		var color_box = ColorRect.new()
+		color_box.position = Vector2(x_offset, 2)
+		color_box.size = Vector2(12, 12)
+		color_box.color = item.color
+		legend.add_child(color_box)
+
+		var label = Label.new()
+		label.text = item.label
+		label.position = Vector2(x_offset + 16, 0)
+		label.add_theme_font_size_override("font_size", 14)
+		label.add_theme_color_override("font_color", item.color)
+		legend.add_child(label)
+
+		x_offset += 60
+
+	return legend
+
+
+func create_graph_line(data: Array[float], area: Rect2, min_val: float, max_val: float, color: Color) -> Line2D:
+	var line = Line2D.new()
+	line.width = 2.0
+	line.default_color = color
+	line.antialiased = true
+
+	var range_val = max_val - min_val
+	if range_val <= 0:
+		range_val = 1.0
+
+	for i in data.size():
+		var x = area.position.x + area.size.x * (float(i) / (data.size() - 1))
+		var normalized = (data[i] - min_val) / range_val
+		var y = area.position.y + area.size.y * (1.0 - normalized)
+		line.add_point(Vector2(x, y))
+
+	return line
+
+
+func get_max_history_value() -> float:
+	var max_val = 100.0  # Minimum scale
+	for v in history_best_fitness:
+		max_val = maxf(max_val, v)
+	for v in history_avg_fitness:
+		max_val = maxf(max_val, v)
+	# Round up to nice number
+	if max_val <= 100:
+		return 100.0
+	elif max_val <= 500:
+		return ceilf(max_val / 100.0) * 100.0
+	else:
+		return ceilf(max_val / 500.0) * 500.0
