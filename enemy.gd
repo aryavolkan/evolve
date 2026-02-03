@@ -41,9 +41,25 @@ const TYPE_CONFIG = {
 const TILE_SIZE: float = 50.0  # Virtual grid size for chess-like movement
 
 func _ready() -> void:
-	player = get_tree().get_first_node_in_group("player")
+	# Find player in our local scene (handles SubViewport isolation)
+	player = find_local_player()
 	apply_type_config()
 	move_timer = randf() * move_cooldown  # Stagger initial moves
+
+
+func find_local_player() -> CharacterBody2D:
+	## Find the player node within our own scene hierarchy.
+	## This handles SubViewport isolation where get_first_node_in_group finds wrong player.
+
+	# Walk up to find the Main scene (our root)
+	var current = get_parent()
+	while current:
+		if current.name == "Main" and current.has_node("Player"):
+			return current.get_node("Player")
+		current = current.get_parent()
+
+	# Fallback to global search if not in a Main scene
+	return get_tree().get_first_node_in_group("player")
 
 func apply_type_config() -> void:
 	var config = TYPE_CONFIG[type]
@@ -95,11 +111,20 @@ func _physics_process(delta: float) -> void:
 		velocity = (move_target - position).normalized() * speed * 3
 	move_and_slide()
 
-	# Check if we hit the player
+	# Check if we hit the player via slide collision
 	for i in get_slide_collision_count():
 		var collision = get_slide_collision(i)
 		var collider = collision.get_collider()
 		if collider.is_in_group("player"):
+			player.on_enemy_collision(self)
+			return
+
+	# Backup: distance-based collision check (handles high time scales and tunneling)
+	if player and is_instance_valid(player):
+		var my_size: float = TYPE_CONFIG[type]["size"] * 0.5
+		var player_size: float = 20.0  # Player half-size
+		var collision_dist: float = my_size + player_size
+		if global_position.distance_to(player.global_position) < collision_dist:
 			player.on_enemy_collision(self)
 			return
 

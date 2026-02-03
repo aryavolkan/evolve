@@ -48,10 +48,25 @@ func get_inputs() -> PackedFloat32Array:
 
 	var player_pos := player.global_position
 
-	# Get all entities once
-	var enemies := player.get_tree().get_nodes_in_group("enemy")
-	var obstacles := player.get_tree().get_nodes_in_group("obstacle")
-	var powerups := player.get_tree().get_nodes_in_group("powerup")
+	# Get player's scene (parent node) for filtering
+	# This is critical for parallel training where multiple scenes share the same tree
+	var player_scene := player.get_parent()
+
+	# Get all entities, filtered to same scene as player
+	# Without filtering, parallel training would see entities from ALL scenes
+	var enemies: Array = []
+	var obstacles: Array = []
+	var powerups: Array = []
+
+	for e in player.get_tree().get_nodes_in_group("enemy"):
+		if e.get_parent() == player_scene:
+			enemies.append(e)
+	for o in player.get_tree().get_nodes_in_group("obstacle"):
+		if o.get_parent() == player_scene:
+			obstacles.append(o)
+	for p in player.get_tree().get_nodes_in_group("powerup"):
+		if p.get_parent() == player_scene:
+			powerups.append(p)
 
 	# Cast rays
 	var input_idx := 0

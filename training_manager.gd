@@ -1,7 +1,6 @@
 extends Node
 
-## Training Manager - Orchestrates AI training and playback.
-## Add this as an autoload or attach to a persistent node.
+## Training Manager - Runs 10 visible arenas in parallel for AI training.
 
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
@@ -10,13 +9,11 @@ enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK }
 
 var current_mode: Mode = Mode.HUMAN
 
-# Training components (untyped to avoid preload issues)
+# Training components
 var evolution = null
-var ai_controller = null
-var current_individual: int = 0
-var evaluation_time: float = 0.0
+var current_batch_start: int = 0
 
-# References (set when game starts)
+# References
 var main_scene: Node2D
 var player: CharacterBody2D
 
@@ -24,7 +21,8 @@ var player: CharacterBody2D
 var population_size: int = 50
 var max_generations: int = 100
 var max_eval_time: float = 60.0
-var time_scale: float = 2.0
+var time_scale: float = 4.0
+var parallel_count: int = 10  # Number of parallel arenas
 
 # Paths
 const BEST_NETWORK_PATH := "user://best_network.nn"
@@ -35,17 +33,27 @@ var generation: int = 0
 var best_fitness: float = 0.0
 var all_time_best: float = 0.0
 
+# Early stopping
+var stagnation_limit: int = 3
+var generations_without_improvement: int = 0
+var previous_all_time_best: float = 0.0
+
 # Generation playback state
 var playback_generation: int = 1
 var max_playback_generation: int = 1
-var generation_networks: Array = []  # Array of loaded networks
+var generation_networks: Array = []
 
+# Parallel training instances
+var eval_instances: Array = []  # Array of {viewport, scene, controller, index, time, done}
+var training_container: Control  # Container for all training viewports
+var ai_controller = null  # For playback mode
 
 # Preloaded scripts
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 var AISensorScript = preload("res://ai/sensor.gd")
 var AIControllerScript = preload("res://ai/ai_controller.gd")
 var EvolutionScript = preload("res://ai/evolution.gd")
+var MainScenePacked = preload("res://main.tscn")
 
 
 func _ready() -> void:
@@ -57,13 +65,13 @@ func initialize(scene: Node2D) -> void:
 	main_scene = scene
 	player = scene.get_node("Player")
 
-	# Setup AI controller
+	# Setup AI controller for playback
 	ai_controller = AIControllerScript.new()
 	ai_controller.set_player(player)
 
 
 func start_training(pop_size: int = 50, generations: int = 100) -> void:
-	## Begin evolutionary training.
+	## Begin evolutionary training with parallel visible arenas.
 	if not main_scene:
 		push_error("Training manager not initialized")
 		return
@@ -90,15 +98,21 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 	evolution.generation_complete.connect(_on_generation_complete)
 
 	current_mode = Mode.TRAINING
-	current_individual = 0
+	current_batch_start = 0
 	generation = 0
+	generations_without_improvement = 0
+	previous_all_time_best = 0.0
 	Engine.time_scale = time_scale
 
-	player.enable_ai_control(true)
-	load_individual(0)
+	# Hide the main game and show training arenas
+	hide_main_game()
+	create_training_container()
+	start_next_batch()
 
 	training_status_changed.emit("Training started")
-	print("Training started: pop=%d, max_gen=%d" % [population_size, max_generations])
+	print("Training started: pop=%d, max_gen=%d, parallel=%d, early_stop=%d" % [
+		population_size, max_generations, parallel_count, stagnation_limit
+	])
 
 
 func stop_training() -> void:
@@ -108,7 +122,19 @@ func stop_training() -> void:
 
 	current_mode = Mode.HUMAN
 	Engine.time_scale = 1.0
-	player.enable_ai_control(false)
+
+	# Disconnect resize signal
+	if main_scene.get_tree().root.size_changed.is_connected(_on_training_window_resized):
+		main_scene.get_tree().root.size_changed.disconnect(_on_training_window_resized)
+
+	# Cleanup training instances
+	cleanup_training_instances()
+	if training_container:
+		training_container.queue_free()
+		training_container = null
+
+	# Show main game again
+	show_main_game()
 
 	if evolution:
 		evolution.save_best(BEST_NETWORK_PATH)
@@ -118,38 +144,292 @@ func stop_training() -> void:
 	training_status_changed.emit("Training stopped")
 
 
-func resume_training() -> void:
-	## Resume from saved state.
-	if not main_scene:
-		push_error("Training manager not initialized")
+func hide_main_game() -> void:
+	## Hide the main game elements during training.
+	main_scene.visible = false
+	player.set_physics_process(false)
+	# Hide the CanvasLayer UI (it renders independently of the scene)
+	var canvas_layer = main_scene.get_node_or_null("CanvasLayer")
+	if canvas_layer:
+		canvas_layer.visible = false
+
+
+func show_main_game() -> void:
+	## Show the main game elements after training.
+	main_scene.visible = true
+	player.set_physics_process(true)
+	player.enable_ai_control(false)
+	# Show the CanvasLayer UI
+	var canvas_layer = main_scene.get_node_or_null("CanvasLayer")
+	if canvas_layer:
+		canvas_layer.visible = true
+	# Reset the game
+	main_scene.get_tree().paused = false
+
+
+func create_training_container() -> void:
+	## Create a container with SubViewports for parallel training.
+	training_container = Control.new()
+	training_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	training_container.name = "TrainingContainer"
+
+	# Add to the root so it's visible
+	main_scene.get_tree().root.add_child(training_container)
+
+	# Background
+	var bg = ColorRect.new()
+	bg.name = "Background"
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.05, 0.05, 0.08, 1)
+	training_container.add_child(bg)
+
+	# Stats label at top
+	var stats_label = Label.new()
+	stats_label.name = "StatsLabel"
+	stats_label.position = Vector2(10, 10)
+	stats_label.add_theme_font_size_override("font_size", 16)
+	stats_label.add_theme_color_override("font_color", Color.YELLOW)
+	training_container.add_child(stats_label)
+
+	# Connect to window resize
+	main_scene.get_tree().root.size_changed.connect(_on_training_window_resized)
+
+
+func _on_training_window_resized() -> void:
+	## Update grid layout when window is resized.
+	if current_mode != Mode.TRAINING or eval_instances.is_empty():
 		return
 
-	var sensor_instance = AISensorScript.new()
-	var input_size: int = sensor_instance.TOTAL_INPUTS
+	var viewport_size = main_scene.get_viewport().get_visible_rect().size
+	var cols = 5
+	var rows = 2
+	var padding = 5
+	var top_margin = 40
+	var arena_width = (viewport_size.x - padding * (cols + 1)) / cols
+	var arena_height = (viewport_size.y - top_margin - padding * (rows + 1)) / rows
 
-	evolution = EvolutionScript.new(population_size, input_size, 32, 6)
+	for i in eval_instances.size():
+		var eval = eval_instances[i]
+		var grid_x = i % cols
+		var grid_y = i / cols
+		eval.container.position = Vector2(
+			padding + grid_x * (arena_width + padding),
+			top_margin + padding + grid_y * (arena_height + padding)
+		)
+		eval.container.size = Vector2(arena_width, arena_height)
 
-	if evolution.load_population(POPULATION_PATH):
-		generation = evolution.get_generation()
-		best_fitness = evolution.get_best_fitness()
-		all_time_best = evolution.get_all_time_best_fitness()
-		print("Resumed from generation %d (best: %.1f)" % [generation, all_time_best])
+
+func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Dictionary:
+	## Create a SubViewport with a game instance for evaluation.
+	var viewport_size = main_scene.get_viewport().get_visible_rect().size
+
+	# Calculate size for each arena (5 columns, 2 rows)
+	var cols = 5
+	var rows = 2
+	var padding = 5
+	var top_margin = 40  # Space for stats
+	var arena_width = (viewport_size.x - padding * (cols + 1)) / cols
+	var arena_height = (viewport_size.y - top_margin - padding * (rows + 1)) / rows
+
+	# Create SubViewportContainer
+	var container = SubViewportContainer.new()
+	container.position = Vector2(
+		padding + grid_x * (arena_width + padding),
+		top_margin + padding + grid_y * (arena_height + padding)
+	)
+	container.size = Vector2(arena_width, arena_height)
+	container.stretch = true
+	training_container.add_child(container)
+
+	# Create SubViewport
+	var viewport = SubViewport.new()
+	viewport.size = Vector2(1280, 720)  # Internal resolution
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport.handle_input_locally = false
+	container.add_child(viewport)
+
+	# Instantiate game scene
+	var scene: Node2D = MainScenePacked.instantiate()
+	viewport.add_child(scene)
+
+	# Get player and configure for AI
+	var scene_player: CharacterBody2D = scene.get_node("Player")
+	scene_player.enable_ai_control(true)
+
+	# Create AI controller
+	var controller = AIControllerScript.new()
+	controller.set_player(scene_player)
+	controller.set_network(evolution.get_individual(individual_index))
+
+	# Hide UI elements we don't need
+	var ui = scene.get_node("CanvasLayer/UI")
+	for child in ui.get_children():
+		if child.name not in ["ScoreLabel", "LivesLabel"]:
+			child.visible = false
+
+	# Add index label
+	var index_label = Label.new()
+	index_label.text = "#%d" % individual_index
+	index_label.position = Vector2(5, 80)
+	index_label.add_theme_font_size_override("font_size", 14)
+	index_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+	ui.add_child(index_label)
+
+	return {
+		"container": container,
+		"viewport": viewport,
+		"scene": scene,
+		"player": scene_player,
+		"controller": controller,
+		"index": individual_index,
+		"time": 0.0,
+		"done": false
+	}
+
+
+func start_next_batch() -> void:
+	## Start evaluating the next batch of individuals in parallel.
+	cleanup_training_instances()
+
+	var batch_end: int = mini(current_batch_start + parallel_count, population_size)
+
+	print("Gen %d: Evaluating individuals %d-%d..." % [
+		generation, current_batch_start, batch_end - 1
+	])
+
+	var grid_index = 0
+	for i in range(current_batch_start, batch_end):
+		var grid_x = grid_index % 5
+		var grid_y = grid_index / 5
+		var instance = create_eval_instance(i, grid_x, grid_y)
+		eval_instances.append(instance)
+		grid_index += 1
+
+
+func cleanup_training_instances() -> void:
+	## Clean up completed evaluation instances.
+	for eval in eval_instances:
+		if is_instance_valid(eval.container):
+			eval.container.queue_free()
+	eval_instances.clear()
+
+
+func _physics_process(delta: float) -> void:
+	if current_mode == Mode.HUMAN:
+		return
+
+	if current_mode == Mode.TRAINING:
+		_process_parallel_training(delta)
+	elif current_mode == Mode.PLAYBACK:
+		_process_playback()
+	elif current_mode == Mode.GENERATION_PLAYBACK:
+		_process_generation_playback()
+
+
+func _process_parallel_training(delta: float) -> void:
+	var all_done := true
+	var completed_this_frame: Array = []
+
+	for eval in eval_instances:
+		if eval.done:
+			continue
+
+		all_done = false
+		eval.time += delta
+
+		# Drive AI controller
+		var action: Dictionary = eval.controller.get_action()
+		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
+
+		# Unpause if paused
+		if eval.scene.get_tree():
+			eval.viewport.get_tree()
+
+		var game_over: bool = eval.scene.game_over
+		var time_exceeded: bool = eval.time >= max_eval_time
+
+		if game_over or time_exceeded:
+			var fitness: float = eval.scene.score
+			evolution.set_fitness(eval.index, fitness)
+			eval.done = true
+			completed_this_frame.append(eval)
+
+	# Update stats display
+	update_training_stats_display()
+
+	if all_done and eval_instances.size() > 0:
+		# Batch complete
+		current_batch_start += parallel_count
+
+		if current_batch_start >= population_size:
+			# Generation complete, evolve
+			evolution.evolve()
+			current_batch_start = 0
+
+			if evolution.get_generation() >= max_generations:
+				stop_training()
+				return
+
+		start_next_batch()
+
+	stats_updated.emit(get_stats())
+
+
+func update_training_stats_display() -> void:
+	if not training_container:
+		return
+
+	var stats_label = training_container.get_node_or_null("StatsLabel")
+	if stats_label:
+		var completed = 0
+		var best_current = 0.0
+		for eval in eval_instances:
+			if eval.done:
+				completed += 1
+			if eval.scene.score > best_current:
+				best_current = eval.scene.score
+
+		stats_label.text = "Gen %d | Batch %d-%d | Done: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.0fx | [-/+] Speed [T]=Stop [H]=Human" % [
+			generation,
+			current_batch_start,
+			mini(current_batch_start + parallel_count, population_size) - 1,
+			completed,
+			eval_instances.size(),
+			best_current,
+			all_time_best,
+			generations_without_improvement,
+			stagnation_limit,
+			time_scale
+		]
+
+
+func _on_generation_complete(gen: int, best: float, avg: float) -> void:
+	generation = gen
+	best_fitness = best
+	all_time_best = evolution.get_all_time_best_fitness()
+
+	# Track stagnation for early stopping
+	if all_time_best > previous_all_time_best:
+		generations_without_improvement = 0
+		previous_all_time_best = all_time_best
 	else:
-		print("No saved state, starting fresh")
-		evolution.initialize_population()
+		generations_without_improvement += 1
 
-	evolution.generation_complete.connect(_on_generation_complete)
+	print("Gen %3d | Best: %6.1f | Avg: %6.1f | All-time: %6.1f | Stagnant: %d/%d" % [
+		gen, best, avg, all_time_best, generations_without_improvement, stagnation_limit
+	])
 
-	current_mode = Mode.TRAINING
-	current_individual = 0
-	Engine.time_scale = time_scale
+	# Auto-save every generation
+	evolution.save_best(BEST_NETWORK_PATH)
+	evolution.save_population(POPULATION_PATH)
 
-	player.enable_ai_control(true)
-	load_individual(0)
+	# Early stopping if no improvement for stagnation_limit generations
+	if generations_without_improvement >= stagnation_limit:
+		print("Early stopping: No improvement for %d generations" % stagnation_limit)
+		stop_training()
 
-	training_status_changed.emit("Training resumed")
 
-
+# Playback mode functions (unchanged from before)
 func start_playback() -> void:
 	## Watch the best trained network play.
 	if not main_scene:
@@ -177,7 +457,6 @@ func stop_playback() -> void:
 	## Return to human control.
 	current_mode = Mode.HUMAN
 	player.enable_ai_control(false)
-	# Unpause if game was paused at game over
 	main_scene.get_tree().paused = false
 	training_status_changed.emit("Playback stopped")
 
@@ -188,7 +467,6 @@ func start_generation_playback() -> void:
 		push_error("Training manager not initialized")
 		return
 
-	# Find all generation networks
 	generation_networks.clear()
 	var gen := 1
 	while true:
@@ -197,10 +475,6 @@ func start_generation_playback() -> void:
 		if not network:
 			break
 		generation_networks.append(network)
-		print("Loaded gen %d network: input=%d hidden=%d output=%d weights=%d" % [
-			gen, network.input_size, network.hidden_size, network.output_size,
-			network.get_weights().size()
-		])
 		gen += 1
 
 	if generation_networks.is_empty():
@@ -225,7 +499,6 @@ func start_generation_playback() -> void:
 func advance_generation_playback() -> void:
 	## Move to the next generation in playback.
 	if playback_generation >= max_playback_generation:
-		# Finished all generations
 		main_scene.game_over_label.text = "ALL GENERATIONS COMPLETE\n\nPress [G] to restart\nPress [H] for human mode"
 		main_scene.game_over_label.visible = true
 		player.enable_ai_control(false)
@@ -238,17 +511,30 @@ func advance_generation_playback() -> void:
 	print("Playing back generation %d of %d" % [playback_generation, max_playback_generation])
 
 
-func load_individual(index: int) -> void:
-	## Load a network for evaluation.
-	var network = evolution.get_individual(index)
-	ai_controller.set_network(network)
-	reset_game()
-	evaluation_time = 0.0
+func _process_playback() -> void:
+	# Get AI action and apply to player
+	var action: Dictionary = ai_controller.get_action()
+	player.set_ai_action(action.move_direction, action.shoot_direction)
+
+	if main_scene.game_over:
+		main_scene.game_over_label.text = "GAME OVER\nFinal Score: %d\n\nPress [P] to replay\nPress [H] for human mode" % int(main_scene.score)
+		main_scene.game_over_label.visible = true
+		player.enable_ai_control(false)
+
+
+func _process_generation_playback() -> void:
+	# Get AI action and apply to player
+	var action: Dictionary = ai_controller.get_action()
+	player.set_ai_action(action.move_direction, action.shoot_direction)
+
+	if main_scene.game_over:
+		main_scene.game_over_label.text = "GENERATION %d\nScore: %d\n\nPress [SPACE] for next gen\nPress [H] for human mode" % [playback_generation, int(main_scene.score)]
+		main_scene.game_over_label.visible = true
+		player.enable_ai_control(false)
 
 
 func reset_game() -> void:
 	## Reset game state for new evaluation.
-	# Unpause the game (it gets paused on game over)
 	main_scene.get_tree().paused = false
 
 	main_scene.score = 0.0
@@ -259,12 +545,10 @@ func reset_game() -> void:
 	main_scene.next_powerup_score = 30.0
 	main_scene.slow_active = false
 
-	# Hide game over UI elements
 	main_scene.game_over_label.visible = false
 	main_scene.name_entry.visible = false
 	main_scene.name_prompt.visible = false
 
-	# Position player at arena center
 	var arena_center = Vector2(main_scene.ARENA_WIDTH / 2, main_scene.ARENA_HEIGHT / 2)
 	player.position = arena_center
 	player.is_hit = false
@@ -274,124 +558,30 @@ func reset_game() -> void:
 	player.slow_time = 0.0
 	player.velocity = Vector2.ZERO
 
-	# Clear entities
 	for enemy in main_scene.get_tree().get_nodes_in_group("enemy"):
-		enemy.queue_free()
+		enemy.free()
 	for powerup in main_scene.get_tree().get_nodes_in_group("powerup"):
-		powerup.queue_free()
+		powerup.free()
 
-	# Give brief invincibility after reset to prevent instant death
-	# (queue_free doesn't happen until end of frame)
+	main_scene.spawn_initial_enemies()
 	player.activate_invincibility(1.0)
-
-
-var _debug_frame_count: int = 0
-
-func _physics_process(delta: float) -> void:
-	if current_mode == Mode.HUMAN:
-		return
-
-	# Get AI action and apply to player
-	var action: Dictionary = ai_controller.get_action()
-	player.set_ai_action(action.move_direction, action.shoot_direction)
-
-	# Debug: print first few frames of output
-	_debug_frame_count += 1
-	if _debug_frame_count <= 3 and current_mode == Mode.GENERATION_PLAYBACK:
-		var inputs = ai_controller.get_inputs()
-		var outputs = ai_controller.get_outputs()
-		# Print first 10 inputs (ray data) and player state
-		print("Frame %d: inputs[0:10]=%s state=%s" % [
-			_debug_frame_count,
-			[inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]],
-			[inputs[64], inputs[65], inputs[66], inputs[67], inputs[68], inputs[69]]
-		])
-		print("  outputs=%s move=%s shoot=%s" % [
-			[outputs[0], outputs[1], outputs[2], outputs[3], outputs[4], outputs[5]],
-			action.move_direction, action.shoot_direction
-		])
-
-	if current_mode == Mode.TRAINING:
-		_process_training(delta)
-	elif current_mode == Mode.PLAYBACK:
-		_process_playback()
-	elif current_mode == Mode.GENERATION_PLAYBACK:
-		_process_generation_playback()
-
-
-func _process_training(delta: float) -> void:
-	evaluation_time += delta
-
-	var game_over: bool = main_scene.game_over
-	var time_exceeded: bool = evaluation_time >= max_eval_time
-
-	if game_over or time_exceeded:
-		# Record fitness (game score is the fitness)
-		var fitness: float = main_scene.score
-		evolution.set_fitness(current_individual, fitness)
-
-		current_individual += 1
-
-		if current_individual >= population_size:
-			# Evolve to next generation
-			evolution.evolve()
-			current_individual = 0
-
-			if evolution.get_generation() >= max_generations:
-				stop_training()
-				return
-
-		load_individual(current_individual)
-
-	# Update stats
-	stats_updated.emit(get_stats())
-
-
-func _process_playback() -> void:
-	## Handle playback mode - single run, stop when game over.
-	if main_scene.game_over:
-		# Show final score and stop playback
-		main_scene.game_over_label.text = "GAME OVER\nFinal Score: %d\n\nPress [P] to replay\nPress [H] for human mode" % int(main_scene.score)
-		main_scene.game_over_label.visible = true
-		# Stop AI control but stay in playback mode so user can see the result
-		player.enable_ai_control(false)
-
-
-func _process_generation_playback() -> void:
-	## Handle generation playback mode - show result, then advance to next generation.
-	if main_scene.game_over:
-		# Show generation result
-		main_scene.game_over_label.text = "GENERATION %d\nScore: %d\n\nPress [SPACE] for next gen\nPress [H] for human mode" % [playback_generation, int(main_scene.score)]
-		main_scene.game_over_label.visible = true
-		player.enable_ai_control(false)
-
-
-func _on_generation_complete(gen: int, best: float, avg: float) -> void:
-	generation = gen
-	best_fitness = best
-	all_time_best = evolution.get_all_time_best_fitness()
-
-	print("Gen %3d | Best: %6.1f | Avg: %6.1f | All-time: %6.1f" % [gen, best, avg, all_time_best])
-
-	# Auto-save every 10 generations
-	if gen % 10 == 0:
-		evolution.save_best(BEST_NETWORK_PATH)
-		evolution.save_population(POPULATION_PATH)
 
 
 func get_stats() -> Dictionary:
 	return {
 		"mode": Mode.keys()[current_mode],
 		"generation": generation,
-		"individual": current_individual,
+		"individual": current_batch_start,
 		"population_size": population_size,
-		"eval_time": evaluation_time,
+		"eval_time": 0.0,
 		"max_eval_time": max_eval_time,
 		"best_fitness": best_fitness,
 		"all_time_best": all_time_best,
 		"current_score": main_scene.score if main_scene else 0.0,
 		"playback_generation": playback_generation,
-		"max_playback_generation": max_playback_generation
+		"max_playback_generation": max_playback_generation,
+		"stagnation": generations_without_improvement,
+		"stagnation_limit": stagnation_limit
 	}
 
 
@@ -401,3 +591,10 @@ func get_mode() -> Mode:
 
 func is_ai_active() -> bool:
 	return current_mode != Mode.HUMAN
+
+
+func adjust_speed(delta: float) -> void:
+	## Adjust training speed up or down.
+	time_scale = clampf(time_scale + delta, 1.0, 10.0)
+	Engine.time_scale = time_scale
+	print("Training speed: %.1fx" % time_scale)

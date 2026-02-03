@@ -154,13 +154,16 @@ func reset_game() -> void:
 	player.slow_time = 0.0
 	player.velocity = Vector2.ZERO
 
-	# Clear enemies
+	# Clear enemies - use free() instead of queue_free() for immediate removal
 	for enemy in main_scene.get_tree().get_nodes_in_group("enemy"):
-		enemy.queue_free()
+		enemy.free()
 
 	# Clear powerups
 	for powerup in main_scene.get_tree().get_nodes_in_group("powerup"):
-		powerup.queue_free()
+		powerup.free()
+
+	# Spawn initial enemies at arena edges (now safe since old ones are gone)
+	main_scene.spawn_initial_enemies()
 
 
 func _physics_process(delta: float) -> void:

@@ -84,6 +84,7 @@ func _ready() -> void:
 	update_scoreboard_display()
 	setup_arena()
 	spawn_arena_obstacles()
+	spawn_initial_enemies()
 	setup_training_manager()
 
 func _process(delta: float) -> void:
@@ -110,11 +111,8 @@ func _process(delta: float) -> void:
 
 	# Spawn power-ups based on score, but respect the MAX_POWERUPS limit
 	if score >= next_powerup_score:
-		# Count only valid (not queued for deletion) powerups
-		var powerup_count = 0
-		for p in get_tree().get_nodes_in_group("powerup"):
-			if is_instance_valid(p) and not p.is_queued_for_deletion():
-				powerup_count += 1
+		# Count only local powerups (in this scene, not globally)
+		var powerup_count = count_local_powerups()
 
 		if powerup_count >= MAX_POWERUPS:
 			# At max power-ups, set next threshold far ahead
@@ -167,15 +165,32 @@ func spawn_enemy() -> void:
 	if slow_active:
 		enemy.apply_slow(SLOW_MULTIPLIER)
 
+
+func spawn_initial_enemies() -> void:
+	## Spawn initial enemies at the arena edges
+	const INITIAL_ENEMY_COUNT: int = 10
+	for i in range(INITIAL_ENEMY_COUNT):
+		var enemy = enemy_scene.instantiate()
+		enemy.speed = BASE_ENEMY_SPEED
+		enemy.type = ChessPiece.PAWN  # Start with pawns
+		enemy.position = get_random_edge_spawn_position()
+		add_child(enemy)
+
+
+func count_local_powerups() -> int:
+	## Count powerups that are children of this scene (not global).
+	## This is needed for parallel training where multiple scenes share the tree.
+	var count = 0
+	for p in get_tree().get_nodes_in_group("powerup"):
+		if is_instance_valid(p) and not p.is_queued_for_deletion() and p.get_parent() == self:
+			count += 1
+	return count
+
+
 func spawn_powerup() -> bool:
 	## Returns true if a power-up was successfully spawned
-	# Check if we've reached the maximum number of power-ups
-	# Count only valid (not queued for deletion) powerups
-	var powerup_count = 0
-	for p in get_tree().get_nodes_in_group("powerup"):
-		if is_instance_valid(p) and not p.is_queued_for_deletion():
-			powerup_count += 1
-	if powerup_count >= MAX_POWERUPS:
+	# Check if we've reached the maximum number of power-ups (local only)
+	if count_local_powerups() >= MAX_POWERUPS:
 		return false  # Don't spawn more power-ups
 
 	var powerup = powerup_scene.instantiate()
@@ -264,24 +279,32 @@ func _on_powerup_timer_updated(powerup_type: String, time_left: float) -> void:
 func activate_slow_enemies() -> void:
 	# Apply slow to all current enemies if not already active
 	if not slow_active:
-		var enemies = get_tree().get_nodes_in_group("enemy")
-		for enemy in enemies:
+		for enemy in get_local_enemies():
 			enemy.apply_slow(SLOW_MULTIPLIER)
 	slow_active = true
 	player.activate_slow_effect(POWERUP_DURATION)
 
+func get_local_enemies() -> Array:
+	## Get enemies that are children of this scene (not global).
+	## This is needed for parallel training where multiple scenes share the tree.
+	var local_enemies = []
+	for enemy in get_tree().get_nodes_in_group("enemy"):
+		if is_instance_valid(enemy) and enemy.get_parent() == self:
+			local_enemies.append(enemy)
+	return local_enemies
+
+
 func end_slow_enemies() -> void:
 	if slow_active:
 		slow_active = false
-		var enemies = get_tree().get_nodes_in_group("enemy")
-		for enemy in enemies:
+		for enemy in get_local_enemies():
 			enemy.remove_slow(SLOW_MULTIPLIER)
+
 
 func clear_all_enemies() -> void:
 	player.trigger_screen_clear_effect()
-	var enemies = get_tree().get_nodes_in_group("enemy")
 	var total_points = 0
-	for enemy in enemies:
+	for enemy in get_local_enemies():
 		if enemy.has_method("get_point_value"):
 			total_points += enemy.get_point_value() * KILL_MULTIPLIER
 		else:
@@ -629,6 +652,15 @@ func handle_training_input() -> void:
 	if training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
 		if Input.is_action_just_pressed("ui_accept") and game_over:
 			training_manager.advance_generation_playback()
+
+	# Speed controls during training ([ and ] or - and =)
+	if training_manager.get_mode() == training_manager.Mode.TRAINING:
+		if Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS):
+			if _key_just_pressed("speed_down"):
+				training_manager.adjust_speed(-1.0)
+		elif Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL):
+			if _key_just_pressed("speed_up"):
+				training_manager.adjust_speed(1.0)
 
 
 var _pressed_keys: Dictionary = {}
