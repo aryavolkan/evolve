@@ -56,6 +56,10 @@ const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxe
 # Slow enemies tracking
 var slow_active: bool = false
 
+# Screen clear spawn cooldown
+var screen_clear_cooldown: float = 0.0
+const SCREEN_CLEAR_SPAWN_DELAY: float = 2.0  # No enemy spawns for 2 seconds after clear
+
 # Arena camera
 var arena_camera: Camera2D
 
@@ -104,7 +108,11 @@ func _process(delta: float) -> void:
 	score_label.text = "Score: %d" % int(score)
 	update_ai_status_display()
 
-	if score >= next_spawn_score:
+	# Update screen clear cooldown
+	if screen_clear_cooldown > 0:
+		screen_clear_cooldown -= delta
+
+	if score >= next_spawn_score and screen_clear_cooldown <= 0:
 		spawn_enemy()
 		var spawn_interval = get_scaled_spawn_interval()
 		next_spawn_score += spawn_interval
@@ -203,7 +211,7 @@ func spawn_powerup() -> bool:
 
 	powerup.position = pos
 
-	# Random power-up type
+	# Random powerup type
 	var type_index = randi() % 4
 	powerup.set_type(type_index)
 	powerup.collected.connect(_on_powerup_collected)
@@ -287,9 +295,9 @@ func activate_slow_enemies() -> void:
 func get_local_enemies() -> Array:
 	## Get enemies that belong to this scene (not other parallel training scenes).
 	var local_enemies = []
-	for enemy in get_tree().get_nodes_in_group("enemy"):
-		if is_instance_valid(enemy) and is_ancestor_of(enemy):
-			local_enemies.append(enemy)
+	for child in get_children():
+		if child.is_in_group("enemy"):
+			local_enemies.append(child)
 	return local_enemies
 
 
@@ -305,16 +313,23 @@ func clear_all_enemies() -> void:
 	var local_enemies = get_local_enemies()
 	var total_points = 0
 	for enemy in local_enemies:
-		if enemy.has_method("get_point_value"):
-			total_points += enemy.get_point_value() * KILL_MULTIPLIER
-		else:
-			total_points += KILL_MULTIPLIER
-		enemy.queue_free()
+		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+			if enemy.has_method("get_point_value"):
+				total_points += enemy.get_point_value() * KILL_MULTIPLIER
+			else:
+				total_points += KILL_MULTIPLIER
+			enemy.queue_free()
+
 	# Bonus points for screen clear (scaled piece values + flat bonus)
 	if total_points > 0:
 		total_points += SCREEN_CLEAR_BONUS
 		score += total_points
 		spawn_floating_text("+%d CLEAR!" % total_points, Color(1, 0.3, 0.3, 1), player.position + Vector2(0, -50))
+
+	# Prevent immediate respawning - set cooldown and advance spawn threshold
+	screen_clear_cooldown = SCREEN_CLEAR_SPAWN_DELAY
+	next_spawn_score = score + get_scaled_spawn_interval()
+
 
 func update_lives_display() -> void:
 	lives_label.text = "Lives: %d" % lives
@@ -585,6 +600,10 @@ func get_arena_bounds() -> Rect2:
 
 # AI Training functions
 func setup_training_manager() -> void:
+	# Don't setup training manager if we're inside a SubViewport (training instance)
+	if get_viewport() != get_tree().root:
+		return
+
 	var TrainingManager = load("res://training_manager.gd")
 	training_manager = TrainingManager.new()
 	add_child(training_manager)
