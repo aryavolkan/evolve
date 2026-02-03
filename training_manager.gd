@@ -651,7 +651,7 @@ func is_ai_active() -> bool:
 	return current_mode != Mode.HUMAN
 
 
-const SPEED_STEPS: Array[float] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
+const SPEED_STEPS: Array[float] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0]
 
 func adjust_speed(delta: float) -> void:
 	## Adjust training speed up or down through discrete steps.
