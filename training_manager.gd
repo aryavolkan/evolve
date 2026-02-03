@@ -20,9 +20,12 @@ var player: CharacterBody2D
 # Configuration
 var population_size: int = 48
 var max_generations: int = 100
-var max_eval_time: float = 60.0
 var time_scale: float = 1.0
-var parallel_count: int = 48  # Number of parallel arenas (6x8 grid)
+var parallel_count: int = 10  # Number of parallel arenas (5x2 grid)
+
+# Rolling evaluation - next individual to evaluate
+var next_individual: int = 0
+var evaluated_count: int = 0
 
 # Paths
 const BEST_NETWORK_PATH := "user://best_network.nn"
@@ -233,18 +236,18 @@ func update_grid_layout() -> void:
 	_update_container_size()
 
 	var size = get_window_size()
-	var cols = 6
-	var rows = 8
-	var gap = 2
-	var top_margin = 36
+	var cols = 5
+	var rows = 2
+	var gap = 4
+	var top_margin = 40
 
 	# Simple calculation: divide available space evenly
 	var arena_w = (size.x - gap * (cols + 1)) / cols
 	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
 
 	for i in eval_instances.size():
-		var col = i % cols
-		var row = i / cols
+		var col: int = i % cols
+		var row: int = int(i / cols)
 		var x = gap + col * (arena_w + gap)
 		var y = top_margin + gap + row * (arena_h + gap)
 		eval_instances[i].container.position = Vector2(x, y)
@@ -259,10 +262,10 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 
 	# Set initial position and size immediately (don't wait for deferred update)
 	var size = get_window_size()
-	var cols = 6
-	var rows = 8
-	var gap = 2
-	var top_margin = 36
+	var cols = 5
+	var rows = 2
+	var gap = 4
+	var top_margin = 40
 	var arena_w = (size.x - gap * (cols + 1)) / cols
 	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
 	var x = gap + grid_x * (arena_w + gap)
@@ -317,22 +320,35 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 
 
 func start_next_batch() -> void:
-	## Start evaluating the next batch of individuals in parallel.
+	## Start evaluating the first batch of individuals (rolling replacement after).
 	cleanup_training_instances()
 
-	var batch_end: int = mini(current_batch_start + parallel_count, population_size)
+	# Reset rolling counters
+	next_individual = parallel_count  # First 10 are started, next is #10
+	evaluated_count = 0
 
-	print("Gen %d: Evaluating individuals %d-%d..." % [
-		generation, current_batch_start, batch_end - 1
-	])
+	print("Gen %d: Starting evaluation (rolling batches of %d)..." % [generation, parallel_count])
 
-	var grid_index = 0
-	for i in range(current_batch_start, batch_end):
-		var grid_x = grid_index % 6
-		var grid_y = grid_index / 6
+	for i in range(parallel_count):
+		var grid_x: int = i % 5
+		var grid_y: int = i / 5
 		var instance = create_eval_instance(i, grid_x, grid_y)
 		eval_instances.append(instance)
-		grid_index += 1
+
+
+func replace_eval_instance(slot_index: int, individual_index: int) -> void:
+	## Replace a completed evaluation slot with a new individual.
+	var old_eval = eval_instances[slot_index]
+	var grid_x: int = slot_index % 5
+	var grid_y: int = int(slot_index / 5)
+
+	# Clean up old instance
+	if is_instance_valid(old_eval.container):
+		old_eval.container.queue_free()
+
+	# Create new instance in same slot
+	var new_instance = create_eval_instance(individual_index, grid_x, grid_y)
+	eval_instances[slot_index] = new_instance
 
 
 func cleanup_training_instances() -> void:
@@ -356,14 +372,13 @@ func _physics_process(delta: float) -> void:
 
 
 func _process_parallel_training(delta: float) -> void:
-	var all_done := true
 	var active_count := 0
 
-	for eval in eval_instances:
+	for i in eval_instances.size():
+		var eval = eval_instances[i]
 		if eval.done:
 			continue
 
-		all_done = false
 		active_count += 1
 		eval.time += delta
 
@@ -371,43 +386,34 @@ func _process_parallel_training(delta: float) -> void:
 		var action: Dictionary = eval.controller.get_action()
 		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
 
-		# Unpause if paused
-		if eval.scene.get_tree():
-			eval.viewport.get_tree()
-
-		var game_over: bool = eval.scene.game_over
-		var time_exceeded: bool = eval.time >= max_eval_time
-
-		if game_over or time_exceeded:
+		# Check if game over (no time limit)
+		if eval.scene.game_over:
 			var fitness: float = eval.scene.score
 			evolution.set_fitness(eval.index, fitness)
 			eval.done = true
+			evaluated_count += 1
 			active_count -= 1
 
-	# Auto-scale speed based on active arenas (0.25x at full -> 2x when few remain)
-	if eval_instances.size() > 0:
-		var active_ratio: float = float(active_count) / eval_instances.size()
-		# Lerp from 2.0 (0% active) to 0.25 (100% active)
-		time_scale = lerpf(2.0, 0.25, active_ratio)
-		Engine.time_scale = time_scale
+			# Replace with next individual if available
+			if next_individual < population_size:
+				replace_eval_instance(i, next_individual)
+				next_individual += 1
+
+	# Check if generation complete
+	if evaluated_count >= population_size:
+		evolution.evolve()
+		evaluated_count = 0
+		next_individual = 0
+
+		if evolution.get_generation() >= max_generations:
+			stop_training()
+			return
+
+		# Start fresh batch for new generation
+		start_next_batch()
 
 	# Update stats display
 	update_training_stats_display()
-
-	if all_done and eval_instances.size() > 0:
-		# Batch complete
-		current_batch_start += parallel_count
-
-		if current_batch_start >= population_size:
-			# Generation complete, evolve
-			evolution.evolve()
-			current_batch_start = 0
-
-			if evolution.get_generation() >= max_generations:
-				stop_training()
-				return
-
-		start_next_batch()
 
 	stats_updated.emit(get_stats())
 
@@ -418,20 +424,15 @@ func update_training_stats_display() -> void:
 
 	var stats_label = training_container.get_node_or_null("StatsLabel")
 	if stats_label:
-		var completed = 0
 		var best_current = 0.0
 		for eval in eval_instances:
-			if eval.done:
-				completed += 1
-			if eval.scene.score > best_current:
+			if not eval.done and eval.scene.score > best_current:
 				best_current = eval.scene.score
 
-		stats_label.text = "Gen %d | Batch %d-%d | Done: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.2fx | [-/+] Speed [T]=Stop [H]=Human" % [
+		stats_label.text = "Gen %d | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.2fx | [-/+] [T]=Stop [H]=Human" % [
 			generation,
-			current_batch_start,
-			mini(current_batch_start + parallel_count, population_size) - 1,
-			completed,
-			eval_instances.size(),
+			evaluated_count,
+			population_size,
 			best_current,
 			all_time_best,
 			generations_without_improvement,
@@ -608,10 +609,8 @@ func get_stats() -> Dictionary:
 	return {
 		"mode": Mode.keys()[current_mode],
 		"generation": generation,
-		"individual": current_batch_start,
+		"evaluated_count": evaluated_count,
 		"population_size": population_size,
-		"eval_time": 0.0,
-		"max_eval_time": max_eval_time,
 		"best_fitness": best_fitness,
 		"all_time_best": all_time_best,
 		"current_score": main_scene.score if main_scene else 0.0,
@@ -630,7 +629,7 @@ func is_ai_active() -> bool:
 	return current_mode != Mode.HUMAN
 
 
-const SPEED_STEPS: Array[float] = [0.25, 0.5, 1.0, 1.5, 2.0]
+const SPEED_STEPS: Array[float] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0]
 
 func adjust_speed(delta: float) -> void:
 	## Adjust training speed up or down through discrete steps.
