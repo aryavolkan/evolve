@@ -157,8 +157,8 @@ func evolve() -> void:
 
 
 func select_parent(indexed_fitness: Array):
-	## Tournament selection: pick best of 7 random individuals.
-	var tournament_size := 7
+	## Tournament selection: pick best of 3 random individuals.
+	var tournament_size := 3
 	var best_idx := -1
 	var best_fit := -INF
 

@@ -41,10 +41,10 @@ var stagnation_limit: int = 10
 var generations_without_improvement: int = 0
 var previous_all_time_best: float = 0.0
 
-# Generation rollback
+# Generation rollback (disabled - trust elitism, accept normal variance)
 var previous_avg_fitness: float = 0.0
 var rerun_count: int = 0
-const MAX_RERUNS: int = 3  # Max times to re-run a generation before accepting
+const MAX_RERUNS: int = 0  # Disabled - rollback wastes compute and reduces diversity
 
 # Generation playback state
 var playback_generation: int = 1
@@ -119,9 +119,9 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 		input_size,
 		32,
 		6,
-		5,     # Elite count
-		0.15,  # Mutation rate
-		0.3,   # Mutation strength
+		10,    # Elite count (20% of population)
+		0.10,  # Mutation rate (reduced from 0.15)
+		0.1,   # Mutation strength (reduced from 0.3 - less destructive)
 		0.7    # Crossover rate
 	)
 
