@@ -4,6 +4,7 @@ extends Area2D
 @export var max_distance: float = 800.0
 var direction: Vector2 = Vector2.RIGHT
 var start_position: Vector2
+var is_piercing: bool = false
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -26,7 +27,9 @@ func _on_body_entered(body: Node2D) -> void:
 		var enemy_pos = body.global_position
 		var points = body.get_point_value() if body.has_method("get_point_value") else 1
 		body.queue_free()
-		queue_free()
+		# Piercing projectiles don't disappear on enemy hit
+		if not is_piercing:
+			queue_free()
 		# Notify player of kill for bonus points
 		var player = get_tree().get_first_node_in_group("player")
 		if player:

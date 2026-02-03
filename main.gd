@@ -44,7 +44,7 @@ const OBSTACLE_MIN_DISTANCE: float = 120.0  # Min distance between obstacles
 const OBSTACLE_PLAYER_SAFE_ZONE: float = 250.0  # Keep obstacles away from player spawn
 
 # Power-up limit
-const MAX_POWERUPS: int = 5  # Maximum power-ups on the map at once
+const MAX_POWERUPS: int = 10  # Maximum power-ups on the map at once
 
 # Difficulty scaling
 const BASE_ENEMY_SPEED: float = 150.0
@@ -53,8 +53,12 @@ const BASE_SPAWN_INTERVAL: float = 50.0
 const MIN_SPAWN_INTERVAL: float = 20.0
 const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxed
 
-# Slow enemies tracking
+# Slow/Freeze enemies tracking
 var slow_active: bool = false
+var freeze_active: bool = false
+
+# Double points tracking
+var double_points_active: bool = false
 
 # Screen clear spawn cooldown
 var screen_clear_cooldown: float = 0.0
@@ -104,7 +108,8 @@ func _process(delta: float) -> void:
 				get_tree().reload_current_scene()
 		return
 
-	score += delta * 10
+	var score_multiplier = 2.0 if double_points_active else 1.0
+	score += delta * 10 * score_multiplier
 	score_label.text = "Score: %d" % int(score)
 	update_ai_status_display()
 
@@ -169,8 +174,10 @@ func spawn_enemy() -> void:
 	enemy.position = pos
 	add_child(enemy)
 
-	# Apply slow after adding to tree (so apply_type_config has run)
-	if slow_active:
+	# Apply slow/freeze after adding to tree (so apply_type_config has run)
+	if freeze_active:
+		enemy.apply_freeze()
+	elif slow_active:
 		enemy.apply_slow(SLOW_MULTIPLIER)
 
 
@@ -211,8 +218,8 @@ func spawn_powerup() -> bool:
 
 	powerup.position = pos
 
-	# Random powerup type
-	var type_index = randi() % 4
+	# Random powerup type (9 types: 0-8)
+	var type_index = randi() % 9
 	powerup.set_type(type_index)
 	powerup.collected.connect(_on_powerup_collected)
 	add_child(powerup)
@@ -250,8 +257,11 @@ func _on_powerup_collected(type: String) -> void:
 	show_powerup_message(type)
 
 	# Bonus for collecting powerup
-	score += POWERUP_COLLECT_BONUS
-	spawn_floating_text("+%d" % POWERUP_COLLECT_BONUS, Color(0, 1, 0.5, 1), player.position)
+	var multiplier = 2 if double_points_active else 1
+	var bonus = POWERUP_COLLECT_BONUS * multiplier
+	score += bonus
+	var bonus_text = "+%d" % bonus if multiplier == 1 else "+%d (2X)" % bonus
+	spawn_floating_text(bonus_text, Color(0, 1, 0.5, 1), player.position)
 
 	match type:
 		"SPEED BOOST":
@@ -262,11 +272,23 @@ func _on_powerup_collected(type: String) -> void:
 			activate_slow_enemies()
 		"SCREEN CLEAR":
 			clear_all_enemies()
+		"RAPID FIRE":
+			player.activate_rapid_fire(POWERUP_DURATION)
+		"PIERCING":
+			player.activate_piercing(POWERUP_DURATION)
+		"SHIELD":
+			player.activate_shield()
+		"FREEZE":
+			activate_freeze_enemies()
+		"DOUBLE POINTS":
+			activate_double_points()
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
-	var bonus = points * KILL_MULTIPLIER  # Scale up kill rewards (pawn=10, queen=90)
+	var multiplier = 2 if double_points_active else 1
+	var bonus = points * KILL_MULTIPLIER * multiplier  # Scale up kill rewards (pawn=10, queen=90)
 	score += bonus
-	spawn_floating_text("+%d" % bonus, Color(1, 1, 0, 1), pos)
+	var bonus_text = "+%d" % bonus if multiplier == 1 else "+%d (2X)" % bonus
+	spawn_floating_text(bonus_text, Color(1, 1, 0, 1), pos)
 
 func spawn_floating_text(text: String, color: Color, pos: Vector2) -> void:
 	var floating = floating_text_scene.instantiate()
@@ -283,6 +305,12 @@ func _on_powerup_timer_updated(powerup_type: String, time_left: float) -> void:
 	# Handle slow enemies ending
 	if powerup_type == "SLOW" and time_left <= 0:
 		end_slow_enemies()
+	# Handle freeze enemies ending
+	if powerup_type == "FREEZE" and time_left <= 0:
+		end_freeze_enemies()
+	# Handle double points ending
+	if powerup_type == "DOUBLE" and time_left <= 0:
+		end_double_points()
 
 func activate_slow_enemies() -> void:
 	# Apply slow to all current enemies if not already active
@@ -306,6 +334,31 @@ func end_slow_enemies() -> void:
 		slow_active = false
 		for enemy in get_local_enemies():
 			enemy.remove_slow(SLOW_MULTIPLIER)
+
+
+func activate_freeze_enemies() -> void:
+	# Freeze completely stops enemies (unlike slow which is 50%)
+	if not freeze_active:
+		for enemy in get_local_enemies():
+			enemy.apply_freeze()
+	freeze_active = true
+	player.activate_freeze_effect(POWERUP_DURATION)
+
+
+func end_freeze_enemies() -> void:
+	if freeze_active:
+		freeze_active = false
+		for enemy in get_local_enemies():
+			enemy.remove_freeze()
+
+
+func activate_double_points() -> void:
+	double_points_active = true
+	player.activate_double_points(POWERUP_DURATION)
+
+
+func end_double_points() -> void:
+	double_points_active = false
 
 
 func clear_all_enemies() -> void:

@@ -11,6 +11,11 @@ var is_hit: bool = false
 var is_invincible: bool = false
 var is_speed_boosted: bool = false
 var is_slow_active: bool = false
+var is_rapid_fire: bool = false
+var is_piercing: bool = false
+var has_shield: bool = false  # Absorbs one hit
+var is_freeze_active: bool = false
+var is_double_points: bool = false
 var can_shoot: bool = true
 
 # AI control
@@ -22,6 +27,10 @@ var ai_shoot_direction: Vector2 = Vector2.ZERO
 var speed_boost_time: float = 0.0
 var invincibility_time: float = 0.0
 var slow_time: float = 0.0
+var rapid_fire_time: float = 0.0
+var piercing_time: float = 0.0
+var freeze_time: float = 0.0
+var double_points_time: float = 0.0
 
 var projectile_scene: PackedScene = preload("res://projectile.tscn")
 
@@ -113,6 +122,30 @@ func update_powerup_timers(delta: float) -> void:
 		if slow_time <= 0:
 			end_slow_effect()
 
+	if rapid_fire_time > 0:
+		rapid_fire_time -= delta
+		powerup_timer_updated.emit("RAPID", rapid_fire_time)
+		if rapid_fire_time <= 0:
+			end_rapid_fire()
+
+	if piercing_time > 0:
+		piercing_time -= delta
+		powerup_timer_updated.emit("PIERCING", piercing_time)
+		if piercing_time <= 0:
+			end_piercing()
+
+	if freeze_time > 0:
+		freeze_time -= delta
+		powerup_timer_updated.emit("FREEZE", freeze_time)
+		if freeze_time <= 0:
+			end_freeze_effect()
+
+	if double_points_time > 0:
+		double_points_time -= delta
+		powerup_timer_updated.emit("DOUBLE", double_points_time)
+		if double_points_time <= 0:
+			end_double_points()
+
 func update_timer_display() -> void:
 	var lines: Array = []
 
@@ -122,6 +155,14 @@ func update_timer_display() -> void:
 		lines.append("[color=gold]SHIELD %.1f[/color]" % invincibility_time)
 	if slow_time > 0:
 		lines.append("[color=purple]SLOW %.1f[/color]" % slow_time)
+	if rapid_fire_time > 0:
+		lines.append("[color=orange]RAPID %.1f[/color]" % rapid_fire_time)
+	if piercing_time > 0:
+		lines.append("[color=deepskyblue]PIERCE %.1f[/color]" % piercing_time)
+	if freeze_time > 0:
+		lines.append("[color=lightcyan]FREEZE %.1f[/color]" % freeze_time)
+	if double_points_time > 0:
+		lines.append("[color=lime]2X POINTS %.1f[/color]" % double_points_time)
 
 	if lines.size() > 0:
 		timer_label.text = "\n".join(lines)
@@ -133,10 +174,12 @@ func shoot(direction: Vector2) -> void:
 	var projectile = projectile_scene.instantiate()
 	projectile.position = global_position
 	projectile.direction = direction
+	projectile.is_piercing = is_piercing
 	get_parent().add_child(projectile)
 
 	can_shoot = false
-	await get_tree().create_timer(shoot_cooldown).timeout
+	var cooldown = shoot_cooldown * 0.3 if is_rapid_fire else shoot_cooldown  # 70% faster when rapid fire
+	await get_tree().create_timer(cooldown).timeout
 	can_shoot = true
 
 	# Check collisions after movement
@@ -153,6 +196,11 @@ func on_enemy_collision(enemy: Node) -> void:
 		var points = enemy.get_point_value() if enemy.has_method("get_point_value") else 1
 		enemy.queue_free()
 		enemy_killed.emit(enemy_pos, points)
+		return
+	if has_shield:
+		# Shield absorbs the hit
+		has_shield = false
+		update_sprite_color()
 		return
 	_trigger_hit()
 
@@ -199,6 +247,49 @@ func end_slow_effect() -> void:
 	slow_particles.emitting = false
 	powerup_timer_updated.emit("SLOW", 0.0)
 
+func activate_rapid_fire(duration: float) -> void:
+	is_rapid_fire = true
+	rapid_fire_time = duration
+
+func end_rapid_fire() -> void:
+	is_rapid_fire = false
+	rapid_fire_time = 0.0
+	powerup_timer_updated.emit("RAPID", 0.0)
+
+func activate_piercing(duration: float) -> void:
+	is_piercing = true
+	piercing_time = duration
+
+func end_piercing() -> void:
+	is_piercing = false
+	piercing_time = 0.0
+	powerup_timer_updated.emit("PIERCING", 0.0)
+
+func activate_shield() -> void:
+	has_shield = true
+	# Brief visual feedback
+	sprite.modulate = Color(0.7, 0.7, 1, 1)  # Light blue tint
+	await get_tree().create_timer(0.3).timeout
+	update_sprite_color()
+
+func activate_freeze_effect(duration: float) -> void:
+	is_freeze_active = true
+	freeze_time = duration
+
+func end_freeze_effect() -> void:
+	is_freeze_active = false
+	freeze_time = 0.0
+	powerup_timer_updated.emit("FREEZE", 0.0)
+
+func activate_double_points(duration: float) -> void:
+	is_double_points = true
+	double_points_time = duration
+
+func end_double_points() -> void:
+	is_double_points = false
+	double_points_time = 0.0
+	powerup_timer_updated.emit("DOUBLE", 0.0)
+
 func update_sprite_color() -> void:
 	if is_invincible:
 		sprite.modulate = Color(1, 0.9, 0.3, 1)
@@ -221,7 +312,12 @@ func get_active_powerups() -> Dictionary:
 	return {
 		"SPEED": speed_boost_time,
 		"INVINCIBLE": invincibility_time,
-		"SLOW": slow_time
+		"SLOW": slow_time,
+		"RAPID": rapid_fire_time,
+		"PIERCING": piercing_time,
+		"FREEZE": freeze_time,
+		"DOUBLE": double_points_time,
+		"SHIELD": 1.0 if has_shield else 0.0
 	}
 
 

@@ -83,6 +83,12 @@ func _physics_process(delta: float) -> void:
 	if not player:
 		return
 
+	# Frozen enemies don't move at all
+	if is_frozen:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+
 	if is_moving:
 		# Animate the move
 		move_progress += delta / move_duration
@@ -231,3 +237,24 @@ func remove_slow(multiplier: float) -> void:
 	move_cooldown = base_move_cooldown
 	move_duration = base_move_duration
 	speed /= multiplier
+
+
+var is_frozen: bool = false
+var frozen_speed: float = 0.0
+
+func apply_freeze() -> void:
+	## Freeze enemy completely - stops all movement
+	if not is_frozen:
+		is_frozen = true
+		frozen_speed = speed
+		speed = 0.0
+		# Visual feedback - turn enemy blue/white
+		$Sprite2D.modulate = Color(0.7, 0.9, 1.0, 0.8)
+
+
+func remove_freeze() -> void:
+	## Unfreeze enemy - restore movement
+	if is_frozen:
+		is_frozen = false
+		speed = frozen_speed
+		$Sprite2D.modulate = Color(1, 1, 1, 1)
