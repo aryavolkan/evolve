@@ -672,12 +672,8 @@ func handle_training_input() -> void:
 		if Input.is_action_just_pressed("ui_accept") and game_over:
 			training_manager.advance_generation_playback()
 
-	# Training mode controls
+	# Training mode controls (SPACE for pause is handled in training_manager._input)
 	if training_manager.get_mode() == training_manager.Mode.TRAINING:
-		# SPACE to toggle pause (with graph view)
-		if Input.is_action_just_pressed("ui_accept"):
-			training_manager.toggle_pause()
-
 		# Speed controls ([ and ] or - and =) - only when not paused
 		if not training_manager.is_paused:
 			var speed_down = Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS)

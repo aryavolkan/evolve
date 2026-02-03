@@ -78,6 +78,17 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
+var _space_was_pressed: bool = false
+
+func _process(_delta: float) -> void:
+	# Handle SPACE for pause toggle (runs even when paused due to PROCESS_MODE_ALWAYS)
+	var space_pressed = Input.is_physical_key_pressed(KEY_SPACE)
+	if space_pressed and not _space_was_pressed:
+		if current_mode == Mode.TRAINING:
+			toggle_pause()
+	_space_was_pressed = space_pressed
+
+
 func initialize(scene: Node2D) -> void:
 	## Call this when the main scene is ready.
 	main_scene = scene
@@ -115,6 +126,11 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 
 	evolution.generation_complete.connect(_on_generation_complete)
 
+	# Clean up any leftover pause state
+	if pause_overlay:
+		destroy_pause_overlay()
+	is_paused = false
+
 	current_mode = Mode.TRAINING
 	current_batch_start = 0
 	generation = 0
@@ -122,7 +138,6 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 	previous_all_time_best = 0.0
 	previous_avg_fitness = 0.0
 	rerun_count = 0
-	is_paused = false
 	Engine.time_scale = time_scale
 
 	# Clear metric history
@@ -145,6 +160,11 @@ func stop_training() -> void:
 	## Stop training and save progress.
 	if current_mode != Mode.TRAINING:
 		return
+
+	# Clean up pause state first
+	if is_paused:
+		destroy_pause_overlay()
+		is_paused = false
 
 	current_mode = Mode.HUMAN
 	Engine.time_scale = 1.0
@@ -708,7 +728,7 @@ func pause_training() -> void:
 
 	is_paused = true
 	saved_time_scale = Engine.time_scale
-	Engine.time_scale = 0.0
+	get_tree().paused = true  # Use tree pause instead of time_scale
 	create_pause_overlay()
 	print("Training paused")
 
@@ -718,7 +738,8 @@ func resume_training() -> void:
 		return
 
 	is_paused = false
-	Engine.time_scale = saved_time_scale
+	get_tree().paused = false  # Unpause tree
+	Engine.time_scale = saved_time_scale  # Restore speed
 	destroy_pause_overlay()
 	print("Training resumed")
 
