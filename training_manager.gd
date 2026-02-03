@@ -194,8 +194,8 @@ func create_training_container() -> void:
 	# Stats label at top
 	var stats_label = Label.new()
 	stats_label.name = "StatsLabel"
-	stats_label.position = Vector2(10, 5)
-	stats_label.add_theme_font_size_override("font_size", 14)
+	stats_label.position = Vector2(10, 8)
+	stats_label.add_theme_font_size_override("font_size", 20)
 	stats_label.add_theme_color_override("font_color", Color.YELLOW)
 	training_container.add_child(stats_label)
 
@@ -236,7 +236,7 @@ func update_grid_layout() -> void:
 	var cols = 6
 	var rows = 8
 	var gap = 2
-	var top_margin = 22
+	var top_margin = 36
 
 	# Simple calculation: divide available space evenly
 	var arena_w = (size.x - gap * (cols + 1)) / cols
@@ -262,7 +262,7 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 	var cols = 6
 	var rows = 8
 	var gap = 2
-	var top_margin = 22
+	var top_margin = 36
 	var arena_w = (size.x - gap * (cols + 1)) / cols
 	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
 	var x = gap + grid_x * (arena_w + gap)
@@ -357,13 +357,14 @@ func _physics_process(delta: float) -> void:
 
 func _process_parallel_training(delta: float) -> void:
 	var all_done := true
-	var completed_this_frame: Array = []
+	var active_count := 0
 
 	for eval in eval_instances:
 		if eval.done:
 			continue
 
 		all_done = false
+		active_count += 1
 		eval.time += delta
 
 		# Drive AI controller
@@ -381,7 +382,14 @@ func _process_parallel_training(delta: float) -> void:
 			var fitness: float = eval.scene.score
 			evolution.set_fitness(eval.index, fitness)
 			eval.done = true
-			completed_this_frame.append(eval)
+			active_count -= 1
+
+	# Auto-scale speed based on active arenas (0.25x at full -> 2x when few remain)
+	if eval_instances.size() > 0:
+		var active_ratio: float = float(active_count) / eval_instances.size()
+		# Lerp from 2.0 (0% active) to 0.25 (100% active)
+		time_scale = lerpf(2.0, 0.25, active_ratio)
+		Engine.time_scale = time_scale
 
 	# Update stats display
 	update_training_stats_display()
