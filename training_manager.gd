@@ -406,6 +406,10 @@ func _physics_process(delta: float) -> void:
 	if current_mode == Mode.HUMAN:
 		return
 
+	# Don't process training when paused (SubViewport scenes are frozen)
+	if is_paused:
+		return
+
 	if current_mode == Mode.TRAINING:
 		_process_parallel_training(delta)
 	elif current_mode == Mode.PLAYBACK:
@@ -727,8 +731,13 @@ func pause_training() -> void:
 		return
 
 	is_paused = true
-	saved_time_scale = Engine.time_scale
-	get_tree().paused = true  # Use tree pause instead of time_scale
+	# Pause each SubViewport to freeze game state
+	for eval in eval_instances:
+		if is_instance_valid(eval.viewport):
+			eval.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		if is_instance_valid(eval.scene):
+			eval.scene.set_physics_process(false)
+			eval.scene.set_process(false)
 	create_pause_overlay()
 	print("Training paused")
 
@@ -738,8 +747,13 @@ func resume_training() -> void:
 		return
 
 	is_paused = false
-	get_tree().paused = false  # Unpause tree
-	Engine.time_scale = saved_time_scale  # Restore speed
+	# Resume each SubViewport
+	for eval in eval_instances:
+		if is_instance_valid(eval.viewport):
+			eval.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		if is_instance_valid(eval.scene):
+			eval.scene.set_physics_process(true)
+			eval.scene.set_process(true)
 	destroy_pause_overlay()
 	print("Training resumed")
 
