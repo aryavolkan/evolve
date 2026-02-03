@@ -65,6 +65,7 @@ var history_min_fitness: Array[float] = []
 var is_paused: bool = false
 var pause_overlay: Control = null
 var saved_time_scale: float = 1.0
+var training_complete: bool = false  # Shows results screen at end
 
 # Preloaded scripts
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
@@ -130,6 +131,7 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 	if pause_overlay:
 		destroy_pause_overlay()
 	is_paused = false
+	training_complete = false
 
 	current_mode = Mode.TRAINING
 	current_batch_start = 0
@@ -453,7 +455,7 @@ func _process_parallel_training(delta: float) -> void:
 		next_individual = 0
 
 		if evolution.get_generation() >= max_generations:
-			stop_training()
+			show_training_complete("Reached max generations (%d)" % max_generations)
 			return
 
 		# Start fresh batch for new generation
@@ -532,7 +534,7 @@ func _on_generation_complete(gen: int, best: float, avg: float) -> void:
 	# Early stopping if no improvement for stagnation_limit generations
 	if generations_without_improvement >= stagnation_limit:
 		print("Early stopping: No improvement for %d generations" % stagnation_limit)
-		stop_training()
+		show_training_complete("Early stopping: No improvement for %d generations" % stagnation_limit)
 
 
 # Playback mode functions (unchanged from before)
@@ -720,10 +722,54 @@ func toggle_pause() -> void:
 	if current_mode != Mode.TRAINING:
 		return
 
+	# If training complete, SPACE exits to human mode
+	if training_complete:
+		stop_training()
+		return
+
 	if is_paused:
 		resume_training()
 	else:
 		pause_training()
+
+
+func show_training_complete(reason: String) -> void:
+	## Show results screen at end of training. SPACE will exit.
+	print("Training complete: %s" % reason)
+	training_complete = true
+	is_paused = true
+
+	# Freeze all evals
+	for eval in eval_instances:
+		if is_instance_valid(eval.viewport):
+			eval.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		if is_instance_valid(eval.scene):
+			eval.scene.set_physics_process(false)
+			eval.scene.set_process(false)
+
+	# Save final results
+	if evolution:
+		evolution.save_best(BEST_NETWORK_PATH)
+		evolution.save_population(POPULATION_PATH)
+
+	# Create pause overlay with completion message
+	create_pause_overlay()
+	# Update title to show completion
+	if pause_overlay:
+		var title = pause_overlay.get_node_or_null("Control")
+		if not title:
+			for child in pause_overlay.get_children():
+				if child is Label and "PAUSED" in child.text:
+					child.text = "TRAINING COMPLETE"
+					break
+		var stats_label = pause_overlay.get_node_or_null("StatsLabel")
+		if stats_label:
+			stats_label.text = "Reason: %s\n\nGeneration: %d\nBest Fitness: %.1f\nAll-time Best: %.1f\n\n[SPACE] to exit" % [
+				reason,
+				generation,
+				best_fitness,
+				all_time_best
+			]
 
 
 func pause_training() -> void:
