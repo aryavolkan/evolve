@@ -124,13 +124,14 @@ func stop_training() -> void:
 	Engine.time_scale = 1.0
 
 	# Disconnect resize signal
-	if main_scene.get_tree().root.size_changed.is_connected(_on_training_window_resized):
-		main_scene.get_tree().root.size_changed.disconnect(_on_training_window_resized)
+	if get_tree().root.size_changed.is_connected(_on_training_window_resized):
+		get_tree().root.size_changed.disconnect(_on_training_window_resized)
 
 	# Cleanup training instances
 	cleanup_training_instances()
 	if training_container:
-		training_container.queue_free()
+		var canvas_layer = training_container.get_parent()
+		canvas_layer.queue_free()
 		training_container = null
 
 	# Show main game again
@@ -167,79 +168,107 @@ func show_main_game() -> void:
 	main_scene.get_tree().paused = false
 
 
-func create_training_container() -> void:
-	## Create a container with SubViewports for parallel training.
-	training_container = Control.new()
-	training_container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	training_container.name = "TrainingContainer"
+func get_window_size() -> Vector2:
+	## Get current window size reliably.
+	return get_viewport().get_visible_rect().size
 
-	# Add to the root so it's visible
-	main_scene.get_tree().root.add_child(training_container)
+
+func create_training_container() -> void:
+	## Create a CanvasLayer with SubViewports for parallel training.
+	# Use CanvasLayer to ensure proper screen-space positioning
+	var canvas_layer = CanvasLayer.new()
+	canvas_layer.name = "TrainingCanvasLayer"
+	canvas_layer.layer = 100  # On top of everything
+	get_tree().root.add_child(canvas_layer)
+
+	training_container = Control.new()
+	training_container.name = "TrainingContainer"
+	canvas_layer.add_child(training_container)
 
 	# Background
 	var bg = ColorRect.new()
 	bg.name = "Background"
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.color = Color(0.05, 0.05, 0.08, 1)
 	training_container.add_child(bg)
 
 	# Stats label at top
 	var stats_label = Label.new()
 	stats_label.name = "StatsLabel"
-	stats_label.position = Vector2(10, 10)
-	stats_label.add_theme_font_size_override("font_size", 16)
+	stats_label.position = Vector2(10, 5)
+	stats_label.add_theme_font_size_override("font_size", 14)
 	stats_label.add_theme_color_override("font_color", Color.YELLOW)
 	training_container.add_child(stats_label)
 
+	# Set initial size
+	_update_container_size()
+
 	# Connect to window resize
-	main_scene.get_tree().root.size_changed.connect(_on_training_window_resized)
+	get_tree().root.size_changed.connect(_on_training_window_resized)
+
+
+func _update_container_size() -> void:
+	var size = get_window_size()
+	training_container.position = Vector2.ZERO
+	training_container.size = size
+	var bg = training_container.get_node_or_null("Background")
+	if bg:
+		bg.position = Vector2.ZERO
+		bg.size = size
 
 
 func _on_training_window_resized() -> void:
 	## Update grid layout when window is resized.
-	if current_mode != Mode.TRAINING or eval_instances.is_empty():
+	if current_mode != Mode.TRAINING or not training_container:
 		return
 
-	var viewport_size = main_scene.get_viewport().get_visible_rect().size
+	update_grid_layout()
+
+
+func update_grid_layout() -> void:
+	## Recalculate and apply grid positions/sizes for all arenas.
+	if eval_instances.is_empty():
+		return
+
+	# Ensure container is correctly sized first
+	_update_container_size()
+
+	var size = get_window_size()
 	var cols = 6
 	var rows = 8
-	var padding = 5
-	var top_margin = 40
-	var arena_width = (viewport_size.x - padding * (cols + 1)) / cols
-	var arena_height = (viewport_size.y - top_margin - padding * (rows + 1)) / rows
+	var gap = 2
+	var top_margin = 22
+
+	# Simple calculation: divide available space evenly
+	var arena_w = (size.x - gap * (cols + 1)) / cols
+	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
 
 	for i in eval_instances.size():
-		var eval = eval_instances[i]
-		var grid_x = i % cols
-		var grid_y = i / cols
-		eval.container.position = Vector2(
-			padding + grid_x * (arena_width + padding),
-			top_margin + padding + grid_y * (arena_height + padding)
-		)
-		eval.container.size = Vector2(arena_width, arena_height)
+		var col = i % cols
+		var row = i / cols
+		var x = gap + col * (arena_w + gap)
+		var y = top_margin + gap + row * (arena_h + gap)
+		eval_instances[i].container.position = Vector2(x, y)
+		eval_instances[i].container.size = Vector2(arena_w, arena_h)
 
 
 func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Dictionary:
 	## Create a SubViewport with a game instance for evaluation.
-	var viewport_size = main_scene.get_viewport().get_visible_rect().size
-
-	# Calculate size for each arena (5 columns, 2 rows)
-	var cols = 6
-	var rows = 8
-	var padding = 5
-	var top_margin = 40  # Space for stats
-	var arena_width = (viewport_size.x - padding * (cols + 1)) / cols
-	var arena_height = (viewport_size.y - top_margin - padding * (rows + 1)) / rows
-
-	# Create SubViewportContainer
 	var container = SubViewportContainer.new()
-	container.position = Vector2(
-		padding + grid_x * (arena_width + padding),
-		top_margin + padding + grid_y * (arena_height + padding)
-	)
-	container.size = Vector2(arena_width, arena_height)
 	container.stretch = true
 	training_container.add_child(container)
+
+	# Set initial position and size immediately (don't wait for deferred update)
+	var size = get_window_size()
+	var cols = 6
+	var rows = 8
+	var gap = 2
+	var top_margin = 22
+	var arena_w = (size.x - gap * (cols + 1)) / cols
+	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
+	var x = gap + grid_x * (arena_w + gap)
+	var y = top_margin + gap + grid_y * (arena_h + gap)
+	container.position = Vector2(x, y)
+	container.size = Vector2(arena_w, arena_h)
 
 	# Create SubViewport
 	var viewport = SubViewport.new()
@@ -389,7 +418,7 @@ func update_training_stats_display() -> void:
 			if eval.scene.score > best_current:
 				best_current = eval.scene.score
 
-		stats_label.text = "Gen %d | Batch %d-%d | Done: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.0fx | [-/+] Speed [T]=Stop [H]=Human" % [
+		stats_label.text = "Gen %d | Batch %d-%d | Done: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.2fx | [-/+] Speed [T]=Stop [H]=Human" % [
 			generation,
 			current_batch_start,
 			mini(current_batch_start + parallel_count, population_size) - 1,
@@ -593,8 +622,19 @@ func is_ai_active() -> bool:
 	return current_mode != Mode.HUMAN
 
 
+const SPEED_STEPS: Array[float] = [0.25, 0.5, 1.0, 1.5, 2.0]
+
 func adjust_speed(delta: float) -> void:
-	## Adjust training speed up or down.
-	time_scale = clampf(time_scale + delta, 1.0, 8.0)
+	## Adjust training speed up or down through discrete steps.
+	var current_idx := SPEED_STEPS.find(time_scale)
+	if current_idx == -1:
+		current_idx = 2  # Default to 1.0x
+
+	if delta > 0 and current_idx < SPEED_STEPS.size() - 1:
+		current_idx += 1
+	elif delta < 0 and current_idx > 0:
+		current_idx -= 1
+
+	time_scale = SPEED_STEPS[current_idx]
 	Engine.time_scale = time_scale
-	print("Training speed: %.1fx" % time_scale)
+	print("Training speed: %.2fx" % time_scale)
