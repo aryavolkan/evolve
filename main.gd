@@ -39,7 +39,7 @@ const ARENA_WALL_THICKNESS: float = 40.0
 const ARENA_PADDING: float = 100.0  # Safe zone from walls for spawning
 
 # Permanent obstacle configuration
-const OBSTACLE_COUNT: int = 50      # More obstacles for larger arena
+const OBSTACLE_COUNT: int = 20      # Fewer obstacles for clearer navigation
 const OBSTACLE_MIN_DISTANCE: float = 120.0  # Min distance between obstacles
 const OBSTACLE_PLAYER_SAFE_ZONE: float = 250.0  # Keep obstacles away from player spawn
 
@@ -680,18 +680,23 @@ func handle_training_input() -> void:
 
 		# Speed controls ([ and ] or - and =) - only when not paused
 		if not training_manager.is_paused:
-			if Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS):
-				if _key_just_pressed("speed_down"):
-					training_manager.adjust_speed(-1.0)
-			elif Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL):
-				if _key_just_pressed("speed_up"):
-					training_manager.adjust_speed(1.0)
+			var speed_down = Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS)
+			var speed_up = Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL)
+
+			if speed_down and not _speed_down_held:
+				training_manager.adjust_speed(-1.0)
+			if speed_up and not _speed_up_held:
+				training_manager.adjust_speed(1.0)
+
+			_speed_down_held = speed_down
+			_speed_up_held = speed_up
 
 
 var _pressed_keys: Dictionary = {}
+var _speed_down_held: bool = false
+var _speed_up_held: bool = false
 
 func _key_just_pressed(key_name: String) -> bool:
-	var is_pressed := true
 	if _pressed_keys.get(key_name, false):
 		return false  # Already pressed
 	_pressed_keys[key_name] = true

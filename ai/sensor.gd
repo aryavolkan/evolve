@@ -4,7 +4,7 @@ extends RefCounted
 ## Casts rays around the player to detect enemies, obstacles, and power-ups.
 
 const NUM_RAYS: int = 16
-const RAY_LENGTH: float = 500.0
+const RAY_LENGTH: float = 1500.0  # Long enough to span most of 2560x1440 arena
 const INPUTS_PER_RAY: int = 5  # (enemy_dist, enemy_type, obstacle_dist, powerup_dist, wall_dist)
 
 # Total inputs: rays + player state
