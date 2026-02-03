@@ -41,6 +41,11 @@ var stagnation_limit: int = 10
 var generations_without_improvement: int = 0
 var previous_all_time_best: float = 0.0
 
+# Generation rollback
+var previous_avg_fitness: float = 0.0
+var rerun_count: int = 0
+const MAX_RERUNS: int = 3  # Max times to re-run a generation before accepting
+
 # Generation playback state
 var playback_generation: int = 1
 var max_playback_generation: int = 1
@@ -115,6 +120,8 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 	generation = 0
 	generations_without_improvement = 0
 	previous_all_time_best = 0.0
+	previous_avg_fitness = 0.0
+	rerun_count = 0
 	is_paused = false
 	Engine.time_scale = time_scale
 
@@ -461,6 +468,21 @@ func _on_generation_complete(gen: int, best: float, avg: float) -> void:
 	generation = gen
 	best_fitness = best
 	all_time_best = evolution.get_all_time_best_fitness()
+
+	# Check if this generation is worse than previous (and we haven't exceeded rerun limit)
+	if previous_avg_fitness > 0 and avg < previous_avg_fitness and rerun_count < MAX_RERUNS:
+		rerun_count += 1
+		print("Gen %3d | Avg: %6.1f < Previous: %6.1f | RE-RUNNING (attempt %d/%d)" % [
+			gen, avg, previous_avg_fitness, rerun_count, MAX_RERUNS
+		])
+		# Restore backup and re-run this generation
+		evolution.restore_backup()
+		generation = evolution.get_generation()
+		return  # Don't record this failed attempt
+
+	# Generation accepted - reset rerun counter
+	rerun_count = 0
+	previous_avg_fitness = avg
 
 	# Record metrics for graphing
 	history_best_fitness.append(best)

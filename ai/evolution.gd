@@ -29,6 +29,10 @@ var best_fitness: float = 0.0
 var all_time_best_network = null
 var all_time_best_fitness: float = 0.0
 
+# Backup for generation rollback
+var backup_population: Array = []
+var backup_generation: int = 0
+
 
 func _init(
 	p_population_size: int = 100,
@@ -72,8 +76,32 @@ func get_individual(index: int):
 	return population[index]
 
 
+func save_backup() -> void:
+	## Save current population state before evolving.
+	backup_population.clear()
+	for net in population:
+		backup_population.append(net.clone())
+	backup_generation = generation
+
+
+func restore_backup() -> void:
+	## Restore population from backup (for re-running a generation).
+	if backup_population.is_empty():
+		return
+	population.clear()
+	for net in backup_population:
+		population.append(net.clone())
+	generation = backup_generation
+	# Reset fitness scores
+	for i in population_size:
+		fitness_scores[i] = 0.0
+
+
 func evolve() -> void:
 	## Create the next generation based on fitness scores.
+
+	# Save backup before evolving (for potential rollback)
+	save_backup()
 
 	# Find best performers
 	var indexed_fitness: Array = []
