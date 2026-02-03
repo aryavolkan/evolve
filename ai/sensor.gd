@@ -1,44 +1,40 @@
 extends RefCounted
 
-## Grid-based perception system for the AI agent.
-## Divides the entire arena into a grid and encodes entity positions.
-## Optimized: O(entities) instead of O(cells × entities)
+## Raycast-based perception system for the AI agent.
+## Casts rays around the player to detect enemies, obstacles, and power-ups.
 
-const GRID_COLS: int = 16
-const GRID_ROWS: int = 9
-const CHANNELS_PER_CELL: int = 4  # (enemy_type, obstacle, powerup_type, player)
+const NUM_RAYS: int = 16
+const RAY_LENGTH: float = 500.0
+const INPUTS_PER_RAY: int = 5  # (enemy_dist, enemy_type, obstacle_dist, powerup_dist, wall_dist)
 
-# Total inputs: grid + player state
-# 16x9 grid × 4 channels = 576 grid inputs
-# + 6 player state inputs = 582 total
+# Total inputs: rays + player state
+# 16 rays × 5 values = 80 ray inputs
+# + 6 player state inputs = 86 total
 const PLAYER_STATE_INPUTS: int = 6
-const TOTAL_INPUTS: int = GRID_COLS * GRID_ROWS * CHANNELS_PER_CELL + PLAYER_STATE_INPUTS
+const TOTAL_INPUTS: int = NUM_RAYS * INPUTS_PER_RAY + PLAYER_STATE_INPUTS
 
-# Arena dimensions (matches main.gd ARENA_WIDTH/HEIGHT)
+# Arena bounds
 const ARENA_WIDTH: float = 2560.0
 const ARENA_HEIGHT: float = 1440.0
-const CELL_WIDTH: float = ARENA_WIDTH / GRID_COLS   # 80px
-const CELL_HEIGHT: float = ARENA_HEIGHT / GRID_ROWS  # 80px
+var arena_bounds: Rect2 = Rect2(40, 40, ARENA_WIDTH - 80, ARENA_HEIGHT - 80)
 
 var player: CharacterBody2D
+var ray_angles: PackedFloat32Array
+
+
+func _init() -> void:
+	# Pre-compute ray angles (evenly distributed around player)
+	ray_angles.resize(NUM_RAYS)
+	for i in NUM_RAYS:
+		ray_angles[i] = (float(i) / NUM_RAYS) * TAU
 
 
 func set_player(p: CharacterBody2D) -> void:
 	player = p
 
 
-func pos_to_cell(pos: Vector2) -> int:
-	## Convert world position to cell index. Returns -1 if out of bounds.
-	var col := int(pos.x / CELL_WIDTH)
-	var row := int(pos.y / CELL_HEIGHT)
-	if col < 0 or col >= GRID_COLS or row < 0 or row >= GRID_ROWS:
-		return -1
-	return (row * GRID_COLS + col) * CHANNELS_PER_CELL
-
-
 func get_inputs() -> PackedFloat32Array:
 	## Gather all sensor inputs for the neural network.
-	## Optimized: directly maps entity positions to grid cells.
 
 	var inputs := PackedFloat32Array()
 	inputs.resize(TOTAL_INPUTS)
@@ -47,63 +43,119 @@ func get_inputs() -> PackedFloat32Array:
 	if not player or not is_instance_valid(player):
 		return inputs
 
+	var player_pos := player.global_position
 	var player_scene := player.get_parent()
 
-	# Place player in grid (channel 3)
-	var player_cell := pos_to_cell(player.global_position)
-	if player_cell >= 0:
-		inputs[player_cell + 3] = 1.0
+	# Collect entities from player's scene only
+	var enemies: Array = []
+	var obstacles: Array = []
+	var powerups: Array = []
 
-	# Place enemies in grid (channel 0)
-	for enemy in player.get_tree().get_nodes_in_group("enemy"):
-		if not is_instance_valid(enemy) or enemy.get_parent() != player_scene:
-			continue
-		var cell := pos_to_cell(enemy.global_position)
-		if cell >= 0:
-			var value := 0.3  # Default
-			if enemy.has_method("get_point_value"):
-				var points: int = enemy.get_point_value()
-				match points:
-					1: value = 0.2   # Pawn
-					3: value = 0.5   # Knight/Bishop
-					5: value = 0.8   # Rook
-					9: value = 1.0   # Queen
-			# Keep highest value if multiple enemies in cell
-			if value > inputs[cell]:
-				inputs[cell] = value
+	for e in player.get_tree().get_nodes_in_group("enemy"):
+		if e.get_parent() == player_scene:
+			enemies.append(e)
+	for o in player.get_tree().get_nodes_in_group("obstacle"):
+		if o.get_parent() == player_scene:
+			obstacles.append(o)
+	for p in player.get_tree().get_nodes_in_group("powerup"):
+		if p.get_parent() == player_scene:
+			powerups.append(p)
 
-	# Place obstacles in grid (channel 1)
-	for obstacle in player.get_tree().get_nodes_in_group("obstacle"):
-		if not is_instance_valid(obstacle) or obstacle.get_parent() != player_scene:
-			continue
-		var cell := pos_to_cell(obstacle.global_position)
-		if cell >= 0:
-			inputs[cell + 1] = 1.0
+	# Cast rays
+	var input_idx := 0
+	for ray_idx in NUM_RAYS:
+		var angle: float = ray_angles[ray_idx]
+		var ray_dir := Vector2(cos(angle), sin(angle))
 
-	# Place powerups in grid (channel 2)
-	for powerup in player.get_tree().get_nodes_in_group("powerup"):
-		if not is_instance_valid(powerup) or powerup.get_parent() != player_scene:
-			continue
-		var cell := pos_to_cell(powerup.global_position)
-		if cell >= 0:
-			var value := 0.5  # Default
-			if powerup.has_method("get_type_name"):
-				match powerup.get_type_name():
-					"SPEED BOOST": value = 0.25
-					"INVINCIBILITY": value = 0.5
-					"SLOW ENEMIES": value = 0.75
-					"SCREEN CLEAR": value = 1.0
-			inputs[cell + 2] = value
+		# Find closest entity of each type along this ray
+		var enemy_result := cast_ray_to_entities(player_pos, ray_dir, enemies, 50.0)
+		var obstacle_result := cast_ray_to_entities(player_pos, ray_dir, obstacles, 40.0)
+		var powerup_result := cast_ray_to_entities(player_pos, ray_dir, powerups, 30.0)
 
-	# Player state inputs (after grid)
-	var state_idx := GRID_COLS * GRID_ROWS * CHANNELS_PER_CELL
+		# Enemy distance (normalized, 1.0 = close, 0.0 = far/none)
+		inputs[input_idx] = 1.0 - (enemy_result.distance / RAY_LENGTH) if enemy_result.hit else 0.0
+		input_idx += 1
+
+		# Enemy type (pawn=0.2, knight/bishop=0.5, rook=0.8, queen=1.0)
+		inputs[input_idx] = enemy_result.type_value if enemy_result.hit else 0.0
+		input_idx += 1
+
+		# Obstacle distance
+		inputs[input_idx] = 1.0 - (obstacle_result.distance / RAY_LENGTH) if obstacle_result.hit else 0.0
+		input_idx += 1
+
+		# Power-up distance
+		inputs[input_idx] = 1.0 - (powerup_result.distance / RAY_LENGTH) if powerup_result.hit else 0.0
+		input_idx += 1
+
+		# Wall distance
+		var wall_dist := get_wall_distance(player_pos, ray_dir)
+		inputs[input_idx] = 1.0 - (wall_dist / RAY_LENGTH) if wall_dist < RAY_LENGTH else 0.0
+		input_idx += 1
+
+	# Player state inputs
 	var max_speed := 500.0
-
-	inputs[state_idx] = clampf(player.velocity.x / max_speed, -1.0, 1.0)
-	inputs[state_idx + 1] = clampf(player.velocity.y / max_speed, -1.0, 1.0)
-	inputs[state_idx + 2] = 1.0 if player.is_invincible else 0.0
-	inputs[state_idx + 3] = 1.0 if player.is_speed_boosted else 0.0
-	inputs[state_idx + 4] = 1.0 if player.is_slow_active else 0.0
-	inputs[state_idx + 5] = 1.0 if player.can_shoot else 0.0
+	inputs[input_idx] = clampf(player.velocity.x / max_speed, -1.0, 1.0)
+	inputs[input_idx + 1] = clampf(player.velocity.y / max_speed, -1.0, 1.0)
+	inputs[input_idx + 2] = 1.0 if player.is_invincible else 0.0
+	inputs[input_idx + 3] = 1.0 if player.is_speed_boosted else 0.0
+	inputs[input_idx + 4] = 1.0 if player.is_slow_active else 0.0
+	inputs[input_idx + 5] = 1.0 if player.can_shoot else 0.0
 
 	return inputs
+
+
+func cast_ray_to_entities(origin: Vector2, direction: Vector2, entities: Array, hit_radius: float) -> Dictionary:
+	## Cast a ray and find the closest entity.
+	var result := {"hit": false, "distance": RAY_LENGTH, "type_value": 0.0}
+
+	for entity in entities:
+		if not is_instance_valid(entity):
+			continue
+
+		var to_entity: Vector2 = entity.global_position - origin
+		var projection: float = to_entity.dot(direction)
+
+		if projection < 0 or projection > RAY_LENGTH:
+			continue
+
+		var closest_point: Vector2 = origin + direction * projection
+		var dist_to_ray: float = closest_point.distance_to(entity.global_position)
+
+		if dist_to_ray < hit_radius and projection < result.distance:
+			result.hit = true
+			result.distance = projection
+			if entity.has_method("get_point_value"):
+				var points: int = entity.get_point_value()
+				match points:
+					1: result.type_value = 0.2
+					3: result.type_value = 0.5
+					5: result.type_value = 0.8
+					9: result.type_value = 1.0
+
+	return result
+
+
+func get_wall_distance(origin: Vector2, direction: Vector2) -> float:
+	## Calculate distance to arena wall in the given direction.
+	var min_dist := RAY_LENGTH
+
+	if direction.x > 0.001:
+		var dist := (arena_bounds.end.x - origin.x) / direction.x
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+	elif direction.x < -0.001:
+		var dist := (arena_bounds.position.x - origin.x) / direction.x
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+
+	if direction.y > 0.001:
+		var dist := (arena_bounds.end.y - origin.y) / direction.y
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+	elif direction.y < -0.001:
+		var dist := (arena_bounds.position.y - origin.y) / direction.y
+		if dist > 0 and dist < min_dist:
+			min_dist = dist
+
+	return min_dist

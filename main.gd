@@ -285,11 +285,10 @@ func activate_slow_enemies() -> void:
 	player.activate_slow_effect(POWERUP_DURATION)
 
 func get_local_enemies() -> Array:
-	## Get enemies that are children of this scene (not global).
-	## This is needed for parallel training where multiple scenes share the tree.
+	## Get enemies that belong to this scene (not other parallel training scenes).
 	var local_enemies = []
 	for enemy in get_tree().get_nodes_in_group("enemy"):
-		if is_instance_valid(enemy) and enemy.get_parent() == self:
+		if is_instance_valid(enemy) and is_ancestor_of(enemy):
 			local_enemies.append(enemy)
 	return local_enemies
 
@@ -304,8 +303,6 @@ func end_slow_enemies() -> void:
 func clear_all_enemies() -> void:
 	player.trigger_screen_clear_effect()
 	var local_enemies = get_local_enemies()
-	var all_enemies = get_tree().get_nodes_in_group("enemy")
-	print("Screen clear: %d local enemies / %d total enemies" % [local_enemies.size(), all_enemies.size()])
 	var total_points = 0
 	for enemy in local_enemies:
 		if enemy.has_method("get_point_value"):
