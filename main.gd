@@ -26,6 +26,13 @@ const POWERUP_COLLECT_BONUS: int = 500     # Worth 50 seconds of survival
 const SCREEN_CLEAR_BONUS: int = 1000       # Big reward for clearing screen
 const KILL_MULTIPLIER: int = 100           # Multiply chess piece values (1-9 -> 100-900)
 
+# Combo system - rewards rapid kills/powerups
+const COMBO_WINDOW: float = 3.0            # Seconds to maintain combo
+const COMBO_BONUS_PER_LEVEL: float = 0.25  # +25% per combo level
+const MAX_COMBO_LEVEL: int = 10            # Cap at 3.5x multiplier
+var combo_level: int = 0
+var combo_timer: float = 0.0
+
 # Chess piece types for spawning
 enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
 
@@ -210,6 +217,12 @@ func _process(delta: float) -> void:
 	if screen_clear_cooldown > 0:
 		screen_clear_cooldown -= delta
 
+	# Update combo timer
+	if combo_timer > 0:
+		combo_timer -= delta
+		if combo_timer <= 0:
+			combo_level = 0
+
 	# Enemy spawning
 	if use_preset_events:
 		# Spawn from preset list based on elapsed time
@@ -386,12 +399,21 @@ func _on_powerup_collected(type: String) -> void:
 	powerups_collected += 1
 	show_powerup_message(type)
 
-	# Bonus for collecting powerup
-	var multiplier = 2 if double_points_active else 1
-	var bonus = POWERUP_COLLECT_BONUS * multiplier
+	# Bonus for collecting powerup with combo
+	var base_multiplier = 2.0 if double_points_active else 1.0
+	var combo_multiplier = 1.0 + combo_level * COMBO_BONUS_PER_LEVEL
+	var total_multiplier = base_multiplier * combo_multiplier
+	var bonus = int(POWERUP_COLLECT_BONUS * total_multiplier)
 	score += bonus
 	score_from_powerups += bonus
-	var bonus_text = "+%d" % bonus if multiplier == 1 else "+%d (2X)" % bonus
+
+	# Update combo
+	combo_level = mini(combo_level + 1, MAX_COMBO_LEVEL)
+	combo_timer = COMBO_WINDOW
+
+	var bonus_text = "+%d" % bonus
+	if combo_level > 1:
+		bonus_text += " x%d" % combo_level
 	spawn_floating_text(bonus_text, Color(0, 1, 0.5, 1), player.position)
 
 	match type:
@@ -416,11 +438,20 @@ func _on_powerup_collected(type: String) -> void:
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	kills += 1
-	var multiplier = 2 if double_points_active else 1
-	var bonus = points * KILL_MULTIPLIER * multiplier  # Scale up kill rewards (pawn=10, queen=90)
+	var base_multiplier = 2.0 if double_points_active else 1.0
+	var combo_multiplier = 1.0 + combo_level * COMBO_BONUS_PER_LEVEL
+	var total_multiplier = base_multiplier * combo_multiplier
+	var bonus = int(points * KILL_MULTIPLIER * total_multiplier)
 	score += bonus
 	score_from_kills += bonus
-	var bonus_text = "+%d" % bonus if multiplier == 1 else "+%d (2X)" % bonus
+
+	# Update combo
+	combo_level = mini(combo_level + 1, MAX_COMBO_LEVEL)
+	combo_timer = COMBO_WINDOW
+
+	var bonus_text = "+%d" % bonus
+	if combo_level > 1:
+		bonus_text += " x%d" % combo_level
 	spawn_floating_text(bonus_text, Color(1, 1, 0, 1), pos)
 
 func spawn_floating_text(text: String, color: Color, pos: Vector2) -> void:
