@@ -9,3 +9,7 @@
 
 # Claude Code
 .claude/
+
+# W&B local data
+wandb/
+.venv/
