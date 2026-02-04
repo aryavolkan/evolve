@@ -175,6 +175,7 @@ func shoot(direction: Vector2) -> void:
 	projectile.position = global_position
 	projectile.direction = direction
 	projectile.is_piercing = is_piercing
+	projectile.owner_player = self  # Track who fired this projectile
 	get_parent().add_child(projectile)
 
 	can_shoot = false

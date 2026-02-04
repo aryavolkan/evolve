@@ -5,6 +5,7 @@ extends Area2D
 var direction: Vector2 = Vector2.RIGHT
 var start_position: Vector2
 var is_piercing: bool = false
+var owner_player: Node = null  # The player who fired this projectile
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -30,7 +31,6 @@ func _on_body_entered(body: Node2D) -> void:
 		# Piercing projectiles don't disappear on enemy hit
 		if not is_piercing:
 			queue_free()
-		# Notify player of kill for bonus points
-		var player = get_tree().get_first_node_in_group("player")
-		if player:
-			player.enemy_killed.emit(enemy_pos, points)
+		# Notify owner player of kill for bonus points
+		if owner_player:
+			owner_player.enemy_killed.emit(enemy_pos, points)
