@@ -19,7 +19,7 @@ A 2D arcade survival game built with Godot 4.5+. Player avoids enemy entities to
 ├── projectile.tscn/gd # Player projectiles
 ├── obstacle.tscn      # Static obstacles
 ├── icon.svg           # Project icon
-└── test/              # Test suite (118 tests)
+└── test/              # Test suite (137 tests)
 ```
 
 ## Running the Project
@@ -227,7 +227,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (118 tests)
+### Test Coverage (137 tests)
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -240,6 +240,8 @@ godot --headless --script test/test_runner.gd
 | `test_ai_controller.gd` | 10 | Movement mapping, shoot direction, deadzone handling |
 | `test_edge_cases.gd` | 10 | Zero weights, extreme values, minimal populations |
 | `test_powerup.gd` | 12 | Type names, type count |
+| `test_trainer.gd` | 9 | Path constants, config defaults, stats/action structure |
+| `test_integration.gd` | 10 | Full Sensor → Network → Controller pipeline, data flow |
 
 ### Visible Training Mode
 
