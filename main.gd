@@ -5,6 +5,8 @@ var lives: int = 3
 var game_over: bool = false
 var kills: int = 0
 var powerups_collected: int = 0
+var score_from_kills: float = 0.0
+var score_from_powerups: float = 0.0
 var entering_name: bool = false
 var next_spawn_score: float = 50.0
 var next_powerup_score: float = 30.0
@@ -388,6 +390,7 @@ func _on_powerup_collected(type: String) -> void:
 	var multiplier = 2 if double_points_active else 1
 	var bonus = POWERUP_COLLECT_BONUS * multiplier
 	score += bonus
+	score_from_powerups += bonus
 	var bonus_text = "+%d" % bonus if multiplier == 1 else "+%d (2X)" % bonus
 	spawn_floating_text(bonus_text, Color(0, 1, 0.5, 1), player.position)
 
@@ -416,6 +419,7 @@ func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	var multiplier = 2 if double_points_active else 1
 	var bonus = points * KILL_MULTIPLIER * multiplier  # Scale up kill rewards (pawn=10, queen=90)
 	score += bonus
+	score_from_kills += bonus
 	var bonus_text = "+%d" % bonus if multiplier == 1 else "+%d (2X)" % bonus
 	spawn_floating_text(bonus_text, Color(1, 1, 0, 1), pos)
 

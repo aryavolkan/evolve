@@ -66,13 +66,13 @@ var ai_controller = null  # For playback mode
 var history_best_fitness: Array[float] = []
 var history_avg_fitness: Array[float] = []
 var history_min_fitness: Array[float] = []
-var history_avg_kills: Array[float] = []
-var history_avg_powerups: Array[float] = []
+var history_avg_kill_score: Array[float] = []
+var history_avg_powerup_score: Array[float] = []
 var history_avg_score: Array[float] = []
 
 # Per-generation accumulators
-var generation_total_kills: int = 0
-var generation_total_powerups: int = 0
+var generation_total_kill_score: float = 0.0
+var generation_total_powerup_score: float = 0.0
 var generation_total_score: float = 0.0
 
 # Pause state
@@ -160,11 +160,11 @@ func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	history_best_fitness.clear()
 	history_avg_fitness.clear()
 	history_min_fitness.clear()
-	history_avg_kills.clear()
-	history_avg_powerups.clear()
+	history_avg_kill_score.clear()
+	history_avg_powerup_score.clear()
 	history_avg_score.clear()
-	generation_total_kills = 0
-	generation_total_powerups = 0
+	generation_total_kill_score = 0.0
+	generation_total_powerup_score = 0.0
 	generation_total_score = 0.0
 
 	# Hide the main game and show training arenas
@@ -475,8 +475,8 @@ func _process_parallel_training(delta: float) -> void:
 			evolution.set_fitness(eval.index, fitness)
 
 			# Accumulate stats for this generation
-			generation_total_kills += eval.scene.kills
-			generation_total_powerups += eval.scene.powerups_collected
+			generation_total_kill_score += eval.scene.score_from_kills
+			generation_total_powerup_score += eval.scene.score_from_powerups
 			generation_total_score += eval.scene.score
 
 			eval.done = true
@@ -562,17 +562,17 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	history_avg_fitness.append(avg)
 	history_min_fitness.append(min_fit)
 
-	# Record kills, powerups, and score averages
-	var avg_kills := float(generation_total_kills) / population_size
-	var avg_powerups := float(generation_total_powerups) / population_size
+	# Record score breakdown averages
+	var avg_kill_score := generation_total_kill_score / population_size
+	var avg_powerup_score := generation_total_powerup_score / population_size
 	var avg_score := generation_total_score / population_size
-	history_avg_kills.append(avg_kills)
-	history_avg_powerups.append(avg_powerups)
+	history_avg_kill_score.append(avg_kill_score)
+	history_avg_powerup_score.append(avg_powerup_score)
 	history_avg_score.append(avg_score)
 
 	# Reset accumulators for next generation
-	generation_total_kills = 0
-	generation_total_powerups = 0
+	generation_total_kill_score = 0.0
+	generation_total_powerup_score = 0.0
 	generation_total_score = 0.0
 
 	# Track stagnation based on average fitness (more robust than all-time best)
@@ -1015,19 +1015,13 @@ func create_graph_panel() -> Control:
 			var score_line = create_graph_line(history_avg_score, graph_area, min_val, max_val, Color.ORANGE)
 			panel.add_child(score_line)
 
-		# Scale kills and powerups to be visible on same graph (multiply by 5)
-		if history_avg_kills.size() > 1:
-			var scaled_kills: Array[float] = []
-			for k in history_avg_kills:
-				scaled_kills.append(k * 5.0)
-			var kills_line = create_graph_line(scaled_kills, graph_area, min_val, max_val, Color.CYAN)
+		# Kill and powerup scores (already in same units as fitness/score)
+		if history_avg_kill_score.size() > 1:
+			var kills_line = create_graph_line(history_avg_kill_score, graph_area, min_val, max_val, Color.CYAN)
 			panel.add_child(kills_line)
 
-		if history_avg_powerups.size() > 1:
-			var scaled_powerups: Array[float] = []
-			for p in history_avg_powerups:
-				scaled_powerups.append(p * 10.0)
-			var powerups_line = create_graph_line(scaled_powerups, graph_area, min_val, max_val, Color.MAGENTA)
+		if history_avg_powerup_score.size() > 1:
+			var powerups_line = create_graph_line(history_avg_powerup_score, graph_area, min_val, max_val, Color.MAGENTA)
 			panel.add_child(powerups_line)
 	else:
 		var no_data = Label.new()
@@ -1048,8 +1042,8 @@ func create_legend() -> Control:
 		{"label": "Avg", "color": Color.YELLOW},
 		{"label": "Min", "color": Color.RED},
 		{"label": "Score", "color": Color.ORANGE},
-		{"label": "Kills×5", "color": Color.CYAN},
-		{"label": "Pwr×10", "color": Color.MAGENTA}
+		{"label": "Kills$", "color": Color.CYAN},
+		{"label": "Pwr$", "color": Color.MAGENTA}
 	]
 
 	var x_offset = 0
@@ -1098,6 +1092,10 @@ func get_max_history_value() -> float:
 	for v in history_avg_fitness:
 		max_val = maxf(max_val, v)
 	for v in history_avg_score:
+		max_val = maxf(max_val, v)
+	for v in history_avg_kill_score:
+		max_val = maxf(max_val, v)
+	for v in history_avg_powerup_score:
 		max_val = maxf(max_val, v)
 	# Round up to nice number
 	if max_val <= 100:
