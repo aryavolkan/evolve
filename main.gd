@@ -21,15 +21,15 @@ var spawned_obstacle_positions: Array = []
 var training_manager: Node
 var ai_status_label: Label
 
-# Bonus points - heavily reward kills and power-ups
-const POWERUP_COLLECT_BONUS: int = 2500    # 5x boost - worth 250 seconds of survival
-const SCREEN_CLEAR_BONUS: int = 5000       # Scaled with powerup bonus
-const KILL_MULTIPLIER: int = 300           # 3x boost - chess values (1-9 -> 300-2700)
+# Bonus points - kills dominate scoring
+const POWERUP_COLLECT_BONUS: int = 2500    # Worth 250 seconds of survival
+const SCREEN_CLEAR_BONUS: int = 5000       # Big reward for clearing screen
+const KILL_MULTIPLIER: int = 500           # Chess values (1-9 -> 500-4500)
 
-# Combo system - rewards rapid kills/powerups
-const COMBO_WINDOW: float = 3.0            # Seconds to maintain combo
-const COMBO_BONUS_PER_LEVEL: float = 0.25  # +25% per combo level
-const MAX_COMBO_LEVEL: int = 10            # Cap at 3.5x multiplier
+# Combo system - heavily rewards rapid kills/powerups
+const COMBO_WINDOW: float = 5.0            # 5 seconds to maintain combo
+const COMBO_BONUS_PER_LEVEL: float = 0.5   # +50% per combo level
+const MAX_COMBO_LEVEL: int = 15            # Cap at 8.5x multiplier
 var combo_level: int = 0
 var combo_timer: float = 0.0
 
