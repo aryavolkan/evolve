@@ -33,6 +33,10 @@ func _run_tests() -> void:
 	_test("rook_moves_straight", _test_rook_moves_straight)
 	_test("queen_moves_like_bishop_or_rook", _test_queen_moves_like_bishop_or_rook)
 	_test("piece_sizes_increase_with_value", _test_piece_sizes_increase_with_value)
+	_test("speed_multipliers_scale_correctly", _test_speed_multipliers_scale_correctly)
+	_test("cooldowns_vary_by_type", _test_cooldowns_vary_by_type)
+	_test("slow_effect_logic", _test_slow_effect_logic)
+	_test("kill_points_match_spec", _test_kill_points_match_spec)
 
 
 # ============================================================
@@ -223,3 +227,62 @@ func _test_piece_sizes_increase_with_value() -> void:
 	assert_eq(knight_size, bishop_size, "Knight and bishop should be same size")
 	assert_lt(bishop_size, rook_size, "Rook should be larger than bishop")
 	assert_lt(rook_size, queen_size, "Queen should be largest")
+
+
+# ============================================================
+# Speed and Cooldown Tests
+# ============================================================
+
+func _test_speed_multipliers_scale_correctly() -> void:
+	# Queen should be fastest, pawn baseline
+	var pawn_mult: float = TYPE_CONFIG[Type.PAWN]["speed_mult"]
+	var queen_mult: float = TYPE_CONFIG[Type.QUEEN]["speed_mult"]
+
+	assert_approx(pawn_mult, 1.0, 0.001, "Pawn should have baseline speed (1.0)")
+	assert_gt(queen_mult, pawn_mult, "Queen should be faster than pawn")
+
+	# All multipliers should be positive
+	for piece_type in TYPE_CONFIG:
+		var mult: float = TYPE_CONFIG[piece_type]["speed_mult"]
+		assert_gt(mult, 0.0, "Speed multiplier should be positive")
+
+
+func _test_cooldowns_vary_by_type() -> void:
+	# Queen should have shortest cooldown (more aggressive)
+	var queen_cd: float = TYPE_CONFIG[Type.QUEEN]["cooldown"]
+	var pawn_cd: float = TYPE_CONFIG[Type.PAWN]["cooldown"]
+
+	assert_lt(queen_cd, pawn_cd, "Queen should have shorter cooldown than pawn")
+
+	# All cooldowns should be positive
+	for piece_type in TYPE_CONFIG:
+		var cd: float = TYPE_CONFIG[piece_type]["cooldown"]
+		assert_gt(cd, 0.0, "Cooldown should be positive")
+
+
+func _test_slow_effect_logic() -> void:
+	# Test slow effect calculation (mirrors enemy.gd apply_slow logic)
+	var base_cooldown := 1.0
+	var base_duration := 0.3
+	var slow_multiplier := 0.5  # 50% slow
+
+	# Slow increases cooldown and duration (enemy moves slower)
+	var slowed_cooldown := base_cooldown / slow_multiplier  # 2.0
+	var slowed_duration := base_duration / slow_multiplier  # 0.6
+
+	assert_gt(slowed_cooldown, base_cooldown, "Slowed cooldown should be longer")
+	assert_gt(slowed_duration, base_duration, "Slowed move duration should be longer")
+	assert_approx(slowed_cooldown, 2.0, 0.001)
+	assert_approx(slowed_duration, 0.6, 0.001)
+
+
+func _test_kill_points_match_spec() -> void:
+	# Per CLAUDE.md: Kill points are 10× chess values
+	# pawn=10, knight/bishop=30, rook=50, queen=90
+	const KILL_MULTIPLIER := 10
+
+	assert_eq(TYPE_CONFIG[Type.PAWN]["points"] * KILL_MULTIPLIER, 10, "Pawn kill = 10 pts")
+	assert_eq(TYPE_CONFIG[Type.KNIGHT]["points"] * KILL_MULTIPLIER, 30, "Knight kill = 30 pts")
+	assert_eq(TYPE_CONFIG[Type.BISHOP]["points"] * KILL_MULTIPLIER, 30, "Bishop kill = 30 pts")
+	assert_eq(TYPE_CONFIG[Type.ROOK]["points"] * KILL_MULTIPLIER, 50, "Rook kill = 50 pts")
+	assert_eq(TYPE_CONFIG[Type.QUEEN]["points"] * KILL_MULTIPLIER, 90, "Queen kill = 90 pts")

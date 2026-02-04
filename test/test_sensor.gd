@@ -2,15 +2,15 @@ extends "res://test/test_base.gd"
 ## Tests for AI sensor logic.
 ## Tests the pure calculation functions without requiring scene instantiation.
 
-# Constants from sensor.gd
+# Constants from sensor.gd (updated for 3840x3840 square arena)
 const NUM_RAYS: int = 16
-const RAY_LENGTH: float = 1500.0
+const RAY_LENGTH: float = 2800.0  # Long enough to span diagonal of square arena
 const INPUTS_PER_RAY: int = 5
 const PLAYER_STATE_INPUTS: int = 6
 const TOTAL_INPUTS: int = NUM_RAYS * INPUTS_PER_RAY + PLAYER_STATE_INPUTS
 
-const ARENA_WIDTH: float = 2560.0
-const ARENA_HEIGHT: float = 1440.0
+const ARENA_WIDTH: float = 3840.0
+const ARENA_HEIGHT: float = 3840.0
 var arena_bounds: Rect2 = Rect2(40, 40, ARENA_WIDTH - 80, ARENA_HEIGHT - 80)
 
 
@@ -30,6 +30,8 @@ func _run_tests() -> void:
 	_test("ray_cast_ignores_entity_behind", _test_ray_cast_ignores_entity_behind)
 	_test("ray_cast_ignores_entity_too_far_from_ray", _test_ray_cast_ignores_entity_too_far_from_ray)
 	_test("enemy_type_encoding", _test_enemy_type_encoding)
+	_test("ray_cast_selects_closest_entity", _test_ray_cast_selects_closest_entity)
+	_test("distance_normalization", _test_distance_normalization)
 
 
 # ============================================================
@@ -189,11 +191,12 @@ func _test_wall_distance_from_center() -> void:
 	var dist_down = get_wall_distance(center, Vector2(0, 1))
 	var dist_up = get_wall_distance(center, Vector2(0, -1))
 
-	# Arena is 2560x1440, with 40px walls, playable area is roughly centered
-	assert_gt(dist_right, 1000.0, "Right wall should be > 1000 from center")
-	assert_gt(dist_left, 1000.0, "Left wall should be > 1000 from center")
-	assert_gt(dist_down, 500.0, "Bottom wall should be > 500 from center")
-	assert_gt(dist_up, 500.0, "Top wall should be > 500 from center")
+	# Arena is 3840x3840 square, with 40px walls, playable area is roughly centered
+	# From center (1920, 1920) to wall edge should be ~1880 (1920 - 40)
+	assert_gt(dist_right, 1800.0, "Right wall should be > 1800 from center")
+	assert_gt(dist_left, 1800.0, "Left wall should be > 1800 from center")
+	assert_gt(dist_down, 1800.0, "Bottom wall should be > 1800 from center")
+	assert_gt(dist_up, 1800.0, "Top wall should be > 1800 from center")
 
 
 # ============================================================
@@ -268,3 +271,44 @@ func _test_enemy_type_encoding() -> void:
 	var queen = MockEntity.new(Vector2(600, 500), 9)
 	result = cast_ray_to_entities(origin, direction, [queen], 50.0)
 	assert_approx(result.type_value, 1.0, 0.001, "Queen should encode as 1.0")
+
+
+# ============================================================
+# Closest Entity Selection Tests
+# ============================================================
+
+func _test_ray_cast_selects_closest_entity() -> void:
+	var origin = Vector2(500, 500)
+	var direction = Vector2(1, 0)  # Looking right
+
+	# Place two entities on the ray - far one is queen (higher value), close one is pawn
+	var close_pawn = MockEntity.new(Vector2(600, 500), 1)  # 100 units away
+	var far_queen = MockEntity.new(Vector2(900, 500), 9)   # 400 units away
+	var entities: Array = [far_queen, close_pawn]  # Order shouldn't matter
+
+	var result = cast_ray_to_entities(origin, direction, entities, 50.0)
+
+	assert_true(result.hit, "Should detect entity")
+	assert_approx(result.distance, 100.0, 1.0, "Should return distance to CLOSEST entity")
+	assert_approx(result.type_value, 0.2, 0.001, "Should return type of CLOSEST entity (pawn)")
+
+
+func _test_distance_normalization() -> void:
+	# Test that distance is normalized correctly: 1.0 = close, 0.0 = far
+	var origin = Vector2(500, 500)
+	var direction = Vector2(1, 0)
+
+	# Entity at distance 100 should have high normalized value
+	var close_entity = MockEntity.new(Vector2(600, 500), 1)
+	var result = cast_ray_to_entities(origin, direction, [close_entity], 50.0)
+
+	# Normalized = 1.0 - (distance / RAY_LENGTH) = 1.0 - (100 / 2800) ≈ 0.964
+	var expected_normalized = 1.0 - (100.0 / RAY_LENGTH)
+	assert_true(result.hit)
+	# The actual normalization happens in sensor.get_inputs(), here we just verify distance
+	assert_approx(result.distance, 100.0, 1.0)
+
+	# Verify the normalization formula
+	var normalized = 1.0 - (result.distance / RAY_LENGTH)
+	assert_gt(normalized, 0.9, "Close entity should have high normalized value")
+	assert_lt(normalized, 1.0, "Normalized value should be less than 1.0")

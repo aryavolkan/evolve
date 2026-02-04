@@ -18,7 +18,8 @@ A 2D arcade survival game built with Godot 4.5+. Player avoids enemy entities to
 ├── powerup.tscn/gd    # Power-up collectibles
 ├── projectile.tscn/gd # Player projectiles
 ├── obstacle.tscn      # Static obstacles
-└── icon.svg           # Project icon
+├── icon.svg           # Project icon
+└── test/              # Test suite (118 tests)
 ```
 
 ## Running the Project
@@ -78,10 +79,10 @@ add_child(enemy)
 
 ## Arena System
 
-- **Fixed Arena Size:** 2560x1440 pixels (2x viewport, zoomed out to fit)
-- **Static Camera:** Centered on arena, 0.5x zoom to show entire arena
+- **Fixed Arena Size:** 3840x3840 pixels (square arena, zoomed out to fit)
+- **Static Camera:** Centered on arena, dynamic zoom to show entire arena
 - **Arena Walls:** Solid boundaries prevent player/enemies from leaving
-- **Permanent Obstacles:** 50 obstacles placed randomly at game start (fixed layout per run)
+- **Permanent Obstacles:** 20 obstacles placed randomly at game start (fixed layout per run)
 - **Safe Zone:** 250px radius around center kept clear for player spawn
 - **Enemy Spawning:** Enemies spawn along arena edges
 - **Grid Floor:** Visual grid lines (160px) for spatial reference
@@ -218,6 +219,27 @@ Uses game score directly:
 
 - `user://best_network.nn` - Best performing network
 - `user://population.evo` - Full population state
+
+## Testing
+
+Run tests with:
+```bash
+godot --headless --script test/test_runner.gd
+```
+
+### Test Coverage (118 tests)
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| `test_neural_network.gd` | 16 | Network init, forward pass, cloning, mutation, crossover, save/load |
+| `test_evolution.gd` | 17 | Population, fitness, elitism, selection, backup/restore, persistence |
+| `test_difficulty.gd` | 11 | Difficulty factor, enemy speed, spawn interval scaling |
+| `test_highscore.gd` | 9 | Score qualification, sorting, capping, persistence |
+| `test_enemy.gd` | 18 | Chess piece points, movement patterns, slow/freeze effects |
+| `test_sensor.gd` | 15 | Ray casting, wall distance, entity detection, type encoding |
+| `test_ai_controller.gd` | 10 | Movement mapping, shoot direction, deadzone handling |
+| `test_edge_cases.gd` | 10 | Zero weights, extreme values, minimal populations |
+| `test_powerup.gd` | 12 | Type names, type count |
 
 ### Visible Training Mode
 

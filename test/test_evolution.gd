@@ -20,6 +20,10 @@ func _run_tests() -> void:
 	_test("backup_and_restore_works", _test_backup_and_restore_works)
 	_test("save_load_population_roundtrip", _test_save_load_population_roundtrip)
 	_test("get_stats_returns_valid_data", _test_get_stats_returns_valid_data)
+	_test("save_best_and_load_best", _test_save_best_and_load_best)
+	_test("load_population_rejects_size_mismatch", _test_load_population_rejects_size_mismatch)
+	_test("evolve_handles_zero_fitness", _test_evolve_handles_zero_fitness)
+	_test("evolve_handles_equal_fitness", _test_evolve_handles_equal_fitness)
 
 
 # ============================================================
@@ -265,3 +269,86 @@ func _test_get_stats_returns_valid_data() -> void:
 	assert_approx(stats.current_min, 10.0, 0.001)
 	assert_approx(stats.current_max, 100.0, 0.001)
 	assert_approx(stats.current_avg, 55.0, 0.001)  # (10+20+...+100)/10 = 550/10 = 55
+
+
+# ============================================================
+# Best Network Persistence Tests
+# ============================================================
+
+func _test_save_best_and_load_best() -> void:
+	var evo = Evolution.new(10, 5, 3, 2)
+	var test_path := "user://test_best_network.nn"
+
+	# Run evolution to establish a best network
+	for i in 10:
+		evo.set_fitness(i, float(i) * 10.0)
+	evo.evolve()
+
+	# Save best network
+	evo.save_best(test_path)
+
+	# Create new evolution and load
+	var evo2 = Evolution.new(10, 5, 3, 2)
+	evo2.load_best(test_path)
+
+	assert_not_null(evo2.all_time_best_network, "Should load best network")
+
+	# Verify weights match
+	var weights1: PackedFloat32Array = evo.all_time_best_network.get_weights()
+	var weights2: PackedFloat32Array = evo2.all_time_best_network.get_weights()
+	assert_eq(weights1.size(), weights2.size())
+	for i in weights1.size():
+		assert_approx(weights1[i], weights2[i], 0.0001, "Weight %d should match" % i)
+
+	# Cleanup
+	DirAccess.remove_absolute(test_path)
+
+
+func _test_load_population_rejects_size_mismatch() -> void:
+	var evo1 = Evolution.new(10, 5, 3, 2)
+	var test_path := "user://test_pop_mismatch.evo"
+
+	for i in 10:
+		evo1.set_fitness(i, float(i) * 10.0)
+	evo1.evolve()
+	evo1.save_population(test_path)
+
+	# Try to load into evolution with different population size
+	var evo2 = Evolution.new(20, 5, 3, 2)  # Different size!
+	var loaded := evo2.load_population(test_path)
+
+	assert_false(loaded, "Should reject population size mismatch")
+
+	# Cleanup
+	DirAccess.remove_absolute(test_path)
+
+
+# ============================================================
+# Edge Case Fitness Tests
+# ============================================================
+
+func _test_evolve_handles_zero_fitness() -> void:
+	var evo = Evolution.new(10, 5, 3, 2)
+
+	# All individuals have zero fitness
+	for i in 10:
+		evo.set_fitness(i, 0.0)
+
+	# Should not crash
+	evo.evolve()
+
+	assert_eq(evo.generation, 1, "Should complete evolution with zero fitness")
+	assert_eq(evo.population.size(), 10, "Population size should remain constant")
+
+
+func _test_evolve_handles_equal_fitness() -> void:
+	var evo = Evolution.new(10, 5, 3, 2)
+
+	# All individuals have equal fitness
+	for i in 10:
+		evo.set_fitness(i, 50.0)
+
+	evo.evolve()
+
+	assert_eq(evo.generation, 1, "Should complete evolution with equal fitness")
+	assert_approx(evo.best_fitness, 50.0, 0.001, "Best fitness should be 50")
