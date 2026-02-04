@@ -41,12 +41,12 @@ const ARENA_WALL_THICKNESS: float = 40.0
 const ARENA_PADDING: float = 100.0  # Safe zone from walls for spawning
 
 # Permanent obstacle configuration
-const OBSTACLE_COUNT: int = 20      # Fewer obstacles for clearer navigation
-const OBSTACLE_MIN_DISTANCE: float = 120.0  # Min distance between obstacles
-const OBSTACLE_PLAYER_SAFE_ZONE: float = 250.0  # Keep obstacles away from player spawn
+const OBSTACLE_COUNT: int = 40      # More obstacles for larger arena
+const OBSTACLE_MIN_DISTANCE: float = 150.0  # Min distance between obstacles
+const OBSTACLE_PLAYER_SAFE_ZONE: float = 300.0  # Keep obstacles away from player spawn
 
 # Power-up limit
-const MAX_POWERUPS: int = 10  # Maximum power-ups on the map at once
+const MAX_POWERUPS: int = 15  # Maximum power-ups on the map at once
 
 # Difficulty scaling
 const BASE_ENEMY_SPEED: float = 150.0
@@ -115,17 +115,17 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 	# Generate obstacle positions (3840x3840 square arena)
 	var arena_center = Vector2(3840 / 2, 3840 / 2)
 	var spawned_positions: Array = []
-	for i in range(20):  # OBSTACLE_COUNT
+	for i in range(40):  # More obstacles for larger arena
 		for attempt in range(50):
 			var pos = Vector2(
 				randf_range(100, 3740),
 				randf_range(100, 3740)
 			)
-			if pos.distance_to(arena_center) < 250:
+			if pos.distance_to(arena_center) < 300:
 				continue
 			var too_close = false
 			for existing_pos in spawned_positions:
-				if pos.distance_to(existing_pos) < 120:
+				if pos.distance_to(existing_pos) < 150:
 					too_close = true
 					break
 			if not too_close:
@@ -149,9 +149,9 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 			3: pos = Vector2(3740, randf_range(100, 3740))  # Right
 		enemy_spawns.append({"time": spawn_time, "pos": pos, "type": 0})  # Type 0 = pawn
 
-	# Generate powerup spawn events
+	# Generate powerup spawn events (more frequent for larger arena)
 	var powerup_spawns: Array = []
-	var powerup_time: float = 3.0  # First powerup at 3 seconds
+	var powerup_time: float = 2.0  # First powerup at 2 seconds
 	while powerup_time < 120.0:
 		var pos = Vector2(
 			randf_range(200, 3640),
@@ -161,7 +161,7 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 		if pos.distance_to(arena_center) > 200:
 			var powerup_type = randi() % 9  # 9 powerup types
 			powerup_spawns.append({"time": powerup_time, "pos": pos, "type": powerup_type})
-		powerup_time += 8.0  # Powerup every 8 seconds
+		powerup_time += 5.0  # Powerup every 5 seconds
 
 	return {"obstacles": obstacles, "enemy_spawns": enemy_spawns, "powerup_spawns": powerup_spawns}
 
