@@ -4,7 +4,7 @@ extends RefCounted
 ## Casts rays around the player to detect enemies, obstacles, and power-ups.
 
 const NUM_RAYS: int = 16
-const RAY_LENGTH: float = 1500.0  # Long enough to span most of 2560x1440 arena
+const RAY_LENGTH: float = 2800.0  # Long enough to span 3840x3840 square arena diagonal
 const INPUTS_PER_RAY: int = 5  # (enemy_dist, enemy_type, obstacle_dist, powerup_dist, wall_dist)
 
 # Total inputs: rays + player state
@@ -14,8 +14,8 @@ const PLAYER_STATE_INPUTS: int = 6
 const TOTAL_INPUTS: int = NUM_RAYS * INPUTS_PER_RAY + PLAYER_STATE_INPUTS
 
 # Arena bounds
-const ARENA_WIDTH: float = 2560.0
-const ARENA_HEIGHT: float = 1440.0
+const ARENA_WIDTH: float = 3840.0
+const ARENA_HEIGHT: float = 3840.0
 var arena_bounds: Rect2 = Rect2(40, 40, ARENA_WIDTH - 80, ARENA_HEIGHT - 80)
 
 var player: CharacterBody2D

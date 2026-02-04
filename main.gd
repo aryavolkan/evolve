@@ -32,9 +32,9 @@ const RESPAWN_INVINCIBILITY: float = 2.0
 const MAX_HIGH_SCORES: int = 5
 const SAVE_PATH: String = "user://highscores.save"
 
-# Arena configuration - large arena (2x viewport size, zoomed out to fit)
-const ARENA_WIDTH: float = 2560.0   # 2x viewport width
-const ARENA_HEIGHT: float = 1440.0  # 2x viewport height
+# Arena configuration - large square arena
+const ARENA_WIDTH: float = 3840.0   # 3x viewport width
+const ARENA_HEIGHT: float = 3840.0  # Square arena
 const ARENA_WALL_THICKNESS: float = 40.0
 const ARENA_PADDING: float = 100.0  # Safe zone from walls for spawning
 
@@ -110,14 +110,14 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 	var obstacles: Array = []
 	var enemy_spawns: Array = []
 
-	# Generate obstacle positions
-	var arena_center = Vector2(2560 / 2, 1440 / 2)
+	# Generate obstacle positions (3840x3840 square arena)
+	var arena_center = Vector2(3840 / 2, 3840 / 2)
 	var spawned_positions: Array = []
 	for i in range(20):  # OBSTACLE_COUNT
 		for attempt in range(50):
 			var pos = Vector2(
-				randf_range(100, 2560 - 100),
-				randf_range(100, 1440 - 100)
+				randf_range(100, 3740),
+				randf_range(100, 3740)
 			)
 			if pos.distance_to(arena_center) < 250:
 				continue
@@ -141,10 +141,10 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 		var edge = randi() % 4
 		var pos: Vector2
 		match edge:
-			0: pos = Vector2(randf_range(100, 2460), 100)  # Top
-			1: pos = Vector2(randf_range(100, 2460), 1340)  # Bottom
-			2: pos = Vector2(100, randf_range(100, 1340))  # Left
-			3: pos = Vector2(2460, randf_range(100, 1340))  # Right
+			0: pos = Vector2(randf_range(100, 3740), 100)  # Top
+			1: pos = Vector2(randf_range(100, 3740), 3740)  # Bottom
+			2: pos = Vector2(100, randf_range(100, 3740))  # Left
+			3: pos = Vector2(3740, randf_range(100, 3740))  # Right
 		enemy_spawns.append({"time": spawn_time, "pos": pos, "type": 0})  # Type 0 = pawn
 
 	# Generate powerup spawn events
@@ -152,8 +152,8 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 	var powerup_time: float = 3.0  # First powerup at 3 seconds
 	while powerup_time < 120.0:
 		var pos = Vector2(
-			randf_range(200, 2360),
-			randf_range(200, 1240)
+			randf_range(200, 3640),
+			randf_range(200, 3640)
 		)
 		# Skip if too close to center (player spawn)
 		if pos.distance_to(arena_center) > 200:
