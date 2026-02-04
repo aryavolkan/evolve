@@ -131,12 +131,12 @@ func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	evolution = EvolutionScript.new(
 		population_size,
 		input_size,
-		32,
+		48,    # Hidden layer (increased from 32 for more capacity)
 		6,
-		8,     # Elite count (~17% - balance between preserving good and exploring)
-		0.15,  # Mutation rate (slightly higher for exploration)
-		0.15,  # Mutation strength (slightly higher for exploration)
-		0.6    # Crossover rate (lower to preserve good networks better)
+		3,     # Elite count (12% - reduced to encourage exploration)
+		0.15,  # Mutation rate
+		0.3,   # Mutation strength (increased for better exploration)
+		0.6    # Crossover rate
 	)
 
 	evolution.generation_complete.connect(_on_generation_complete)
@@ -394,11 +394,10 @@ func start_next_batch() -> void:
 	## Start evaluating the first batch of individuals (rolling replacement after).
 	cleanup_training_instances()
 
-	# Generate events ONCE and reuse for all generations (seed=1 always)
-	# This ensures true fitness comparison across generations
-	if generation_events.size() == 0:
-		var MainScene = load("res://main.gd")
-		generation_events = MainScene.generate_random_events(42)  # Fixed seed
+	# Generate new events each generation with different seed
+	# Forces networks to generalize rather than memorize one scenario
+	var MainScene = load("res://main.gd")
+	generation_events = MainScene.generate_random_events(generation + 1)  # Seed varies per gen
 
 	# Reset rolling counters
 	next_individual = parallel_count
