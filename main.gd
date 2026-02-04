@@ -21,10 +21,10 @@ var spawned_obstacle_positions: Array = []
 var training_manager: Node
 var ai_status_label: Label
 
-# Bonus points - scaled 10x to strongly reward kills and power-ups
-const POWERUP_COLLECT_BONUS: int = 500     # Worth 50 seconds of survival
-const SCREEN_CLEAR_BONUS: int = 1000       # Big reward for clearing screen
-const KILL_MULTIPLIER: int = 100           # Multiply chess piece values (1-9 -> 100-900)
+# Bonus points - heavily reward kills and power-ups
+const POWERUP_COLLECT_BONUS: int = 2500    # 5x boost - worth 250 seconds of survival
+const SCREEN_CLEAR_BONUS: int = 5000       # Scaled with powerup bonus
+const KILL_MULTIPLIER: int = 300           # 3x boost - chess values (1-9 -> 300-2700)
 
 # Combo system - rewards rapid kills/powerups
 const COMBO_WINDOW: float = 3.0            # Seconds to maintain combo
