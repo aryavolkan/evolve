@@ -27,6 +27,12 @@ var parallel_count: int = 10  # Number of parallel arenas (5x2 grid)
 var next_individual: int = 0
 var evaluated_count: int = 0
 
+# Fitness tracking
+var fitness_accumulator: Dictionary = {}  # For potential multi-eval
+
+# Pre-generated events for current generation (shared by all individuals)
+var generation_events: Dictionary = {}  # {obstacles: [...], enemy_spawns: [...]}
+
 # Paths
 const BEST_NETWORK_PATH := "user://best_network.nn"
 const POPULATION_PATH := "user://population.evo"
@@ -100,7 +106,7 @@ func initialize(scene: Node2D) -> void:
 	ai_controller.set_player(player)
 
 
-func start_training(pop_size: int = 50, generations: int = 100) -> void:
+func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	## Begin evolutionary training with parallel visible arenas.
 	if not main_scene:
 		push_error("Training manager not initialized")
@@ -119,10 +125,10 @@ func start_training(pop_size: int = 50, generations: int = 100) -> void:
 		input_size,
 		32,
 		6,
-		10,    # Elite count (20% of population)
-		0.10,  # Mutation rate (reduced from 0.15)
-		0.1,   # Mutation strength (reduced from 0.3 - less destructive)
-		0.7    # Crossover rate
+		8,     # Elite count (~17% - balance between preserving good and exploring)
+		0.15,  # Mutation rate (slightly higher for exploration)
+		0.15,  # Mutation strength (slightly higher for exploration)
+		0.6    # Crossover rate (lower to preserve good networks better)
 	)
 
 	evolution.generation_complete.connect(_on_generation_complete)
@@ -325,8 +331,13 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 	viewport.handle_input_locally = false
 	container.add_child(viewport)
 
-	# Instantiate game scene
+	# Instantiate game scene with preset events (all individuals see same game)
 	var scene: Node2D = MainScenePacked.instantiate()
+	scene.set_training_mode(true)  # Simplified: no powerups
+	if generation_events.size() > 0:
+		# Deep copy enemy_spawns since it gets modified during gameplay
+		var events_copy = generation_events.enemy_spawns.duplicate(true)
+		scene.set_preset_events(generation_events.obstacles, events_copy)
 	viewport.add_child(scene)
 
 	# Get player and configure for AI
@@ -368,11 +379,17 @@ func start_next_batch() -> void:
 	## Start evaluating the first batch of individuals (rolling replacement after).
 	cleanup_training_instances()
 
+	# Generate events ONCE and reuse for all generations (seed=1 always)
+	# This ensures true fitness comparison across generations
+	if generation_events.size() == 0:
+		var MainScene = load("res://main.gd")
+		generation_events = MainScene.generate_random_events(42)  # Fixed seed
+
 	# Reset rolling counters
-	next_individual = parallel_count  # First 10 are started, next is #10
+	next_individual = parallel_count
 	evaluated_count = 0
 
-	print("Gen %d: Starting evaluation (rolling batches of %d)..." % [generation, parallel_count])
+	print("Gen %d: Evaluating %d individuals..." % [generation, population_size])
 
 	for i in range(parallel_count):
 		var grid_x: int = i % 5
@@ -435,9 +452,11 @@ func _process_parallel_training(delta: float) -> void:
 		var action: Dictionary = eval.controller.get_action()
 		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
 
-		# Check if game over (no time limit)
-		if eval.scene.game_over:
-			var fitness: float = eval.scene.score
+		# Check if game over OR timeout (90 second max evaluation)
+		var timed_out = eval.time >= 90.0
+		if eval.scene.game_over or timed_out:
+			# Fitness = survival time (deterministic game makes this reliable)
+			var fitness: float = eval.time
 			evolution.set_fitness(eval.index, fitness)
 			eval.done = true
 			evaluated_count += 1
@@ -450,7 +469,14 @@ func _process_parallel_training(delta: float) -> void:
 
 	# Check if generation complete
 	if evaluated_count >= population_size:
+		# Debug: print fitness distribution before evolving
+		var stats = evolution.get_stats()
+		print("Gen %d complete: min=%.0f avg=%.0f max=%.0f best_ever=%.0f" % [
+			generation, stats.current_min, stats.current_avg, stats.current_max, stats.all_time_best
+		])
+
 		evolution.evolve()
+		generation = evolution.get_generation()
 		evaluated_count = 0
 		next_individual = 0
 

@@ -19,7 +19,7 @@ const OUT_SHOOT_LEFT := 4
 const OUT_SHOOT_RIGHT := 5
 
 # Thresholds
-const SHOOT_THRESHOLD := 0.3  # Shoot only if confident (tanh > 0.3)
+const SHOOT_THRESHOLD := 0.0  # Let networks learn shooting from generation 1
 const MOVE_DEADZONE := 0.05   # Small deadzone to filter noise
 
 
@@ -49,8 +49,8 @@ func get_action() -> Dictionary:
 	var inputs: PackedFloat32Array = sensor.get_inputs()
 	var outputs: PackedFloat32Array = network.forward(inputs)
 
-	# Movement direction (moderate scaling preserves nuance while boosting small tanh outputs)
-	var move_dir := Vector2(outputs[OUT_MOVE_X], outputs[OUT_MOVE_Y]) * 2.0
+	# Movement direction (direct mapping from network outputs)
+	var move_dir := Vector2(outputs[OUT_MOVE_X], outputs[OUT_MOVE_Y])
 	if move_dir.length() < MOVE_DEADZONE:
 		move_dir = Vector2.ZERO
 	elif move_dir.length() > 1.0:

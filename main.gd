@@ -76,7 +76,79 @@ var arena_camera: Camera2D
 @onready var name_prompt: Label = $CanvasLayer/UI/NamePrompt
 @onready var player: CharacterBody2D = $Player
 
+var game_seed: int = 0  # Seed for deterministic training
+var training_mode: bool = false  # Simplified game for AI training
+
+# Pre-generated events for deterministic training
+var preset_obstacles: Array = []  # [{pos: Vector2}, ...]
+var preset_enemy_spawns: Array = []  # [{time: float, pos: Vector2, type: int}, ...]
+var use_preset_events: bool = false
+
+func set_game_seed(s: int) -> void:
+	## Set random seed for deterministic game (used in training).
+	game_seed = s
+	seed(s)
+
+func set_training_mode(enabled: bool) -> void:
+	## Enable simplified game mode for AI training.
+	training_mode = enabled
+
+func set_preset_events(obstacles: Array, enemy_spawns: Array) -> void:
+	## Use pre-generated events for deterministic gameplay.
+	preset_obstacles = obstacles
+	preset_enemy_spawns = enemy_spawns.duplicate()  # Copy so we can pop from it
+	use_preset_events = true
+
+static func generate_random_events(seed_value: int) -> Dictionary:
+	## Generate random events for a deterministic game session.
+	## Call once per generation, share results with all individuals.
+	seed(seed_value)
+
+	var obstacles: Array = []
+	var enemy_spawns: Array = []
+
+	# Generate obstacle positions
+	var arena_center = Vector2(2560 / 2, 1440 / 2)
+	var spawned_positions: Array = []
+	for i in range(20):  # OBSTACLE_COUNT
+		for attempt in range(50):
+			var pos = Vector2(
+				randf_range(100, 2560 - 100),
+				randf_range(100, 1440 - 100)
+			)
+			if pos.distance_to(arena_center) < 250:
+				continue
+			var too_close = false
+			for existing_pos in spawned_positions:
+				if pos.distance_to(existing_pos) < 120:
+					too_close = true
+					break
+			if not too_close:
+				obstacles.append({"pos": pos})
+				spawned_positions.append(pos)
+				break
+
+	# Generate enemy spawn events - fewer enemies, slower scaling
+	var spawn_time: float = 0.0
+	var spawn_interval: float = 4.0  # Slower spawning (was 2.0)
+	while spawn_time < 120.0:  # Cover 2 minutes of gameplay
+		spawn_time += spawn_interval
+		spawn_interval = maxf(spawn_interval * 0.98, 2.0)  # Gradually speed up but cap at 2s
+		# Random edge position
+		var edge = randi() % 4
+		var pos: Vector2
+		match edge:
+			0: pos = Vector2(randf_range(100, 2460), 100)  # Top
+			1: pos = Vector2(randf_range(100, 2460), 1340)  # Bottom
+			2: pos = Vector2(100, randf_range(100, 1340))  # Left
+			3: pos = Vector2(2460, randf_range(100, 1340))  # Right
+		enemy_spawns.append({"time": spawn_time, "pos": pos, "type": 0})  # Type 0 = pawn
+
+	return {"obstacles": obstacles, "enemy_spawns": enemy_spawns}
+
 func _ready() -> void:
+	if game_seed > 0:
+		seed(game_seed)  # Apply seed before any random operations
 	if DisplayServer.get_name() != "headless":
 		print("Evolve app started!")
 	get_tree().paused = false
@@ -117,23 +189,27 @@ func _process(delta: float) -> void:
 	if screen_clear_cooldown > 0:
 		screen_clear_cooldown -= delta
 
-	if score >= next_spawn_score and screen_clear_cooldown <= 0:
+	# Enemy spawning
+	if use_preset_events:
+		# Spawn from preset list based on elapsed time
+		var elapsed = score / 10.0  # Score increases by 10 per second
+		while preset_enemy_spawns.size() > 0 and preset_enemy_spawns[0].time <= elapsed:
+			var spawn_data = preset_enemy_spawns.pop_front()
+			spawn_enemy_at(spawn_data.pos, spawn_data.type)
+	elif score >= next_spawn_score and screen_clear_cooldown <= 0:
 		spawn_enemy()
 		var spawn_interval = get_scaled_spawn_interval()
 		next_spawn_score += spawn_interval
 
-	# Spawn power-ups based on score, but respect the MAX_POWERUPS limit
-	if score >= next_powerup_score:
-		# Count only local powerups (in this scene, not globally)
+	# Spawn power-ups based on score (disabled in training mode for consistency)
+	if not training_mode and score >= next_powerup_score:
 		var powerup_count = count_local_powerups()
 
 		if powerup_count >= MAX_POWERUPS:
-			# At max power-ups, set next threshold far ahead
 			next_powerup_score = score + 80.0
 		elif spawn_powerup():
 			next_powerup_score += 80.0
 		else:
-			# Couldn't spawn (no valid position), try again later
 			next_powerup_score = score + 20.0
 
 func get_difficulty_factor() -> float:
@@ -151,23 +227,24 @@ func spawn_enemy() -> void:
 	var enemy = enemy_scene.instantiate()
 	enemy.speed = get_scaled_enemy_speed()
 
-	# Chess piece type (weighted: pawns common, higher pieces rarer)
-	# As difficulty increases, better pieces spawn more often
-	var type_roll = randf()
-	var difficulty = get_difficulty_factor()
-
-	# Weighted spawning based on difficulty
-	# Early game: mostly pawns, Late game: more variety
-	if type_roll < 0.5 - difficulty * 0.3:
-		enemy.type = ChessPiece.PAWN      # 1 point
-	elif type_roll < 0.7 - difficulty * 0.1:
-		enemy.type = ChessPiece.KNIGHT    # 3 points
-	elif type_roll < 0.85:
-		enemy.type = ChessPiece.BISHOP    # 3 points
-	elif type_roll < 0.95:
-		enemy.type = ChessPiece.ROOK      # 5 points
+	if training_mode:
+		# Simplified: only pawns in training mode
+		enemy.type = ChessPiece.PAWN
 	else:
-		enemy.type = ChessPiece.QUEEN     # 9 points
+		# Chess piece type (weighted: pawns common, higher pieces rarer)
+		var type_roll = randf()
+		var difficulty = get_difficulty_factor()
+
+		if type_roll < 0.5 - difficulty * 0.3:
+			enemy.type = ChessPiece.PAWN
+		elif type_roll < 0.7 - difficulty * 0.1:
+			enemy.type = ChessPiece.KNIGHT
+		elif type_roll < 0.85:
+			enemy.type = ChessPiece.BISHOP
+		elif type_roll < 0.95:
+			enemy.type = ChessPiece.ROOK
+		else:
+			enemy.type = ChessPiece.QUEEN
 
 	# Spawn at random position along arena edges
 	var pos = get_random_edge_spawn_position()
@@ -175,6 +252,20 @@ func spawn_enemy() -> void:
 	add_child(enemy)
 
 	# Apply slow/freeze after adding to tree (so apply_type_config has run)
+	if freeze_active:
+		enemy.apply_freeze()
+	elif slow_active:
+		enemy.apply_slow(SLOW_MULTIPLIER)
+
+
+func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
+	## Spawn enemy at specific position with specific type (for preset events).
+	var enemy = enemy_scene.instantiate()
+	enemy.speed = get_scaled_enemy_speed()
+	enemy.type = enemy_type  # 0=pawn, 1=knight, etc.
+	enemy.position = pos
+	add_child(enemy)
+
 	if freeze_active:
 		enemy.apply_freeze()
 	elif slow_active:
@@ -590,22 +681,29 @@ func create_arena_floor() -> void:
 func spawn_arena_obstacles() -> void:
 	## Spawn permanent obstacles throughout the arena
 	spawned_obstacle_positions.clear()
-	var arena_center = Vector2(ARENA_WIDTH / 2, ARENA_HEIGHT / 2)
 
+	# Use preset positions if available (for deterministic training)
+	if use_preset_events and preset_obstacles.size() > 0:
+		for obstacle_data in preset_obstacles:
+			var obstacle = obstacle_scene.instantiate()
+			obstacle.position = obstacle_data.pos
+			add_child(obstacle)
+			spawned_obstacle_positions.append(obstacle_data.pos)
+		return
+
+	# Generate random positions
+	var arena_center = Vector2(ARENA_WIDTH / 2, ARENA_HEIGHT / 2)
 	for i in range(OBSTACLE_COUNT):
 		var placed = false
 		for attempt in range(50):
-			# Random position within arena
 			var pos = Vector2(
 				randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING),
 				randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING)
 			)
 
-			# Keep away from player spawn (center)
 			if pos.distance_to(arena_center) < OBSTACLE_PLAYER_SAFE_ZONE:
 				continue
 
-			# Check minimum distance from other obstacles
 			var too_close = false
 			for existing_pos in spawned_obstacle_positions:
 				if pos.distance_to(existing_pos) < OBSTACLE_MIN_DISTANCE:
@@ -692,7 +790,7 @@ func handle_training_input() -> void:
 		if training_manager.get_mode() == training_manager.Mode.TRAINING:
 			training_manager.stop_training()
 		else:
-			training_manager.start_training(48, 100)
+			training_manager.start_training(24, 100)
 
 	elif Input.is_physical_key_pressed(KEY_P):
 		if not _key_just_pressed("playback"):

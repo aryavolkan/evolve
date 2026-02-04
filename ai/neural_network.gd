@@ -38,20 +38,22 @@ func _init(p_input_size: int = 64, p_hidden_size: int = 32, p_output_size: int =
 
 
 func randomize_weights() -> void:
-	var ih_scale := sqrt(2.0 / input_size)
-	var ho_scale := sqrt(2.0 / hidden_size)
+	# Larger weights to produce meaningful outputs with sparse inputs
+	# (only ~25% of sensor inputs are typically non-zero)
+	var ih_scale := sqrt(8.0 / input_size)  # 4x larger than standard Xavier
+	var ho_scale := sqrt(8.0 / hidden_size)
 
 	for i in weights_ih.size():
 		weights_ih[i] = randf_range(-ih_scale, ih_scale)
 
 	for i in bias_h.size():
-		bias_h[i] = 0.0
+		bias_h[i] = randf_range(-0.5, 0.5)  # Non-zero bias for variety
 
 	for i in weights_ho.size():
 		weights_ho[i] = randf_range(-ho_scale, ho_scale)
 
 	for i in bias_o.size():
-		bias_o[i] = 0.0
+		bias_o[i] = randf_range(-0.5, 0.5)  # Non-zero bias for variety
 
 
 func forward(inputs: PackedFloat32Array) -> PackedFloat32Array:
