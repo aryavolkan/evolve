@@ -21,10 +21,10 @@ var spawned_obstacle_positions: Array = []
 var training_manager: Node
 var ai_status_label: Label
 
-# Bonus points - made significant so AI learns to prioritize kills and power-ups
-const POWERUP_COLLECT_BONUS: int = 50      # Was 10 - now worth 5 seconds of survival
-const SCREEN_CLEAR_BONUS: int = 100        # Was 25 - big reward for clearing screen
-const KILL_MULTIPLIER: int = 10            # Multiply chess piece values (1-9 -> 10-90)
+# Bonus points - scaled 10x to strongly reward kills and power-ups
+const POWERUP_COLLECT_BONUS: int = 500     # Worth 50 seconds of survival
+const SCREEN_CLEAR_BONUS: int = 1000       # Big reward for clearing screen
+const KILL_MULTIPLIER: int = 100           # Multiply chess piece values (1-9 -> 100-900)
 
 # Chess piece types for spawning
 enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
