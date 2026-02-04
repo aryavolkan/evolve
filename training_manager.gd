@@ -333,11 +333,12 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 
 	# Instantiate game scene with preset events (all individuals see same game)
 	var scene: Node2D = MainScenePacked.instantiate()
-	scene.set_training_mode(true)  # Simplified: no powerups
+	scene.set_training_mode(true)  # Simplified: only pawns
 	if generation_events.size() > 0:
-		# Deep copy enemy_spawns since it gets modified during gameplay
-		var events_copy = generation_events.enemy_spawns.duplicate(true)
-		scene.set_preset_events(generation_events.obstacles, events_copy)
+		# Deep copy spawn arrays since they get modified during gameplay
+		var enemy_copy = generation_events.enemy_spawns.duplicate(true)
+		var powerup_copy = generation_events.powerup_spawns.duplicate(true)
+		scene.set_preset_events(generation_events.obstacles, enemy_copy, powerup_copy)
 	viewport.add_child(scene)
 
 	# Get player and configure for AI

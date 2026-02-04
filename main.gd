@@ -93,10 +93,13 @@ func set_training_mode(enabled: bool) -> void:
 	## Enable simplified game mode for AI training.
 	training_mode = enabled
 
-func set_preset_events(obstacles: Array, enemy_spawns: Array) -> void:
+var preset_powerup_spawns: Array = []  # [{time: float, pos: Vector2, type: int}, ...]
+
+func set_preset_events(obstacles: Array, enemy_spawns: Array, powerup_spawns: Array = []) -> void:
 	## Use pre-generated events for deterministic gameplay.
 	preset_obstacles = obstacles
 	preset_enemy_spawns = enemy_spawns.duplicate()  # Copy so we can pop from it
+	preset_powerup_spawns = powerup_spawns.duplicate()
 	use_preset_events = true
 
 static func generate_random_events(seed_value: int) -> Dictionary:
@@ -130,7 +133,7 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 
 	# Generate enemy spawn events - fewer enemies, slower scaling
 	var spawn_time: float = 0.0
-	var spawn_interval: float = 4.0  # Slower spawning (was 2.0)
+	var spawn_interval: float = 4.0  # Slower spawning
 	while spawn_time < 120.0:  # Cover 2 minutes of gameplay
 		spawn_time += spawn_interval
 		spawn_interval = maxf(spawn_interval * 0.98, 2.0)  # Gradually speed up but cap at 2s
@@ -144,7 +147,21 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 			3: pos = Vector2(2460, randf_range(100, 1340))  # Right
 		enemy_spawns.append({"time": spawn_time, "pos": pos, "type": 0})  # Type 0 = pawn
 
-	return {"obstacles": obstacles, "enemy_spawns": enemy_spawns}
+	# Generate powerup spawn events
+	var powerup_spawns: Array = []
+	var powerup_time: float = 3.0  # First powerup at 3 seconds
+	while powerup_time < 120.0:
+		var pos = Vector2(
+			randf_range(200, 2360),
+			randf_range(200, 1240)
+		)
+		# Skip if too close to center (player spawn)
+		if pos.distance_to(arena_center) > 200:
+			var powerup_type = randi() % 9  # 9 powerup types
+			powerup_spawns.append({"time": powerup_time, "pos": pos, "type": powerup_type})
+		powerup_time += 8.0  # Powerup every 8 seconds
+
+	return {"obstacles": obstacles, "enemy_spawns": enemy_spawns, "powerup_spawns": powerup_spawns}
 
 func _ready() -> void:
 	if game_seed > 0:
@@ -201,8 +218,14 @@ func _process(delta: float) -> void:
 		var spawn_interval = get_scaled_spawn_interval()
 		next_spawn_score += spawn_interval
 
-	# Spawn power-ups based on score (disabled in training mode for consistency)
-	if not training_mode and score >= next_powerup_score:
+	# Powerup spawning
+	if use_preset_events:
+		# Spawn from preset list based on elapsed time
+		var elapsed = score / 10.0
+		while preset_powerup_spawns.size() > 0 and preset_powerup_spawns[0].time <= elapsed:
+			var spawn_data = preset_powerup_spawns.pop_front()
+			spawn_powerup_at(spawn_data.pos, spawn_data.type)
+	elif score >= next_powerup_score:
 		var powerup_count = count_local_powerups()
 
 		if powerup_count >= MAX_POWERUPS:
@@ -270,6 +293,17 @@ func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
 		enemy.apply_freeze()
 	elif slow_active:
 		enemy.apply_slow(SLOW_MULTIPLIER)
+
+
+func spawn_powerup_at(pos: Vector2, powerup_type: int) -> void:
+	## Spawn powerup at specific position with specific type (for preset events).
+	if count_local_powerups() >= MAX_POWERUPS:
+		return  # Don't exceed max powerups
+	var powerup = powerup_scene.instantiate()
+	powerup.position = pos
+	powerup.set_type(powerup_type)
+	powerup.collected.connect(_on_powerup_collected)
+	add_child(powerup)
 
 
 func spawn_initial_enemies() -> void:
