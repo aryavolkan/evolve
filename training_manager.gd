@@ -470,8 +470,8 @@ func _process_parallel_training(delta: float) -> void:
 		# Check if game over OR timeout (120 second max evaluation)
 		var timed_out = eval.time >= 120.0
 		if eval.scene.game_over or timed_out:
-			# Fitness = survival time (deterministic game makes this reliable)
-			var fitness: float = eval.time
+			# Fitness = total score (rewards survival, kills, and powerups)
+			var fitness: float = eval.scene.score
 			evolution.set_fitness(eval.index, fitness)
 
 			# Accumulate stats for this generation
