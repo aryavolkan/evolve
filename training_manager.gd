@@ -42,10 +42,10 @@ var generation: int = 0
 var best_fitness: float = 0.0
 var all_time_best: float = 0.0
 
-# Early stopping
+# Early stopping (based on average fitness, not all-time best)
 var stagnation_limit: int = 10
 var generations_without_improvement: int = 0
-var previous_all_time_best: float = 0.0
+var best_avg_fitness: float = 0.0  # Best average fitness seen so far
 
 # Generation rollback (disabled - trust elitism, accept normal variance)
 var previous_avg_fitness: float = 0.0
@@ -143,7 +143,7 @@ func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	current_batch_start = 0
 	generation = 0
 	generations_without_improvement = 0
-	previous_all_time_best = 0.0
+	best_avg_fitness = 0.0
 	previous_avg_fitness = 0.0
 	rerun_count = 0
 	Engine.time_scale = time_scale
@@ -453,8 +453,8 @@ func _process_parallel_training(delta: float) -> void:
 		var action: Dictionary = eval.controller.get_action()
 		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
 
-		# Check if game over OR timeout (90 second max evaluation)
-		var timed_out = eval.time >= 90.0
+		# Check if game over OR timeout (120 second max evaluation)
+		var timed_out = eval.time >= 120.0
 		if eval.scene.game_over or timed_out:
 			# Fitness = survival time (deterministic game makes this reliable)
 			var fitness: float = eval.time
@@ -543,10 +543,10 @@ func _on_generation_complete(gen: int, best: float, avg: float) -> void:
 	var stats = evolution.get_stats()
 	history_min_fitness.append(stats.get("current_min", 0.0))
 
-	# Track stagnation for early stopping
-	if all_time_best > previous_all_time_best:
+	# Track stagnation based on average fitness (more robust than all-time best)
+	if avg > best_avg_fitness:
 		generations_without_improvement = 0
-		previous_all_time_best = all_time_best
+		best_avg_fitness = avg
 	else:
 		generations_without_improvement += 1
 
