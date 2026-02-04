@@ -29,7 +29,7 @@ const KILL_MULTIPLIER: int = 500           # Chess values (1-9 -> 500-4500)
 # Combo system - heavily rewards rapid kills/powerups
 const COMBO_WINDOW: float = 5.0            # 5 seconds to maintain combo
 const COMBO_BONUS_PER_LEVEL: float = 0.5   # +50% per combo level
-const MAX_COMBO_LEVEL: int = 15            # Cap at 8.5x multiplier
+const MAX_COMBO_LEVEL: int = 8             # Cap at 5x multiplier
 var combo_level: int = 0
 var combo_timer: float = 0.0
 
