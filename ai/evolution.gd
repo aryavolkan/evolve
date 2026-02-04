@@ -3,7 +3,7 @@ extends RefCounted
 ## Manages a population of neural networks and evolves them.
 ## Uses fitness-proportionate selection with elitism.
 
-signal generation_complete(generation: int, best_fitness: float, avg_fitness: float)
+signal generation_complete(generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
 
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 
@@ -118,10 +118,12 @@ func evolve() -> void:
 		all_time_best_fitness = best_fitness
 		all_time_best_network = best_network.clone()
 
-	# Calculate average fitness
+	# Calculate average and min fitness
 	var total_fitness := 0.0
+	var min_fitness := INF
 	for i in population_size:
 		total_fitness += fitness_scores[i]
+		min_fitness = minf(min_fitness, fitness_scores[i])
 	var avg_fitness := total_fitness / population_size
 
 	# Create new population
@@ -153,7 +155,7 @@ func evolve() -> void:
 	for i in population_size:
 		fitness_scores[i] = 0.0
 
-	generation_complete.emit(generation, best_fitness, avg_fitness)
+	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
 
 
 func select_parent(indexed_fitness: Array):

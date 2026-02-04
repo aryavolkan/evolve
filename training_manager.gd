@@ -517,7 +517,7 @@ func update_training_stats_display() -> void:
 		]
 
 
-func _on_generation_complete(gen: int, best: float, avg: float) -> void:
+func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) -> void:
 	generation = gen
 	best_fitness = best
 	all_time_best = evolution.get_all_time_best_fitness()
@@ -540,8 +540,7 @@ func _on_generation_complete(gen: int, best: float, avg: float) -> void:
 	# Record metrics for graphing
 	history_best_fitness.append(best)
 	history_avg_fitness.append(avg)
-	var stats = evolution.get_stats()
-	history_min_fitness.append(stats.get("current_min", 0.0))
+	history_min_fitness.append(min_fit)
 
 	# Track stagnation based on average fitness (more robust than all-time best)
 	if avg > best_avg_fitness:
