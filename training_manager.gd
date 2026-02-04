@@ -66,6 +66,12 @@ var ai_controller = null  # For playback mode
 var history_best_fitness: Array[float] = []
 var history_avg_fitness: Array[float] = []
 var history_min_fitness: Array[float] = []
+var history_avg_kills: Array[float] = []
+var history_avg_powerups: Array[float] = []
+
+# Per-generation accumulators
+var generation_total_kills: int = 0
+var generation_total_powerups: int = 0
 
 # Pause state
 var is_paused: bool = false
@@ -152,6 +158,10 @@ func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	history_best_fitness.clear()
 	history_avg_fitness.clear()
 	history_min_fitness.clear()
+	history_avg_kills.clear()
+	history_avg_powerups.clear()
+	generation_total_kills = 0
+	generation_total_powerups = 0
 
 	# Hide the main game and show training arenas
 	hide_main_game()
@@ -459,6 +469,11 @@ func _process_parallel_training(delta: float) -> void:
 			# Fitness = survival time (deterministic game makes this reliable)
 			var fitness: float = eval.time
 			evolution.set_fitness(eval.index, fitness)
+
+			# Accumulate kills and powerups for this generation
+			generation_total_kills += eval.scene.kills
+			generation_total_powerups += eval.scene.powerups_collected
+
 			eval.done = true
 			evaluated_count += 1
 			active_count -= 1
@@ -542,6 +557,16 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	history_avg_fitness.append(avg)
 	history_min_fitness.append(min_fit)
 
+	# Record kills and powerups averages
+	var avg_kills := float(generation_total_kills) / population_size
+	var avg_powerups := float(generation_total_powerups) / population_size
+	history_avg_kills.append(avg_kills)
+	history_avg_powerups.append(avg_powerups)
+
+	# Reset accumulators for next generation
+	generation_total_kills = 0
+	generation_total_powerups = 0
+
 	# Track stagnation based on average fitness (more robust than all-time best)
 	if avg > best_avg_fitness:
 		generations_without_improvement = 0
@@ -549,8 +574,8 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	else:
 		generations_without_improvement += 1
 
-	print("Gen %3d | Best: %6.1f | Avg: %6.1f | All-time: %6.1f | Stagnant: %d/%d" % [
-		gen, best, avg, all_time_best, generations_without_improvement, stagnation_limit
+	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kills: %.1f | Powerups: %.1f | Stagnant: %d/%d" % [
+		gen, best, avg, avg_kills, avg_powerups, generations_without_improvement, stagnation_limit
 	])
 
 	# Auto-save every generation
@@ -929,7 +954,7 @@ func create_graph_panel() -> Control:
 
 	# Legend
 	var legend = create_legend()
-	legend.position = Vector2(graph_width - 200, 5)
+	legend.position = Vector2(graph_width - 380, 5)
 	panel.add_child(legend)
 
 	# Draw the graph lines
@@ -976,6 +1001,21 @@ func create_graph_panel() -> Control:
 
 		var min_line = create_graph_line(history_min_fitness, graph_area, min_val, max_val, Color.RED)
 		panel.add_child(min_line)
+
+		# Scale kills and powerups to be visible on same graph (multiply by 5)
+		if history_avg_kills.size() > 1:
+			var scaled_kills: Array[float] = []
+			for k in history_avg_kills:
+				scaled_kills.append(k * 5.0)
+			var kills_line = create_graph_line(scaled_kills, graph_area, min_val, max_val, Color.CYAN)
+			panel.add_child(kills_line)
+
+		if history_avg_powerups.size() > 1:
+			var scaled_powerups: Array[float] = []
+			for p in history_avg_powerups:
+				scaled_powerups.append(p * 10.0)
+			var powerups_line = create_graph_line(scaled_powerups, graph_area, min_val, max_val, Color.MAGENTA)
+			panel.add_child(powerups_line)
 	else:
 		var no_data = Label.new()
 		no_data.text = "Not enough data yet (need at least 2 generations)"
@@ -993,7 +1033,9 @@ func create_legend() -> Control:
 	var items = [
 		{"label": "Best", "color": Color.GREEN},
 		{"label": "Avg", "color": Color.YELLOW},
-		{"label": "Min", "color": Color.RED}
+		{"label": "Min", "color": Color.RED},
+		{"label": "Kills×5", "color": Color.CYAN},
+		{"label": "Pwr×10", "color": Color.MAGENTA}
 	]
 
 	var x_offset = 0
@@ -1011,7 +1053,7 @@ func create_legend() -> Control:
 		label.add_theme_color_override("font_color", item.color)
 		legend.add_child(label)
 
-		x_offset += 60
+		x_offset += 70
 
 	return legend
 

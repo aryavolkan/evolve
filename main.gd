@@ -3,6 +3,8 @@ extends Node2D
 var score: float = 0.0
 var lives: int = 3
 var game_over: bool = false
+var kills: int = 0
+var powerups_collected: int = 0
 var entering_name: bool = false
 var next_spawn_score: float = 50.0
 var next_powerup_score: float = 30.0
@@ -379,6 +381,7 @@ func find_valid_powerup_position() -> Vector2:
 	return Vector2.ZERO  # Failed to find valid position
 
 func _on_powerup_collected(type: String) -> void:
+	powerups_collected += 1
 	show_powerup_message(type)
 
 	# Bonus for collecting powerup
@@ -409,6 +412,7 @@ func _on_powerup_collected(type: String) -> void:
 			activate_double_points()
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
+	kills += 1
 	var multiplier = 2 if double_points_active else 1
 	var bonus = points * KILL_MULTIPLIER * multiplier  # Scale up kill rewards (pawn=10, queen=90)
 	score += bonus
