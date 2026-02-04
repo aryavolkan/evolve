@@ -18,7 +18,9 @@ A 2D arcade survival game built with Godot 4.5+. Player avoids enemy entities to
 ├── powerup.tscn/gd    # Power-up collectibles
 ├── projectile.tscn/gd # Player projectiles
 ├── obstacle.tscn      # Static obstacles
-├── icon.svg           # Project icon
+├── training_manager.gd # AI training orchestration
+├── ai/                # Neural network and evolution
+├── scripts/           # Python W&B integration scripts
 └── test/              # Test suite (137 tests)
 ```
 
@@ -122,14 +124,20 @@ Scaling uses linear interpolation: `lerp(base, max, score / 500)`
 
 ## Power-Up System
 
-Four power-up types spawn during gameplay (5 second duration each):
+Ten power-up types spawn during gameplay (5 second duration each):
 
 | Type | Color | Effect |
 |------|-------|--------|
 | Speed Boost | Cyan-green | Player speed 300 → 500 |
 | Invincibility | Gold | Immune to enemy collision |
 | Slow Enemies | Purple | All enemies move at 50% speed |
-| Screen Clear | Red-orange | Destroys all enemies (+25 bonus points) |
+| Screen Clear | Red-orange | Destroys all enemies |
+| Rapid Fire | Orange | 70% faster shooting |
+| Piercing | Light blue | Projectiles pass through enemies |
+| Shield | Light purple | Absorbs one hit |
+| Freeze | Ice blue | Completely stops enemies |
+| Double Points | Bright green | 2× score multiplier |
+| Bomb | Bright red | Kills enemies within 600px radius |
 
 Power-ups use `Area2D` with `body_entered` signal for collection detection.
 
@@ -195,30 +203,73 @@ training_manager.gd     # Main scene integration
 
 ### Fitness Function
 
-Uses game score directly:
-- +10 points per second survived
-- +N×10 points per enemy killed (pawn=10, knight/bishop=30, rook=50, queen=90)
-- +50 points per power-up collected
-- +100 bonus for screen clear (plus scaled enemy values)
+Kills and powerups dominate scoring (survival is secondary):
+- +5 points per second survived
+- +100 points survival milestone every 15 seconds (increasing)
+- +1000× enemy chess value per kill (pawn=1000, queen=9000)
+- +5000 points per power-up collected
+- +8000 bonus for screen clear
+- +50 points for shooting toward enemies (training shaping)
+- Proximity bonus for being near powerups (continuous reward)
 
 ### Evolution Parameters
 
 | Parameter | Value |
 |-----------|-------|
-| Population size | 48 |
-| Parallel arenas | 48 (6x8 grid) |
-| Elite count | 5 (top performers kept unchanged) |
+| Population size | 100 |
+| Parallel arenas | 20 (5x4 grid) |
+| Evals per individual | 2 (multi-seed for robustness) |
+| Elite count | 10 (preserve good solutions) |
 | Selection | Tournament (best of 3 random) |
-| Crossover rate | 70% |
-| Mutation rate | 15% per weight |
-| Mutation strength | σ = 0.3 |
+| Crossover | Two-point (70% rate) |
+| Mutation rate | 20% per weight |
+| Mutation strength | σ = 0.3 (adaptive: increases when stagnating) |
 | Max eval time | 60 seconds per individual |
-| Early stopping | 3 generations without improvement |
+| Early stopping | 10 generations without improvement |
+
+### Training Mode Adjustments
+
+Training mode makes the game easier to accelerate learning:
+- Enemies spawn closer and slower (50% speed)
+- Only 3 initial enemies (vs 10 in normal play)
+- Powerups spawn within 300-1000 units of player
+- Powerups every 3 seconds (vs 5 in normal play)
+- Projectiles faster (900) and longer range (1200)
 
 ### Saved Files
 
 - `user://best_network.nn` - Best performing network
 - `user://population.evo` - Full population state
+- `user://metrics.json` - Training metrics for W&B integration
+- `user://sweep_config.json` - Hyperparameters from W&B sweep
+
+### W&B Integration
+
+Python scripts in `scripts/` provide Weights & Biases integration:
+
+**Real-time logging during training:**
+```bash
+source .venv/bin/activate
+python scripts/wandb_bridge.py --project evolve-neuroevolution
+# Then press T in Godot to start training
+```
+
+**Overnight hyperparameter sweep:**
+```bash
+python scripts/overnight_sweep.py --hours 8 --project evolve-neuroevolution
+```
+
+The sweep searches over:
+- Population size: 50, 100, 150
+- Hidden neurons: 24, 32, 48, 64
+- Elite count: 5-20
+- Mutation rate: 0.10-0.35
+- Crossover rate: 0.5-0.85
+
+**Headless training:**
+```bash
+godot --path . --headless -- --auto-train
+```
 
 ## Testing
 

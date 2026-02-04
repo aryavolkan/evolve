@@ -18,6 +18,16 @@ var mutation_rate: float
 var mutation_strength: float
 var crossover_rate: float
 
+# Base parameters (for adaptive mutation reset)
+var base_mutation_rate: float
+var base_mutation_strength: float
+
+# Adaptive mutation tracking
+var stagnant_generations: int = 0
+var last_best_fitness: float = 0.0
+const STAGNATION_THRESHOLD: int = 3  # Generations without improvement to trigger adaptation
+const MAX_MUTATION_BOOST: float = 3.0  # Maximum multiplier for mutation
+
 # Network architecture
 var input_size: int
 var hidden_size: int
@@ -52,6 +62,10 @@ func _init(
 	mutation_rate = p_mutation_rate
 	mutation_strength = p_mutation_strength
 	crossover_rate = p_crossover_rate
+
+	# Save base parameters for adaptive mutation
+	base_mutation_rate = p_mutation_rate
+	base_mutation_strength = p_mutation_strength
 
 	fitness_scores.resize(population_size)
 	initialize_population()
@@ -125,6 +139,24 @@ func evolve() -> void:
 		total_fitness += fitness_scores[i]
 		min_fitness = minf(min_fitness, fitness_scores[i])
 	var avg_fitness := total_fitness / population_size
+
+	# Adaptive mutation: increase mutation when stagnating
+	if best_fitness > last_best_fitness * 1.01:  # 1% improvement threshold
+		stagnant_generations = 0
+		mutation_rate = base_mutation_rate
+		mutation_strength = base_mutation_strength
+	else:
+		stagnant_generations += 1
+
+	last_best_fitness = best_fitness
+
+	# Boost mutation if stagnating
+	var mutation_boost := 1.0
+	if stagnant_generations >= STAGNATION_THRESHOLD:
+		mutation_boost = minf(1.0 + (stagnant_generations - STAGNATION_THRESHOLD + 1) * 0.5, MAX_MUTATION_BOOST)
+		mutation_rate = minf(base_mutation_rate * mutation_boost, 0.5)  # Cap at 50%
+		mutation_strength = base_mutation_strength * mutation_boost
+		print("  Adaptive mutation: %.0fx boost (stagnant %d gens)" % [mutation_boost, stagnant_generations])
 
 	# Create new population
 	var new_population: Array = []

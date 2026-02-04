@@ -21,10 +21,13 @@ var spawned_obstacle_positions: Array = []
 var training_manager: Node
 var ai_status_label: Label
 
-# Bonus points - kills dominate scoring
-const POWERUP_COLLECT_BONUS: int = 2500    # Worth 250 seconds of survival
-const SCREEN_CLEAR_BONUS: int = 5000       # Big reward for clearing screen
-const KILL_MULTIPLIER: int = 500           # Chess values (1-9 -> 500-4500)
+# Bonus points - kills/powerups dominate, survival is minor
+const POWERUP_COLLECT_BONUS: int = 5000    # Massive incentive to collect powerups
+const SCREEN_CLEAR_BONUS: int = 8000       # Huge reward for screen clear
+const KILL_MULTIPLIER: int = 1000          # Chess values (1-9 -> 1000-9000)
+const SURVIVAL_MILESTONE_BONUS: int = 100  # Small milestone bonus
+const SHOOT_TOWARD_ENEMY_BONUS: int = 50   # Reward for shooting toward enemies
+const SHOOT_HIT_BONUS: int = 200           # Bonus when projectile is near enemy
 
 # Chess piece types for spawning
 enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
@@ -67,6 +70,11 @@ var double_points_active: bool = false
 # Screen clear spawn cooldown
 var screen_clear_cooldown: float = 0.0
 const SCREEN_CLEAR_SPAWN_DELAY: float = 2.0  # No enemy spawns for 2 seconds after clear
+
+# Survival milestone tracking
+var survival_time: float = 0.0
+var last_milestone: int = 0
+const MILESTONE_INTERVAL: float = 15.0  # Bonus every 15 seconds
 
 # Arena camera
 var arena_camera: Camera2D
@@ -135,12 +143,12 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 				spawned_positions.append(pos)
 				break
 
-	# Generate enemy spawn events - fewer enemies, slower scaling
+	# Generate enemy spawn events - very slow initially for learning
 	var spawn_time: float = 0.0
-	var spawn_interval: float = 4.0  # Slower spawning
-	while spawn_time < 120.0:  # Cover 2 minutes of gameplay
+	var spawn_interval: float = 6.0  # Very slow spawning to give AI time
+	while spawn_time < 120.0:
 		spawn_time += spawn_interval
-		spawn_interval = maxf(spawn_interval * 0.98, 2.0)  # Gradually speed up but cap at 2s
+		spawn_interval = maxf(spawn_interval * 0.95, 3.0)  # Cap at 3s minimum
 		# Random edge position
 		var edge = randi() % 4
 		var pos: Vector2
@@ -151,19 +159,17 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 			3: pos = Vector2(3740, randf_range(100, 3740))  # Right
 		enemy_spawns.append({"time": spawn_time, "pos": pos, "type": 0})  # Type 0 = pawn
 
-	# Generate powerup spawn events (more frequent for larger arena)
+	# Generate powerup spawn events - CLOSE to player spawn for easier collection
 	var powerup_spawns: Array = []
-	var powerup_time: float = 2.0  # First powerup at 2 seconds
+	var powerup_time: float = 1.0  # First powerup at 1 second
 	while powerup_time < 120.0:
-		var pos = Vector2(
-			randf_range(200, 3640),
-			randf_range(200, 3640)
-		)
-		# Skip if too close to center (player spawn)
-		if pos.distance_to(arena_center) > 200:
-			var powerup_type = randi() % 9  # 9 powerup types
-			powerup_spawns.append({"time": powerup_time, "pos": pos, "type": powerup_type})
-		powerup_time += 5.0  # Powerup every 5 seconds
+		# Spawn powerups within reachable distance of center (player spawn)
+		var angle = randf() * TAU
+		var dist = randf_range(300, 1000)  # 300-1000 units from center (reachable!)
+		var pos = arena_center + Vector2(cos(angle), sin(angle)) * dist
+		var powerup_type = randi() % 10  # 10 powerup types
+		powerup_spawns.append({"time": powerup_time, "pos": pos, "type": powerup_type})
+		powerup_time += 3.0  # Powerup every 3 seconds (more frequent)
 
 	return {"obstacles": obstacles, "enemy_spawns": enemy_spawns, "powerup_spawns": powerup_spawns}
 
@@ -176,6 +182,7 @@ func _ready() -> void:
 	player.hit.connect(_on_player_hit)
 	player.enemy_killed.connect(_on_enemy_killed)
 	player.powerup_timer_updated.connect(_on_powerup_timer_updated)
+	player.shot_fired.connect(_on_shot_fired)
 	game_over_label.visible = false
 	powerup_label.visible = false
 	name_entry.visible = false
@@ -187,6 +194,20 @@ func _ready() -> void:
 	spawn_arena_obstacles()
 	spawn_initial_enemies()
 	setup_training_manager()
+
+	# Check for auto-train flag (for headless W&B sweeps)
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--auto-train":
+			call_deferred("_start_auto_training")
+			return
+
+
+func _start_auto_training() -> void:
+	## Start training automatically (for headless sweep runs)
+	if training_manager:
+		print("Auto-training started via command line")
+		training_manager.start_training()
+
 
 func _process(delta: float) -> void:
 	# Handle AI training controls (always check these)
@@ -202,9 +223,23 @@ func _process(delta: float) -> void:
 		return
 
 	var score_multiplier = 2.0 if double_points_active else 1.0
-	score += delta * 10 * score_multiplier
+	score += delta * 5 * score_multiplier  # Reduced base survival (5 pts/sec)
 	score_label.text = "Score: %d" % int(score)
 	update_ai_status_display()
+
+	# Track survival time and award milestone bonuses
+	survival_time += delta
+	var current_milestone = int(survival_time / MILESTONE_INTERVAL)
+	if current_milestone > last_milestone:
+		var bonus = SURVIVAL_MILESTONE_BONUS * current_milestone
+		score += bonus
+		last_milestone = current_milestone
+
+	# Proximity rewards - guide AI toward powerups (continuous shaping)
+	var proximity_bonus = calculate_proximity_bonus(delta)
+	if proximity_bonus > 0:
+		score += proximity_bonus
+		score_from_powerups += proximity_bonus  # Count as powerup-related
 
 	# Update screen clear cooldown
 	if screen_clear_cooldown > 0:
@@ -212,9 +247,8 @@ func _process(delta: float) -> void:
 
 	# Enemy spawning
 	if use_preset_events:
-		# Spawn from preset list based on elapsed time
-		var elapsed = score / 10.0  # Score increases by 10 per second
-		while preset_enemy_spawns.size() > 0 and preset_enemy_spawns[0].time <= elapsed:
+		# Spawn from preset list based on elapsed time (use survival_time for accuracy)
+		while preset_enemy_spawns.size() > 0 and preset_enemy_spawns[0].time <= survival_time:
 			var spawn_data = preset_enemy_spawns.pop_front()
 			spawn_enemy_at(spawn_data.pos, spawn_data.type)
 	elif score >= next_spawn_score and screen_clear_cooldown <= 0:
@@ -225,8 +259,7 @@ func _process(delta: float) -> void:
 	# Powerup spawning
 	if use_preset_events:
 		# Spawn from preset list based on elapsed time
-		var elapsed = score / 10.0
-		while preset_powerup_spawns.size() > 0 and preset_powerup_spawns[0].time <= elapsed:
+		while preset_powerup_spawns.size() > 0 and preset_powerup_spawns[0].time <= survival_time:
 			var spawn_data = preset_powerup_spawns.pop_front()
 			spawn_powerup_at(spawn_data.pos, spawn_data.type)
 	elif score >= next_powerup_score:
@@ -241,6 +274,28 @@ func _process(delta: float) -> void:
 
 func get_difficulty_factor() -> float:
 	return clampf(score / DIFFICULTY_SCALE_SCORE, 0.0, 1.0)
+
+
+func calculate_proximity_bonus(delta: float) -> float:
+	## Reward AI for being close to powerups (continuous shaping signal).
+	## Returns bonus points to add this frame.
+	var bonus := 0.0
+	var powerups = get_tree().get_nodes_in_group("powerup")
+	var nearest_dist := 99999.0
+
+	for powerup in powerups:
+		if not is_instance_valid(powerup) or powerup.get_parent() != self:
+			continue
+		var dist = player.position.distance_to(powerup.position)
+		nearest_dist = minf(nearest_dist, dist)
+
+	# Reward based on distance to NEAREST powerup (range 1500 for large arena)
+	if nearest_dist < 1500:
+		# Closer = more bonus (100 pts/sec at distance 0, scaling down)
+		var proximity_factor = 1.0 - (nearest_dist / 1500.0)
+		bonus = 100.0 * proximity_factor * delta
+
+	return bonus
 
 func get_scaled_enemy_speed() -> float:
 	var factor = get_difficulty_factor()
@@ -288,7 +343,8 @@ func spawn_enemy() -> void:
 func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
 	## Spawn enemy at specific position with specific type (for preset events).
 	var enemy = enemy_scene.instantiate()
-	enemy.speed = get_scaled_enemy_speed()
+	# Much slower enemies in training mode for easier learning
+	enemy.speed = get_scaled_enemy_speed() * (0.5 if training_mode else 1.0)
 	enemy.type = enemy_type  # 0=pawn, 1=knight, etc.
 	enemy.position = pos
 	add_child(enemy)
@@ -312,10 +368,10 @@ func spawn_powerup_at(pos: Vector2, powerup_type: int) -> void:
 
 func spawn_initial_enemies() -> void:
 	## Spawn initial enemies at the arena edges
-	const INITIAL_ENEMY_COUNT: int = 10
-	for i in range(INITIAL_ENEMY_COUNT):
+	var enemy_count = 3 if training_mode else 10  # Fewer enemies in training
+	for i in range(enemy_count):
 		var enemy = enemy_scene.instantiate()
-		enemy.speed = BASE_ENEMY_SPEED
+		enemy.speed = BASE_ENEMY_SPEED * (0.5 if training_mode else 1.0)  # Slower in training
 		enemy.type = ChessPiece.PAWN  # Start with pawns
 		enemy.position = get_random_edge_spawn_position()
 		add_child(enemy)
@@ -347,8 +403,8 @@ func spawn_powerup() -> bool:
 
 	powerup.position = pos
 
-	# Random powerup type (9 types: 0-8)
-	var type_index = randi() % 9
+	# Random powerup type (10 types: 0-9)
+	var type_index = randi() % 10
 	powerup.set_type(type_index)
 	powerup.collected.connect(_on_powerup_collected)
 	add_child(powerup)
@@ -413,6 +469,8 @@ func _on_powerup_collected(type: String) -> void:
 			activate_freeze_enemies()
 		"DOUBLE POINTS":
 			activate_double_points()
+		"BOMB":
+			explode_nearby_enemies()
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	kills += 1
@@ -444,6 +502,28 @@ func _on_powerup_timer_updated(powerup_type: String, time_left: float) -> void:
 	# Handle double points ending
 	if powerup_type == "DOUBLE" and time_left <= 0:
 		end_double_points()
+
+
+func _on_shot_fired(direction: Vector2) -> void:
+	## Reward shooting toward enemies (training shaping)
+	if not training_mode:
+		return
+
+	var dominated_enemies = get_local_enemies()
+	for enemy in dominated_enemies:
+		if not is_instance_valid(enemy):
+			continue
+		var to_enemy = (enemy.position - player.position).normalized()
+		var dot = direction.dot(to_enemy)
+		var dist = player.position.distance_to(enemy.position)
+
+		# Reward if shooting toward a nearby enemy (within 45 degrees and 800 units)
+		if dot > 0.7 and dist < 800:
+			var bonus = SHOOT_TOWARD_ENEMY_BONUS
+			score += bonus
+			score_from_kills += bonus  # Count as kill-related
+			return  # Only reward once per shot
+
 
 func activate_slow_enemies() -> void:
 	# Apply slow to all current enemies if not already active
@@ -515,6 +595,34 @@ func clear_all_enemies() -> void:
 	# Prevent immediate respawning - set cooldown and advance spawn threshold
 	screen_clear_cooldown = SCREEN_CLEAR_SPAWN_DELAY
 	next_spawn_score = score + get_scaled_spawn_interval()
+
+
+const BOMB_RADIUS: float = 600.0  # Radius of bomb explosion
+
+func explode_nearby_enemies() -> void:
+	## Kill all enemies within BOMB_RADIUS of the player
+	var local_enemies = get_local_enemies()
+	var total_points = 0
+	var killed_count = 0
+
+	for enemy in local_enemies:
+		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+			var distance = player.position.distance_to(enemy.position)
+			if distance <= BOMB_RADIUS:
+				if enemy.has_method("get_point_value"):
+					total_points += enemy.get_point_value() * KILL_MULTIPLIER
+				else:
+					total_points += KILL_MULTIPLIER
+				killed_count += 1
+				enemy.queue_free()
+
+	# Award points and show feedback
+	if total_points > 0:
+		var multiplier = 2 if double_points_active else 1
+		total_points *= multiplier
+		score += total_points
+		score_from_kills += total_points
+		spawn_floating_text("+%d BOMB!" % total_points, Color(1, 0.5, 0, 1), player.position + Vector2(0, -50))
 
 
 func update_lives_display() -> void:
@@ -832,7 +940,7 @@ func handle_training_input() -> void:
 		if training_manager.get_mode() == training_manager.Mode.TRAINING:
 			training_manager.stop_training()
 		else:
-			training_manager.start_training(24, 100)
+			training_manager.start_training(100, 100)
 
 	elif Input.is_physical_key_pressed(KEY_P):
 		if not _key_just_pressed("playback"):

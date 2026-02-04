@@ -1,7 +1,7 @@
 extends Area2D
 
-@export var speed: float = 600.0
-@export var max_distance: float = 800.0
+@export var speed: float = 900.0  # Faster projectiles
+@export var max_distance: float = 1200.0  # Longer range
 var direction: Vector2 = Vector2.RIGHT
 var start_position: Vector2
 var is_piercing: bool = false

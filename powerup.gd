@@ -2,7 +2,7 @@ extends Area2D
 
 signal collected(type: String)
 
-enum Type { SPEED_BOOST, INVINCIBILITY, SLOW_ENEMIES, SCREEN_CLEAR, RAPID_FIRE, PIERCING, SHIELD, FREEZE, DOUBLE_POINTS }
+enum Type { SPEED_BOOST, INVINCIBILITY, SLOW_ENEMIES, SCREEN_CLEAR, RAPID_FIRE, PIERCING, SHIELD, FREEZE, DOUBLE_POINTS, BOMB }
 
 @export var type: Type = Type.SPEED_BOOST
 var colors: Dictionary = {
@@ -14,7 +14,8 @@ var colors: Dictionary = {
 	Type.PIERCING: Color(0, 0.8, 1, 1),         # Light blue
 	Type.SHIELD: Color(0.5, 0.5, 1, 1),         # Light purple/blue
 	Type.FREEZE: Color(0.7, 0.9, 1, 1),         # Ice blue
-	Type.DOUBLE_POINTS: Color(0, 1, 0, 1)       # Bright green
+	Type.DOUBLE_POINTS: Color(0, 1, 0, 1),      # Bright green
+	Type.BOMB: Color(1, 0, 0, 1)                # Bright red
 }
 
 func _ready() -> void:
@@ -37,6 +38,7 @@ func get_type_name() -> String:
 		Type.SHIELD: return "SHIELD"
 		Type.FREEZE: return "FREEZE"
 		Type.DOUBLE_POINTS: return "DOUBLE POINTS"
+		Type.BOMB: return "BOMB"
 	return ""
 
 func _on_body_entered(body: Node2D) -> void:

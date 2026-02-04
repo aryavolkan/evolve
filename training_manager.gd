@@ -18,24 +18,30 @@ var main_scene: Node2D
 var player: CharacterBody2D
 
 # Configuration
-var population_size: int = 48
+var population_size: int = 100
 var max_generations: int = 100
 var time_scale: float = 1.0
-var parallel_count: int = 10  # Number of parallel arenas (5x2 grid)
+var parallel_count: int = 20  # Number of parallel arenas (5x4 grid)
+var evals_per_individual: int = 2  # Run each network multiple times with different seeds
 
 # Rolling evaluation - next individual to evaluate
 var next_individual: int = 0
 var evaluated_count: int = 0
+var current_eval_seed: int = 0  # Which seed we're currently evaluating
 
-# Fitness tracking
-var fitness_accumulator: Dictionary = {}  # For potential multi-eval
+# Fitness tracking - accumulate across multiple seeds
+var fitness_accumulator: Dictionary = {}  # {individual_index: [seed1_fitness, seed2_fitness, ...]}
 
-# Pre-generated events for current generation (shared by all individuals)
-var generation_events: Dictionary = {}  # {obstacles: [...], enemy_spawns: [...]}
+# Pre-generated events for each seed (all individuals see same scenarios)
+var generation_events_by_seed: Array = []  # [{obstacles, enemy_spawns, powerup_spawns}, ...]
 
 # Paths
 const BEST_NETWORK_PATH := "user://best_network.nn"
 const POPULATION_PATH := "user://population.evo"
+const SWEEP_CONFIG_PATH := "user://sweep_config.json"
+
+# Sweep config (loaded from file for hyperparameter search)
+var _sweep_config: Dictionary = {}
 
 # Stats
 var generation: int = 0
@@ -114,29 +120,61 @@ func initialize(scene: Node2D) -> void:
 	ai_controller.set_player(player)
 
 
-func start_training(pop_size: int = 24, generations: int = 100) -> void:
+func _load_sweep_config() -> void:
+	## Load hyperparameters from sweep config if available (for W&B sweeps)
+	_sweep_config.clear()
+	if not FileAccess.file_exists(SWEEP_CONFIG_PATH):
+		return
+
+	var file = FileAccess.open(SWEEP_CONFIG_PATH, FileAccess.READ)
+	if not file:
+		return
+
+	var json = JSON.new()
+	var error = json.parse(file.get_as_text())
+	file.close()
+
+	if error != OK:
+		return
+
+	_sweep_config = json.data
+	print("Loaded sweep config: ", _sweep_config)
+
+
+func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	## Begin evolutionary training with parallel visible arenas.
 	if not main_scene:
 		push_error("Training manager not initialized")
 		return
 
-	population_size = pop_size
-	max_generations = generations
+	# Load sweep config (overrides defaults if present)
+	_load_sweep_config()
+
+	# Apply sweep config or use defaults
+	population_size = int(_sweep_config.get("population_size", pop_size))
+	max_generations = int(_sweep_config.get("max_generations", generations))
+	evals_per_individual = int(_sweep_config.get("evals_per_individual", evals_per_individual))
+
+	var hidden_size = int(_sweep_config.get("hidden_size", 32))
+	var elite_count = int(_sweep_config.get("elite_count", 10))
+	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.20))
+	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.3))
+	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.7))
 
 	# Get input size from sensor
 	var sensor_instance = AISensorScript.new()
 	var input_size: int = sensor_instance.TOTAL_INPUTS
 
-	# Initialize evolution
+	# Initialize evolution with sweep params
 	evolution = EvolutionScript.new(
 		population_size,
 		input_size,
-		48,    # Hidden layer (increased from 32 for more capacity)
+		hidden_size,
 		6,
-		3,     # Elite count (12% - reduced to encourage exploration)
-		0.15,  # Mutation rate
-		0.3,   # Mutation strength (increased for better exploration)
-		0.6    # Crossover rate
+		elite_count,
+		mutation_rate,
+		mutation_strength,
+		crossover_rate
 	)
 
 	evolution.generation_complete.connect(_on_generation_complete)
@@ -154,6 +192,8 @@ func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	best_avg_fitness = 0.0
 	previous_avg_fitness = 0.0
 	rerun_count = 0
+	current_eval_seed = 0
+	fitness_accumulator.clear()
 	Engine.time_scale = time_scale
 
 	# Clear metric history
@@ -170,12 +210,25 @@ func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	# Hide the main game and show training arenas
 	hide_main_game()
 	create_training_container()
+
+	# Generate events for all seeds upfront
+	generate_all_seed_events()
 	start_next_batch()
 
 	training_status_changed.emit("Training started")
-	print("Training started: pop=%d, max_gen=%d, parallel=%d, early_stop=%d" % [
-		population_size, max_generations, parallel_count, stagnation_limit
+	print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d" % [
+		population_size, max_generations, parallel_count, evals_per_individual, stagnation_limit
 	])
+
+
+func generate_all_seed_events() -> void:
+	## Pre-generate events for all evaluation seeds this generation.
+	generation_events_by_seed.clear()
+	var MainScene = load("res://main.gd")
+	for seed_idx in evals_per_individual:
+		var seed_val = generation * 1000 + seed_idx  # Unique seed per generation+seed combo
+		var events = MainScene.generate_random_events(seed_val)
+		generation_events_by_seed.append(events)
 
 
 func stop_training() -> void:
@@ -292,6 +345,13 @@ func _on_training_window_resized() -> void:
 	update_grid_layout()
 
 
+func get_grid_dimensions() -> Dictionary:
+	## Calculate optimal grid dimensions for current parallel count.
+	var cols = 5
+	var rows = ceili(float(parallel_count) / cols)
+	return {"cols": cols, "rows": rows}
+
+
 func update_grid_layout() -> void:
 	## Recalculate and apply grid positions/sizes for all arenas.
 	if eval_instances.is_empty():
@@ -301,8 +361,9 @@ func update_grid_layout() -> void:
 	_update_container_size()
 
 	var size = get_window_size()
-	var cols = 5
-	var rows = 2
+	var grid = get_grid_dimensions()
+	var cols = grid.cols
+	var rows = grid.rows
 	var gap = 4
 	var top_margin = 40
 
@@ -327,8 +388,9 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 
 	# Set initial position and size immediately (don't wait for deferred update)
 	var size = get_window_size()
-	var cols = 5
-	var rows = 2
+	var grid = get_grid_dimensions()
+	var cols = grid.cols
+	var rows = grid.rows
 	var gap = 4
 	var top_margin = 40
 	var arena_w = (size.x - gap * (cols + 1)) / cols
@@ -345,14 +407,15 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 	viewport.handle_input_locally = false
 	container.add_child(viewport)
 
-	# Instantiate game scene with preset events (all individuals see same game)
+	# Instantiate game scene with preset events for current seed
 	var scene: Node2D = MainScenePacked.instantiate()
 	scene.set_training_mode(true)  # Simplified: only pawns
-	if generation_events.size() > 0:
+	if generation_events_by_seed.size() > current_eval_seed:
+		var events = generation_events_by_seed[current_eval_seed]
 		# Deep copy spawn arrays since they get modified during gameplay
-		var enemy_copy = generation_events.enemy_spawns.duplicate(true)
-		var powerup_copy = generation_events.powerup_spawns.duplicate(true)
-		scene.set_preset_events(generation_events.obstacles, enemy_copy, powerup_copy)
+		var enemy_copy = events.enemy_spawns.duplicate(true)
+		var powerup_copy = events.powerup_spawns.duplicate(true)
+		scene.set_preset_events(events.obstacles, enemy_copy, powerup_copy)
 	viewport.add_child(scene)
 
 	# Get player and configure for AI
@@ -391,23 +454,20 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 
 
 func start_next_batch() -> void:
-	## Start evaluating the first batch of individuals (rolling replacement after).
+	## Start evaluating individuals for current seed.
 	cleanup_training_instances()
 
-	# Generate new events each generation with different seed
-	# Forces networks to generalize rather than memorize one scenario
-	var MainScene = load("res://main.gd")
-	generation_events = MainScene.generate_random_events(generation + 1)  # Seed varies per gen
-
-	# Reset rolling counters
-	next_individual = parallel_count
+	# Reset rolling counters for this seed pass
+	next_individual = mini(parallel_count, population_size)
 	evaluated_count = 0
 
-	print("Gen %d: Evaluating %d individuals..." % [generation, population_size])
+	var seed_label = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
+	print("Gen %d (%s): Evaluating %d individuals..." % [generation, seed_label, population_size])
 
-	for i in range(parallel_count):
-		var grid_x: int = i % 5
-		var grid_y: int = i / 5
+	var grid = get_grid_dimensions()
+	for i in range(mini(parallel_count, population_size)):
+		var grid_x: int = i % grid.cols
+		var grid_y: int = i / grid.cols
 		var instance = create_eval_instance(i, grid_x, grid_y)
 		eval_instances.append(instance)
 
@@ -415,8 +475,9 @@ func start_next_batch() -> void:
 func replace_eval_instance(slot_index: int, individual_index: int) -> void:
 	## Replace a completed evaluation slot with a new individual.
 	var old_eval = eval_instances[slot_index]
-	var grid_x: int = slot_index % 5
-	var grid_y: int = int(slot_index / 5)
+	var grid = get_grid_dimensions()
+	var grid_x: int = slot_index % grid.cols
+	var grid_y: int = int(slot_index / grid.cols)
 
 	# Clean up old instance
 	if is_instance_valid(old_eval.container):
@@ -466,17 +527,18 @@ func _process_parallel_training(delta: float) -> void:
 		var action: Dictionary = eval.controller.get_action()
 		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
 
-		# Check if game over OR timeout (120 second max evaluation)
-		var timed_out = eval.time >= 120.0
+		# Check if game over OR timeout (60 second max - faster iteration)
+		var timed_out = eval.time >= 60.0
 		if eval.scene.game_over or timed_out:
-			# Fitness = total score (rewards survival, kills, and powerups)
+			# Store fitness for this individual+seed combination
 			var fitness: float = eval.scene.score
-			evolution.set_fitness(eval.index, fitness)
+			if not fitness_accumulator.has(eval.index):
+				fitness_accumulator[eval.index] = []
+			fitness_accumulator[eval.index].append(fitness)
 
-			# Accumulate stats for this generation
+			# Accumulate stats for this generation (across all seeds)
 			generation_total_kill_score += eval.scene.score_from_kills
 			generation_total_powerup_score += eval.scene.score_from_powerups
-			# Survival score = total - kills - powerups (just the time-based score)
 			var survival_score = eval.scene.score - eval.scene.score_from_kills - eval.scene.score_from_powerups
 			generation_total_survival_score += survival_score
 
@@ -489,25 +551,48 @@ func _process_parallel_training(delta: float) -> void:
 				replace_eval_instance(i, next_individual)
 				next_individual += 1
 
-	# Check if generation complete
+	# Check if all individuals complete for current seed
 	if evaluated_count >= population_size:
-		# Debug: print fitness distribution before evolving
-		var stats = evolution.get_stats()
-		print("Gen %d complete: min=%.0f avg=%.0f max=%.0f best_ever=%.0f" % [
-			generation, stats.current_min, stats.current_avg, stats.current_max, stats.all_time_best
-		])
+		current_eval_seed += 1
 
-		evolution.evolve()
-		generation = evolution.get_generation()
-		evaluated_count = 0
-		next_individual = 0
+		# Check if all seeds complete
+		if current_eval_seed >= evals_per_individual:
+			# Average fitness across seeds and set final fitness
+			for idx in population_size:
+				var scores: Array = fitness_accumulator.get(idx, [0.0])
+				var avg_fitness: float = 0.0
+				for s in scores:
+					avg_fitness += s
+				avg_fitness /= scores.size()
+				evolution.set_fitness(idx, avg_fitness)
 
-		if evolution.get_generation() >= max_generations:
-			show_training_complete("Reached max generations (%d)" % max_generations)
-			return
+			# Debug: print fitness distribution before evolving
+			var stats = evolution.get_stats()
+			print("Gen %d complete: min=%.0f avg=%.0f max=%.0f best_ever=%.0f" % [
+				generation, stats.current_min, stats.current_avg, stats.current_max, stats.all_time_best
+			])
 
-		# Start fresh batch for new generation
-		start_next_batch()
+			evolution.evolve()
+			generation = evolution.get_generation()
+
+			# Reset for next generation
+			current_eval_seed = 0
+			fitness_accumulator.clear()
+			evaluated_count = 0
+			next_individual = 0
+
+			if evolution.get_generation() >= max_generations:
+				show_training_complete("Reached max generations (%d)" % max_generations)
+				return
+
+			# Generate new events for next generation
+			generate_all_seed_events()
+			start_next_batch()
+		else:
+			# Start next seed pass
+			evaluated_count = 0
+			next_individual = 0
+			start_next_batch()
 
 	# Update stats display
 	update_training_stats_display()
@@ -526,8 +611,10 @@ func update_training_stats_display() -> void:
 			if not eval.done and eval.scene.score > best_current:
 				best_current = eval.scene.score
 
-		stats_label.text = "Gen %d | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.2fx | [SPACE]=Pause [-/+]=Speed [T]=Stop" % [
+		var seed_info = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
+		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.1fx | [SPACE]=Pause [-/+]=Speed [T]=Stop" % [
 			generation,
+			seed_info,
 			evaluated_count,
 			population_size,
 			best_current,
@@ -563,10 +650,11 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	history_avg_fitness.append(avg)
 	history_min_fitness.append(min_fit)
 
-	# Record score breakdown averages
-	var avg_kill_score := generation_total_kill_score / population_size
-	var avg_powerup_score := generation_total_powerup_score / population_size
-	var avg_survival_score := generation_total_survival_score / population_size
+	# Record score breakdown averages (divide by total evaluations across all seeds)
+	var total_evals := population_size * evals_per_individual
+	var avg_kill_score := generation_total_kill_score / total_evals
+	var avg_powerup_score := generation_total_powerup_score / total_evals
+	var avg_survival_score := generation_total_survival_score / total_evals
 	history_avg_kill_score.append(avg_kill_score)
 	history_avg_powerup_score.append(avg_powerup_score)
 	history_avg_survival_score.append(avg_survival_score)
@@ -591,10 +679,37 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	evolution.save_best(BEST_NETWORK_PATH)
 	evolution.save_population(POPULATION_PATH)
 
+	# Write metrics for W&B bridge
+	_write_metrics_for_wandb()
+
 	# Early stopping if no improvement for stagnation_limit generations
 	if generations_without_improvement >= stagnation_limit:
 		print("Early stopping: No improvement for %d generations" % stagnation_limit)
 		show_training_complete("Early stopping: No improvement for %d generations" % stagnation_limit)
+
+
+func _write_metrics_for_wandb() -> void:
+	## Write metrics to JSON for W&B Python bridge to read
+	var metrics = {
+		"generation": generation,
+		"best_fitness": best_fitness,
+		"avg_fitness": history_avg_fitness[-1] if history_avg_fitness.size() > 0 else 0.0,
+		"min_fitness": history_min_fitness[-1] if history_min_fitness.size() > 0 else 0.0,
+		"avg_kill_score": history_avg_kill_score[-1] if history_avg_kill_score.size() > 0 else 0.0,
+		"avg_powerup_score": history_avg_powerup_score[-1] if history_avg_powerup_score.size() > 0 else 0.0,
+		"avg_survival_score": history_avg_survival_score[-1] if history_avg_survival_score.size() > 0 else 0.0,
+		"all_time_best": all_time_best,
+		"generations_without_improvement": generations_without_improvement,
+		"population_size": population_size,
+		"evals_per_individual": evals_per_individual,
+		"time_scale": time_scale,
+		"training_complete": training_complete,
+	}
+
+	var file = FileAccess.open("user://metrics.json", FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(metrics))
+		file.close()
 
 
 # Playback mode functions (unchanged from before)
@@ -712,6 +827,8 @@ func reset_game() -> void:
 	main_scene.next_spawn_score = 50.0
 	main_scene.next_powerup_score = 30.0
 	main_scene.slow_active = false
+	main_scene.survival_time = 0.0
+	main_scene.last_milestone = 0
 
 	main_scene.game_over_label.visible = false
 	main_scene.name_entry.visible = false

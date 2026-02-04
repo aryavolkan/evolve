@@ -3,6 +3,7 @@ extends CharacterBody2D
 signal hit
 signal enemy_killed(pos: Vector2, points: int)
 signal powerup_timer_updated(powerup_type: String, time_left: float)
+signal shot_fired(direction: Vector2)
 
 @export var speed: float = 300.0
 @export var boosted_speed: float = 500.0
@@ -177,6 +178,7 @@ func shoot(direction: Vector2) -> void:
 	projectile.is_piercing = is_piercing
 	projectile.owner_player = self  # Track who fired this projectile
 	get_parent().add_child(projectile)
+	shot_fired.emit(direction)  # Notify for training rewards
 
 	can_shoot = false
 	var cooldown = shoot_cooldown * 0.3 if is_rapid_fire else shoot_cooldown  # 70% faster when rapid fire

@@ -149,7 +149,7 @@ func mutate(mutation_rate: float = 0.1, mutation_strength: float = 0.3) -> void:
 
 func crossover_with(other):
 	## Create a child network by combining weights from two parents.
-	## Uses uniform crossover (each weight randomly from either parent).
+	## Uses two-point crossover to preserve weight patterns from each parent.
 	var script = get_script()
 	var child = script.new(input_size, hidden_size, output_size)
 	var weights_a: PackedFloat32Array = get_weights()
@@ -157,8 +157,19 @@ func crossover_with(other):
 	var child_weights = PackedFloat32Array()
 	child_weights.resize(weights_a.size())
 
+	# Two-point crossover: pick two random points and swap the middle segment
+	var point1 := randi() % weights_a.size()
+	var point2 := randi() % weights_a.size()
+	if point1 > point2:
+		var tmp := point1
+		point1 = point2
+		point2 = tmp
+
 	for i in weights_a.size():
-		child_weights[i] = weights_a[i] if randf() < 0.5 else weights_b[i]
+		if i >= point1 and i < point2:
+			child_weights[i] = weights_b[i]
+		else:
+			child_weights[i] = weights_a[i]
 
 	child.set_weights(child_weights)
 	return child
