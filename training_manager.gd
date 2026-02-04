@@ -582,8 +582,8 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	else:
 		generations_without_improvement += 1
 
-	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kills: %.1f | Powerups: %.1f | Stagnant: %d/%d" % [
-		gen, best, avg, avg_kills, avg_powerups, generations_without_improvement, stagnation_limit
+	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d" % [
+		gen, best, avg, avg_kill_score, avg_powerup_score, generations_without_improvement, stagnation_limit
 	])
 
 	# Auto-save every generation
