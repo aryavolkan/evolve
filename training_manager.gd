@@ -68,10 +68,12 @@ var history_avg_fitness: Array[float] = []
 var history_min_fitness: Array[float] = []
 var history_avg_kills: Array[float] = []
 var history_avg_powerups: Array[float] = []
+var history_avg_score: Array[float] = []
 
 # Per-generation accumulators
 var generation_total_kills: int = 0
 var generation_total_powerups: int = 0
+var generation_total_score: float = 0.0
 
 # Pause state
 var is_paused: bool = false
@@ -160,8 +162,10 @@ func start_training(pop_size: int = 24, generations: int = 100) -> void:
 	history_min_fitness.clear()
 	history_avg_kills.clear()
 	history_avg_powerups.clear()
+	history_avg_score.clear()
 	generation_total_kills = 0
 	generation_total_powerups = 0
+	generation_total_score = 0.0
 
 	# Hide the main game and show training arenas
 	hide_main_game()
@@ -470,9 +474,10 @@ func _process_parallel_training(delta: float) -> void:
 			var fitness: float = eval.time
 			evolution.set_fitness(eval.index, fitness)
 
-			# Accumulate kills and powerups for this generation
+			# Accumulate stats for this generation
 			generation_total_kills += eval.scene.kills
 			generation_total_powerups += eval.scene.powerups_collected
+			generation_total_score += eval.scene.score
 
 			eval.done = true
 			evaluated_count += 1
@@ -557,15 +562,18 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	history_avg_fitness.append(avg)
 	history_min_fitness.append(min_fit)
 
-	# Record kills and powerups averages
+	# Record kills, powerups, and score averages
 	var avg_kills := float(generation_total_kills) / population_size
 	var avg_powerups := float(generation_total_powerups) / population_size
+	var avg_score := generation_total_score / population_size
 	history_avg_kills.append(avg_kills)
 	history_avg_powerups.append(avg_powerups)
+	history_avg_score.append(avg_score)
 
 	# Reset accumulators for next generation
 	generation_total_kills = 0
 	generation_total_powerups = 0
+	generation_total_score = 0.0
 
 	# Track stagnation based on average fitness (more robust than all-time best)
 	if avg > best_avg_fitness:
@@ -954,7 +962,7 @@ func create_graph_panel() -> Control:
 
 	# Legend
 	var legend = create_legend()
-	legend.position = Vector2(graph_width - 380, 5)
+	legend.position = Vector2(graph_width - 450, 5)
 	panel.add_child(legend)
 
 	# Draw the graph lines
@@ -1002,6 +1010,11 @@ func create_graph_panel() -> Control:
 		var min_line = create_graph_line(history_min_fitness, graph_area, min_val, max_val, Color.RED)
 		panel.add_child(min_line)
 
+		# Score line (already on similar scale as fitness)
+		if history_avg_score.size() > 1:
+			var score_line = create_graph_line(history_avg_score, graph_area, min_val, max_val, Color.ORANGE)
+			panel.add_child(score_line)
+
 		# Scale kills and powerups to be visible on same graph (multiply by 5)
 		if history_avg_kills.size() > 1:
 			var scaled_kills: Array[float] = []
@@ -1034,6 +1047,7 @@ func create_legend() -> Control:
 		{"label": "Best", "color": Color.GREEN},
 		{"label": "Avg", "color": Color.YELLOW},
 		{"label": "Min", "color": Color.RED},
+		{"label": "Score", "color": Color.ORANGE},
 		{"label": "Kills×5", "color": Color.CYAN},
 		{"label": "Pwr×10", "color": Color.MAGENTA}
 	]
@@ -1082,6 +1096,8 @@ func get_max_history_value() -> float:
 	for v in history_best_fitness:
 		max_val = maxf(max_val, v)
 	for v in history_avg_fitness:
+		max_val = maxf(max_val, v)
+	for v in history_avg_score:
 		max_val = maxf(max_val, v)
 	# Round up to nice number
 	if max_val <= 100:
