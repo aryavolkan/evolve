@@ -42,6 +42,7 @@ const SWEEP_CONFIG_PATH := "user://sweep_config.json"
 
 # Sweep config (loaded from file for hyperparameter search)
 var _sweep_config: Dictionary = {}
+var _worker_id: String = ""  # Worker ID for parallel sweep runs
 
 # Stats
 var generation: int = 0
@@ -123,10 +124,26 @@ func initialize(scene: Node2D) -> void:
 func _load_sweep_config() -> void:
 	## Load hyperparameters from sweep config if available (for W&B sweeps)
 	_sweep_config.clear()
-	if not FileAccess.file_exists(SWEEP_CONFIG_PATH):
+
+	# Check for worker ID from command line args
+	_worker_id = ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--worker-id="):
+			_worker_id = arg.substr(12)  # len("--worker-id=") = 12
+			print("Worker ID: ", _worker_id)
+			break
+
+	# Try worker-specific config first, then fall back to default
+	var config_path = SWEEP_CONFIG_PATH
+	if _worker_id != "":
+		var worker_config_path = "user://sweep_config_%s.json" % _worker_id
+		if FileAccess.file_exists(worker_config_path):
+			config_path = worker_config_path
+
+	if not FileAccess.file_exists(config_path):
 		return
 
-	var file = FileAccess.open(SWEEP_CONFIG_PATH, FileAccess.READ)
+	var file = FileAccess.open(config_path, FileAccess.READ)
 	if not file:
 		return
 
@@ -138,7 +155,7 @@ func _load_sweep_config() -> void:
 		return
 
 	_sweep_config = json.data
-	print("Loaded sweep config: ", _sweep_config)
+	print("Loaded sweep config from %s: %s" % [config_path, _sweep_config])
 
 
 func start_training(pop_size: int = 100, generations: int = 100) -> void:
@@ -154,6 +171,7 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	population_size = int(_sweep_config.get("population_size", pop_size))
 	max_generations = int(_sweep_config.get("max_generations", generations))
 	evals_per_individual = int(_sweep_config.get("evals_per_individual", evals_per_individual))
+	time_scale = float(_sweep_config.get("time_scale", 8.0))  # Default to 8x speed for training
 
 	var hidden_size = int(_sweep_config.get("hidden_size", 32))
 	var elite_count = int(_sweep_config.get("elite_count", 10))
@@ -706,7 +724,12 @@ func _write_metrics_for_wandb() -> void:
 		"training_complete": training_complete,
 	}
 
-	var file = FileAccess.open("user://metrics.json", FileAccess.WRITE)
+	# Use worker-specific metrics file if worker ID is set
+	var metrics_path = "user://metrics.json"
+	if _worker_id != "":
+		metrics_path = "user://metrics_%s.json" % _worker_id
+
+	var file = FileAccess.open(metrics_path, FileAccess.WRITE)
 	if file:
 		file.store_string(JSON.stringify(metrics))
 		file.close()
