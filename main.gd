@@ -90,6 +90,7 @@ var arena_camera: Camera2D
 
 var game_seed: int = 0  # Seed for deterministic training
 var training_mode: bool = false  # Simplified game for AI training
+var rng: RandomNumberGenerator  # Per-arena RNG for deterministic replay
 
 # Pre-generated events for deterministic training
 var preset_obstacles: Array = []  # [{pos: Vector2}, ...]
@@ -99,7 +100,8 @@ var use_preset_events: bool = false
 func set_game_seed(s: int) -> void:
 	## Set random seed for deterministic game (used in training).
 	game_seed = s
-	seed(s)
+	rng = RandomNumberGenerator.new()
+	rng.seed = s
 
 func set_training_mode(enabled: bool) -> void:
 	## Enable simplified game mode for AI training.
@@ -117,7 +119,8 @@ func set_preset_events(obstacles: Array, enemy_spawns: Array, powerup_spawns: Ar
 static func generate_random_events(seed_value: int) -> Dictionary:
 	## Generate random events for a deterministic game session.
 	## Call once per generation, share results with all individuals.
-	seed(seed_value)
+	var gen_rng = RandomNumberGenerator.new()
+	gen_rng.seed = seed_value
 
 	var obstacles: Array = []
 	var enemy_spawns: Array = []
@@ -128,8 +131,8 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 	for i in range(40):  # More obstacles for larger arena
 		for attempt in range(50):
 			var pos = Vector2(
-				randf_range(100, 3740),
-				randf_range(100, 3740)
+				gen_rng.randf_range(100, 3740),
+				gen_rng.randf_range(100, 3740)
 			)
 			if pos.distance_to(arena_center) < 300:
 				continue
@@ -150,13 +153,13 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 		spawn_time += spawn_interval
 		spawn_interval = maxf(spawn_interval * 0.95, 3.0)  # Cap at 3s minimum
 		# Random edge position
-		var edge = randi() % 4
+		var edge = gen_rng.randi() % 4
 		var pos: Vector2
 		match edge:
-			0: pos = Vector2(randf_range(100, 3740), 100)  # Top
-			1: pos = Vector2(randf_range(100, 3740), 3740)  # Bottom
-			2: pos = Vector2(100, randf_range(100, 3740))  # Left
-			3: pos = Vector2(3740, randf_range(100, 3740))  # Right
+			0: pos = Vector2(gen_rng.randf_range(100, 3740), 100)  # Top
+			1: pos = Vector2(gen_rng.randf_range(100, 3740), 3740)  # Bottom
+			2: pos = Vector2(100, gen_rng.randf_range(100, 3740))  # Left
+			3: pos = Vector2(3740, gen_rng.randf_range(100, 3740))  # Right
 		enemy_spawns.append({"time": spawn_time, "pos": pos, "type": 0})  # Type 0 = pawn
 
 	# Generate powerup spawn events - CLOSE to player spawn for easier collection
@@ -164,18 +167,20 @@ static func generate_random_events(seed_value: int) -> Dictionary:
 	var powerup_time: float = 1.0  # First powerup at 1 second
 	while powerup_time < 120.0:
 		# Spawn powerups within reachable distance of center (player spawn)
-		var angle = randf() * TAU
-		var dist = randf_range(300, 1000)  # 300-1000 units from center (reachable!)
+		var angle = gen_rng.randf() * TAU
+		var dist = gen_rng.randf_range(300, 1000)  # 300-1000 units from center (reachable!)
 		var pos = arena_center + Vector2(cos(angle), sin(angle)) * dist
-		var powerup_type = randi() % 10  # 10 powerup types
+		var powerup_type = gen_rng.randi() % 10  # 10 powerup types
 		powerup_spawns.append({"time": powerup_time, "pos": pos, "type": powerup_type})
 		powerup_time += 3.0  # Powerup every 3 seconds (more frequent)
 
 	return {"obstacles": obstacles, "enemy_spawns": enemy_spawns, "powerup_spawns": powerup_spawns}
 
 func _ready() -> void:
-	if game_seed > 0:
-		seed(game_seed)  # Apply seed before any random operations
+	if not rng:
+		# Human mode: create unseeded RNG (random each run)
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
 	if DisplayServer.get_name() != "headless":
 		print("Evolve app started!")
 	get_tree().paused = false
@@ -314,7 +319,7 @@ func spawn_enemy() -> void:
 		enemy.type = ChessPiece.PAWN
 	else:
 		# Chess piece type (weighted: pawns common, higher pieces rarer)
-		var type_roll = randf()
+		var type_roll = rng.randf()
 		var difficulty = get_difficulty_factor()
 
 		if type_roll < 0.5 - difficulty * 0.3:
@@ -331,6 +336,7 @@ func spawn_enemy() -> void:
 	# Spawn at random position along arena edges
 	var pos = get_random_edge_spawn_position()
 	enemy.position = pos
+	enemy.rng = rng
 	add_child(enemy)
 
 	# Apply slow/freeze after adding to tree (so apply_type_config has run)
@@ -347,6 +353,7 @@ func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
 	enemy.speed = get_scaled_enemy_speed() * (0.5 if training_mode else 1.0)
 	enemy.type = enemy_type  # 0=pawn, 1=knight, etc.
 	enemy.position = pos
+	enemy.rng = rng
 	add_child(enemy)
 
 	if freeze_active:
@@ -374,6 +381,7 @@ func spawn_initial_enemies() -> void:
 		enemy.speed = BASE_ENEMY_SPEED * (0.5 if training_mode else 1.0)  # Slower in training
 		enemy.type = ChessPiece.PAWN  # Start with pawns
 		enemy.position = get_random_edge_spawn_position()
+		enemy.rng = rng
 		add_child(enemy)
 
 
@@ -404,7 +412,7 @@ func spawn_powerup() -> bool:
 	powerup.position = pos
 
 	# Random powerup type (10 types: 0-9)
-	var type_index = randi() % 10
+	var type_index = rng.randi() % 10
 	powerup.set_type(type_index)
 	powerup.collected.connect(_on_powerup_collected)
 	add_child(powerup)
@@ -417,8 +425,8 @@ func find_valid_powerup_position() -> Vector2:
 	for attempt in range(20):
 		# Random position within arena bounds
 		var pos = Vector2(
-			randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING),
-			randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING)
+			rng.randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING),
+			rng.randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING)
 		)
 
 		# Check distance from player (not too close, not too far)
@@ -847,8 +855,8 @@ func spawn_arena_obstacles() -> void:
 		var placed = false
 		for attempt in range(50):
 			var pos = Vector2(
-				randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING),
-				randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING)
+				rng.randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING),
+				rng.randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING)
 			)
 
 			if pos.distance_to(arena_center) < OBSTACLE_PLAYER_SAFE_ZONE:
@@ -874,18 +882,18 @@ func spawn_arena_obstacles() -> void:
 
 func get_random_edge_spawn_position() -> Vector2:
 	## Get a random position along the arena edges for enemy spawning
-	var edge = randi() % 4
+	var edge = rng.randi() % 4
 	var pos: Vector2
 
 	match edge:
 		0:  # Top edge
-			pos = Vector2(randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING), ARENA_PADDING)
+			pos = Vector2(rng.randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING), ARENA_PADDING)
 		1:  # Bottom edge
-			pos = Vector2(randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING), ARENA_HEIGHT - ARENA_PADDING)
+			pos = Vector2(rng.randf_range(ARENA_PADDING, ARENA_WIDTH - ARENA_PADDING), ARENA_HEIGHT - ARENA_PADDING)
 		2:  # Left edge
-			pos = Vector2(ARENA_PADDING, randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING))
+			pos = Vector2(ARENA_PADDING, rng.randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING))
 		3:  # Right edge
-			pos = Vector2(ARENA_WIDTH - ARENA_PADDING, randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING))
+			pos = Vector2(ARENA_WIDTH - ARENA_PADDING, rng.randf_range(ARENA_PADDING, ARENA_HEIGHT - ARENA_PADDING))
 
 	return pos
 

@@ -8,6 +8,7 @@ enum Type { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
 
 var player: CharacterBody2D
 var point_value: int = 1
+var rng: RandomNumberGenerator  # Per-arena RNG passed from Main scene
 
 # Movement state
 var move_timer: float = 0.0
@@ -44,7 +45,10 @@ func _ready() -> void:
 	# Find player in our local scene (handles SubViewport isolation)
 	player = find_local_player()
 	apply_type_config()
-	move_timer = randf() * move_cooldown  # Stagger initial moves
+	if rng:
+		move_timer = rng.randf() * move_cooldown  # Stagger initial moves
+	else:
+		move_timer = randf() * move_cooldown  # Fallback for tests/standalone
 
 
 func find_local_player() -> CharacterBody2D:
@@ -196,12 +200,12 @@ func get_bishop_move(to_player: Vector2) -> Vector2:
 	var dy = sign(to_player.y) if to_player.y != 0 else 1
 
 	# Move 1-2 tiles diagonally
-	var tiles = 1 + randi() % 2
+	var tiles = 1 + (rng.randi() if rng else randi()) % 2
 	return Vector2(dx, dy) * TILE_SIZE * tiles
 
 func get_rook_move(to_player: Vector2) -> Vector2:
 	# Straight line movement: pick dominant axis
-	var tiles = 1 + randi() % 3  # 1-3 tiles
+	var tiles = 1 + (rng.randi() if rng else randi()) % 3  # 1-3 tiles
 
 	if abs(to_player.x) > abs(to_player.y):
 		return Vector2(sign(to_player.x) * TILE_SIZE * tiles, 0)
