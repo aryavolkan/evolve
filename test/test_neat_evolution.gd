@@ -159,7 +159,7 @@ func test_signal_emitted() -> void:
 	_setup()
 	var evo := NeatEvolution.new(config)
 	var signal_received := [false]
-	evo.generation_complete.connect(func(gen, best, avg): signal_received[0] = true)
+	evo.generation_complete.connect(func(gen, best, avg, min_fit): signal_received[0] = true)
 	for i in config.population_size:
 		evo.set_fitness(i, randf() * 100.0)
 	evo.evolve()
