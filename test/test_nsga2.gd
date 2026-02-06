@@ -40,6 +40,7 @@ func _run_tests() -> void:
 	# Hypervolume
 	_test("nsga2_hypervolume_simple", _test_hypervolume_simple)
 	_test("nsga2_hypervolume_empty", _test_hypervolume_empty)
+	_test("nsga2_hypervolume_two_points", _test_hypervolume_two_points)
 
 
 # ============================================================
@@ -341,3 +342,11 @@ func _test_hypervolume_empty() -> void:
 	var front: Array = []
 	var hv := NSGA2Script.hypervolume_2d(front, Vector2(0, 0))
 	assert_approx(hv, 0.0, 0.01, "Empty front hypervolume should be 0")
+
+
+func _test_hypervolume_two_points() -> void:
+	# Two points: (10,5) and (5,10) with ref (0,0)
+	# HV = 10*5 + 5*(10-5) = 50 + 25 = 75
+	var front := [Vector2(10, 5), Vector2(5, 10)]
+	var hv := NSGA2Script.hypervolume_2d(front, Vector2(0, 0))
+	assert_approx(hv, 75.0, 0.01, "Two-point hypervolume should be 75")

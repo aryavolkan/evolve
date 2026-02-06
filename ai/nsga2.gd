@@ -218,35 +218,32 @@ static func get_pareto_front(objectives: Array) -> Array:
 
 
 static func hypervolume_2d(front: Array, ref_point: Vector2) -> float:
-	## Calculate 2D hypervolume indicator for a Pareto front.
-	## Used for tracking overall multi-objective performance over generations.
+	## Calculate 2D hypervolume indicator for a Pareto front (maximization).
 	## Input:
 	##   front — Array of Vector2 (2 objectives per individual on the front)
-	##   ref_point — reference point (should be dominated by all front members)
-	## Output: hypervolume value (area dominated by the front).
+	##   ref_point — reference point (should be dominated by all front members,
+	##               i.e. worse than all of them on both objectives)
+	## Output: hypervolume value (area dominated by the front above ref_point).
 	
 	if front.is_empty():
 		return 0.0
 	
-	# Sort by first objective ascending
-	var sorted_front := front.duplicate()
-	sorted_front.sort_custom(func(a, b): return a.x < b.x)
+	# Filter to points that dominate the reference point (both objectives > ref)
+	var valid: Array = []
+	for point in front:
+		if point.x > ref_point.x and point.y > ref_point.y:
+			valid.append(point)
+	
+	if valid.is_empty():
+		return 0.0
+	
+	# Sort by x descending for sweep-line algorithm
+	valid.sort_custom(func(a, b): return a.x > b.x)
 	
 	var hv := 0.0
 	var prev_y := ref_point.y
 	
-	for point in sorted_front:
-		if point.x >= ref_point.x or point.y >= ref_point.y:
-			continue  # Point doesn't dominate reference
-		# Actually we want points that are BETTER than ref — depends on maximization
-		# For maximization: point > ref means point dominates
-		pass
-	
-	# For maximization problems: sort by x descending, sweep
-	sorted_front.sort_custom(func(a, b): return a.x > b.x)
-	prev_y = ref_point.y
-	
-	for point in sorted_front:
+	for point in valid:
 		if point.y > prev_y:
 			hv += (point.x - ref_point.x) * (point.y - prev_y)
 			prev_y = point.y
