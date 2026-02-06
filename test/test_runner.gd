@@ -48,7 +48,10 @@ func _run_all_tests() -> void:
 		preload("res://test/test_powerup.gd"),
 		preload("res://test/test_trainer.gd"),
 		preload("res://test/test_curriculum.gd"),
+		preload("res://test/test_nsga2.gd"),
+		preload("res://test/test_evolution_nsga2.gd"),
 		preload("res://test/test_integration.gd"),
+		preload("res://test/test_neat_genome.gd"),
 	]
 
 	for suite_script in test_suites:

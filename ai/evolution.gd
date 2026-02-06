@@ -1,15 +1,24 @@
 extends RefCounted
 
 ## Manages a population of neural networks and evolves them.
-## Uses fitness-proportionate selection with elitism.
+## Supports single-objective (fitness-proportionate with elitism) or
+## multi-objective NSGA-II selection (3 objectives: survival, kills, powerups).
 
 signal generation_complete(generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
 
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
+# NSGA2 is available via class_name NSGA2 (ai/nsga2.gd)
 
 var population: Array = []
 var fitness_scores: PackedFloat32Array
 var generation: int = 0
+
+# NSGA-II multi-objective mode
+var use_nsga2: bool = false
+var objective_scores: Array = []  # Array of Vector3 per individual (survival, kills, powerups)
+var pareto_front: Array = []  # Current generation's Pareto front [{index, objectives}]
+var last_hypervolume: float = 0.0  # For stagnation detection in NSGA-II mode
+var _last_num_fronts: int = 0  # Cached front count from last evolve
 
 # Evolution parameters
 var population_size: int
@@ -68,6 +77,9 @@ func _init(
 	base_mutation_strength = p_mutation_strength
 
 	fitness_scores.resize(population_size)
+	objective_scores.resize(population_size)
+	for i in population_size:
+		objective_scores[i] = Vector3.ZERO
 	initialize_population()
 
 
@@ -83,6 +95,18 @@ func initialize_population() -> void:
 func set_fitness(index: int, fitness: float) -> void:
 	## Set the fitness score for a specific individual.
 	fitness_scores[index] = fitness
+
+
+func set_objectives(index: int, objectives: Vector3) -> void:
+	## Set the 3 objective scores for an individual (survival, kills, powerups).
+	## Also sets scalar fitness as the sum for backward compatibility.
+	objective_scores[index] = objectives
+	fitness_scores[index] = objectives.x + objectives.y + objectives.z
+
+
+func get_objectives(index: int) -> Vector3:
+	## Get the 3 objective scores for an individual.
+	return objective_scores[index]
 
 
 func get_individual(index: int):
@@ -113,9 +137,20 @@ func restore_backup() -> void:
 
 func evolve() -> void:
 	## Create the next generation based on fitness scores.
+	## Uses NSGA-II multi-objective selection when use_nsga2 is true,
+	## otherwise uses the original single-objective fitness-proportionate selection.
 
 	# Save backup before evolving (for potential rollback)
 	save_backup()
+
+	if use_nsga2:
+		_evolve_nsga2()
+	else:
+		_evolve_single_objective()
+
+
+func _evolve_single_objective() -> void:
+	## Original single-objective evolution with elitism and tournament selection.
 
 	# Find best performers
 	var indexed_fitness: Array = []
@@ -151,12 +186,7 @@ func evolve() -> void:
 	last_best_fitness = best_fitness
 
 	# Boost mutation if stagnating
-	var mutation_boost := 1.0
-	if stagnant_generations >= STAGNATION_THRESHOLD:
-		mutation_boost = minf(1.0 + (stagnant_generations - STAGNATION_THRESHOLD + 1) * 0.5, MAX_MUTATION_BOOST)
-		mutation_rate = minf(base_mutation_rate * mutation_boost, 0.5)  # Cap at 50%
-		mutation_strength = base_mutation_strength * mutation_boost
-		print("  Adaptive mutation: %.0fx boost (stagnant %d gens)" % [mutation_boost, stagnant_generations])
+	_apply_adaptive_mutation()
 
 	# Create new population
 	var new_population: Array = []
@@ -184,10 +214,126 @@ func evolve() -> void:
 	generation += 1
 
 	# Reset fitness scores
-	for i in population_size:
-		fitness_scores[i] = 0.0
+	_reset_scores()
 
 	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
+
+
+func _evolve_nsga2() -> void:
+	## NSGA-II multi-objective evolution.
+	## Selection based on Pareto dominance and crowding distance.
+
+	# Non-dominated sorting
+	var fronts := NSGA2.non_dominated_sort(objective_scores)
+	_last_num_fronts = fronts.size()
+	pareto_front = NSGA2.get_pareto_front(objective_scores)
+
+	# Track best network: highest sum of objectives (backward compat)
+	var best_sum := -INF
+	var best_idx := 0
+	var total_fitness := 0.0
+	var min_fitness := INF
+	for i in population_size:
+		var s: float = objective_scores[i].x + objective_scores[i].y + objective_scores[i].z
+		total_fitness += s
+		min_fitness = minf(min_fitness, s)
+		if s > best_sum:
+			best_sum = s
+			best_idx = i
+
+	best_fitness = best_sum
+	best_network = population[best_idx].clone()
+
+	if best_fitness > all_time_best_fitness:
+		all_time_best_fitness = best_fitness
+		all_time_best_network = best_network.clone()
+
+	var avg_fitness := total_fitness / population_size
+
+	# Adaptive mutation using hypervolume for stagnation detection
+	var hv := _compute_hypervolume()
+	if hv > last_hypervolume * 1.01:
+		stagnant_generations = 0
+		mutation_rate = base_mutation_rate
+		mutation_strength = base_mutation_strength
+	else:
+		stagnant_generations += 1
+	last_hypervolume = hv
+
+	_apply_adaptive_mutation()
+
+	# Build crowding distance map for tournament selection
+	var crowding_map: Dictionary = {}
+	for front in fronts:
+		var distances := NSGA2.crowding_distance(front, objective_scores)
+		for i in front.size():
+			crowding_map[front[i]] = distances[i]
+
+	# NSGA-II selection: fill new population front by front
+	var selected_indices := NSGA2.select(objective_scores, population_size)
+
+	# Create new population using selected individuals as parents
+	var new_population: Array = []
+
+	# Elitism: keep front 0 individuals (up to elite_count)
+	var elite_indices: Array = []
+	if not fronts.is_empty():
+		for idx in fronts[0]:
+			if elite_indices.size() >= elite_count:
+				break
+			elite_indices.append(idx)
+
+	for idx in elite_indices:
+		new_population.append(population[idx].clone())
+
+	# Fill rest with offspring via NSGA-II tournament selection
+	while new_population.size() < population_size:
+		var parent_a_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map)
+		var child
+
+		if randf() < crossover_rate:
+			var parent_b_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map)
+			child = population[parent_a_idx].crossover_with(population[parent_b_idx])
+		else:
+			child = population[parent_a_idx].clone()
+
+		child.mutate(mutation_rate, mutation_strength)
+		new_population.append(child)
+
+	population = new_population
+	generation += 1
+
+	# Reset scores
+	_reset_scores()
+
+	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
+
+
+func _apply_adaptive_mutation() -> void:
+	## Boost mutation rate when stagnating.
+	if stagnant_generations >= STAGNATION_THRESHOLD:
+		var mutation_boost := minf(1.0 + (stagnant_generations - STAGNATION_THRESHOLD + 1) * 0.5, MAX_MUTATION_BOOST)
+		mutation_rate = minf(base_mutation_rate * mutation_boost, 0.5)
+		mutation_strength = base_mutation_strength * mutation_boost
+		print("  Adaptive mutation: %.0fx boost (stagnant %d gens)" % [mutation_boost, stagnant_generations])
+
+
+func _reset_scores() -> void:
+	## Reset all fitness and objective scores.
+	for i in population_size:
+		fitness_scores[i] = 0.0
+		objective_scores[i] = Vector3.ZERO
+
+
+func _compute_hypervolume() -> float:
+	## Compute 2D hypervolume (survival vs kills) for stagnation tracking.
+	if pareto_front.is_empty():
+		return 0.0
+	var front_2d: Array = []
+	for entry in pareto_front:
+		var obj: Vector3 = entry.objectives
+		front_2d.append(Vector2(obj.x, obj.y))
+	return NSGA2.hypervolume_2d(front_2d, Vector2.ZERO)
 
 
 func select_parent(indexed_fitness: Array):
@@ -328,7 +474,7 @@ func get_stats() -> Dictionary:
 		max_fit = maxf(max_fit, f)
 		total += f
 
-	return {
+	var stats := {
 		"generation": generation,
 		"population_size": population_size,
 		"best_fitness": best_fitness,
@@ -337,3 +483,10 @@ func get_stats() -> Dictionary:
 		"current_max": max_fit,
 		"current_avg": total / population_size if population_size > 0 else 0.0
 	}
+
+	if use_nsga2:
+		stats["pareto_front_size"] = pareto_front.size()
+		stats["hypervolume"] = last_hypervolume
+		stats["num_fronts"] = _last_num_fronts
+
+	return stats
