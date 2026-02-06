@@ -73,7 +73,7 @@ add_child(enemy)
 - WASD to shoot projectiles in four directions (0.3s cooldown)
 - Projectiles destroy enemies on contact
 - Multiple enemy types with different behaviors
-- Score +10 per second
+- Score +5 per second
 - Enemy spawn rate increases with score
 - Power-up spawns every 80 points at random position
 - Collision = lose a life, respawn at center with 2s invincibility
@@ -84,22 +84,22 @@ add_child(enemy)
 - **Fixed Arena Size:** 3840x3840 pixels (square arena, zoomed out to fit)
 - **Static Camera:** Centered on arena, dynamic zoom to show entire arena
 - **Arena Walls:** Solid boundaries prevent player/enemies from leaving
-- **Permanent Obstacles:** 20 obstacles placed randomly at game start (fixed layout per run)
-- **Safe Zone:** 250px radius around center kept clear for player spawn
+- **Permanent Obstacles:** 40 obstacles placed randomly at game start (fixed layout per run)
+- **Safe Zone:** 300px radius around center kept clear for player spawn
 - **Enemy Spawning:** Enemies spawn along arena edges
 - **Grid Floor:** Visual grid lines (160px) for spatial reference
 
 ## Chess Piece Enemies
 
-Enemies are chess pieces with chess-like movement patterns. Kill points are 10× chess values:
+Enemies are chess pieces with chess-like movement patterns. Kill points are 1000× chess values:
 
 | Piece | Symbol | Kill Points | Size | Movement Pattern |
 |-------|--------|-------------|------|------------------|
-| Pawn | ♟ | 10 | 28 | One tile toward player (straight lines) |
-| Knight | ♞ | 30 | 32 | L-shaped jumps (2+1 tiles), hops over obstacles |
-| Bishop | ♝ | 30 | 32 | Diagonal movement (1-2 tiles) |
-| Rook | ♜ | 50 | 36 | Straight lines (1-3 tiles horizontal/vertical) |
-| Queen | ♛ | 90 | 40 | Combines bishop and rook movement |
+| Pawn | ♟ | 1000 | 28 | One tile toward player (straight lines) |
+| Knight | ♞ | 3000 | 32 | L-shaped jumps (2+1 tiles), hops over obstacles |
+| Bishop | ♝ | 3000 | 32 | Diagonal movement (1-2 tiles) |
+| Rook | ♜ | 5000 | 36 | Straight lines (1-3 tiles horizontal/vertical) |
+| Queen | ♛ | 9000 | 40 | Combines bishop and rook movement |
 
 **Movement System:**
 - Pieces move on a virtual 50px grid
@@ -198,8 +198,8 @@ training_manager.gd     # Main scene integration
 | T | Start/Stop training |
 | P | Start/Stop playback (watch best AI) |
 | H | Return to human control |
-| [ or - | Slow down training (min 1x) |
-| ] or + | Speed up training (max 8x) |
+| [ or - | Slow down training (min 0.25x) |
+| ] or + | Speed up training (max 16x) |
 
 ### Fitness Function
 
@@ -233,7 +233,7 @@ Training mode makes the game easier to accelerate learning:
 - Enemies spawn closer and slower (50% speed)
 - Only 3 initial enemies (vs 10 in normal play)
 - Powerups spawn within 300-1000 units of player
-- Powerups every 3 seconds (vs 5 in normal play)
+- Powerups every 3 seconds (vs every 80 points in normal play)
 - Projectiles faster (900) and longer range (1200)
 
 ### Saved Files
@@ -296,10 +296,10 @@ godot --headless --script test/test_runner.gd
 
 ### Visible Training Mode
 
-Press **T** to enter training mode. The screen displays 48 parallel arenas in a 6x8 grid, each evaluating a different neural network simultaneously.
+Press **T** to enter training mode. The screen displays 20 parallel arenas in a 5x4 grid, each evaluating a different neural network simultaneously.
 
 **Each arena shows:**
-- Individual number (#0-47)
+- Individual number (#0-19)
 - Current score and lives
 
 **Stats bar (top) shows:**
@@ -310,7 +310,7 @@ Press **T** to enter training mode. The screen displays 48 parallel arenas in a 
 - Current speed multiplier
 
 **Features:**
-- Speed adjustable 1x-8x with `[-/+]` keys
+- Speed adjustable 0.25x-16x with `[-/+]` keys
 - Early stopping after 10 generations without improvement
 - Auto-saves best network every generation
 - Press **T** again or **H** to stop and return to human mode
