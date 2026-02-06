@@ -1,17 +1,26 @@
 extends RefCounted
 
-## A simple feedforward neural network with evolvable weights.
+## A neural network with evolvable weights and optional Elman recurrent memory.
 ## Architecture: inputs -> hidden (tanh) -> outputs (tanh)
+## When use_memory is true, previous hidden state feeds back into hidden layer
+## via context weights, enabling temporal sequence learning (Elman network).
 
 var input_size: int
 var hidden_size: int
 var output_size: int
+
+# Elman memory flag - when false, behaves as pure feedforward (backward compatible)
+var use_memory: bool = false
 
 # Weight matrices (stored as flat arrays for easy mutation)
 var weights_ih: PackedFloat32Array  # Input to hidden
 var bias_h: PackedFloat32Array      # Hidden bias
 var weights_ho: PackedFloat32Array  # Hidden to output
 var bias_o: PackedFloat32Array      # Output bias
+var weights_hh: PackedFloat32Array  # Hidden to hidden (Elman context weights)
+
+# Recurrent state
+var _prev_hidden: PackedFloat32Array  # Previous hidden activation
 
 # Cached arrays for forward pass (avoid allocations)
 var _hidden: PackedFloat32Array
@@ -35,6 +44,27 @@ func _init(p_input_size: int = 64, p_hidden_size: int = 32, p_output_size: int =
 
 	# Random initialization (Xavier-like)
 	randomize_weights()
+
+
+func enable_memory() -> void:
+	## Enable Elman recurrent memory. Call after construction.
+	## Allocates context weights (hidden_size x hidden_size) and hidden state buffer.
+	if use_memory:
+		return
+	use_memory = true
+	weights_hh.resize(hidden_size * hidden_size)
+	_prev_hidden.resize(hidden_size)
+	_prev_hidden.fill(0.0)
+	# Initialize context weights with smaller scale to avoid instability
+	var hh_scale := sqrt(2.0 / hidden_size)
+	for i in weights_hh.size():
+		weights_hh[i] = randf_range(-hh_scale, hh_scale)
+
+
+func reset_memory() -> void:
+	## Reset recurrent state to zeros. Call between episodes/evaluations.
+	if use_memory:
+		_prev_hidden.fill(0.0)
 
 
 func randomize_weights() -> void:
@@ -62,13 +92,23 @@ func forward(inputs: PackedFloat32Array) -> PackedFloat32Array:
 
 	assert(inputs.size() == input_size, "Input size mismatch")
 
-	# Hidden layer: h = tanh(W_ih @ inputs + b_h)
+	# Hidden layer: h = tanh(W_ih @ inputs + W_hh @ prev_hidden + b_h)
 	for h in hidden_size:
 		var sum := bias_h[h]
 		var weight_offset := h * input_size
 		for i in input_size:
 			sum += weights_ih[weight_offset + i] * inputs[i]
+		# Add recurrent context if memory is enabled
+		if use_memory:
+			var ctx_offset := h * hidden_size
+			for ph in hidden_size:
+				sum += weights_hh[ctx_offset + ph] * _prev_hidden[ph]
 		_hidden[h] = tanh(sum)
+
+	# Store current hidden state for next timestep
+	if use_memory:
+		for h in hidden_size:
+			_prev_hidden[h] = _hidden[h]
 
 	# Output layer: o = tanh(W_ho @ hidden + b_o)
 	for o in output_size:
@@ -83,11 +123,14 @@ func forward(inputs: PackedFloat32Array) -> PackedFloat32Array:
 
 func get_weights() -> PackedFloat32Array:
 	## Return all weights as a flat array for evolution.
+	## When memory is enabled, context weights are appended after base weights.
 	var all_weights := PackedFloat32Array()
 	all_weights.append_array(weights_ih)
 	all_weights.append_array(bias_h)
 	all_weights.append_array(weights_ho)
 	all_weights.append_array(bias_o)
+	if use_memory:
+		all_weights.append_array(weights_hh)
 	return all_weights
 
 
@@ -111,16 +154,26 @@ func set_weights(weights: PackedFloat32Array) -> void:
 		bias_o[i] = weights[idx]
 		idx += 1
 
+	if use_memory and idx < weights.size():
+		for i in weights_hh.size():
+			weights_hh[i] = weights[idx]
+			idx += 1
+
 
 func get_weight_count() -> int:
 	## Total number of trainable parameters.
-	return weights_ih.size() + bias_h.size() + weights_ho.size() + bias_o.size()
+	var count := weights_ih.size() + bias_h.size() + weights_ho.size() + bias_o.size()
+	if use_memory:
+		count += weights_hh.size()
+	return count
 
 
 func clone():
 	## Create a deep copy of this network.
 	var script = get_script()
 	var copy = script.new(input_size, hidden_size, output_size)
+	if use_memory:
+		copy.enable_memory()
 	copy.set_weights(get_weights())
 	return copy
 
@@ -146,15 +199,22 @@ func mutate(mutation_rate: float = 0.1, mutation_strength: float = 0.3) -> void:
 		if randf() < mutation_rate:
 			bias_o[i] += randfn(0.0, mutation_strength)
 
+	if use_memory:
+		for i in weights_hh.size():
+			if randf() < mutation_rate:
+				weights_hh[i] += randfn(0.0, mutation_strength)
+
 
 func crossover_with(other):
 	## Create a child network by combining weights from two parents.
 	## Uses two-point crossover to preserve weight patterns from each parent.
 	var script = get_script()
 	var child = script.new(input_size, hidden_size, output_size)
+	if use_memory:
+		child.enable_memory()
 	var weights_a: PackedFloat32Array = get_weights()
 	var weights_b: PackedFloat32Array = other.get_weights()
-	var child_weights = PackedFloat32Array()
+	var child_weights := PackedFloat32Array()
 	child_weights.resize(weights_a.size())
 
 	# Two-point crossover: pick two random points and swap the middle segment
@@ -177,11 +237,13 @@ func crossover_with(other):
 
 func save_to_file(path: String) -> void:
 	## Save network to a file.
+	## Format: [in, hid, out, use_memory_flag, weight_count, weights...]
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file:
 		file.store_32(input_size)
 		file.store_32(hidden_size)
 		file.store_32(output_size)
+		file.store_32(1 if use_memory else 0)
 		var weights := get_weights()
 		file.store_32(weights.size())
 		for w in weights:
@@ -190,7 +252,7 @@ func save_to_file(path: String) -> void:
 
 
 static func load_from_file(path: String):
-	## Load network from a file.
+	## Load network from a file. Supports legacy (no memory flag) and new format.
 	var file := FileAccess.open(path, FileAccess.READ)
 	if not file:
 		return null
@@ -198,7 +260,20 @@ static func load_from_file(path: String):
 	var in_size := file.get_32()
 	var hid_size := file.get_32()
 	var out_size := file.get_32()
-	var weight_count := file.get_32()
+
+	# Format detection: 4th u32 is use_memory flag (0 or 1) or legacy weight_count (>1)
+	var fourth := file.get_32()
+	var has_memory: bool
+	var weight_count: int
+
+	if fourth > 1:
+		# Legacy format: 4th field was weight_count directly
+		has_memory = false
+		weight_count = fourth
+	else:
+		# New format: 4th field is memory flag, 5th is weight_count
+		has_memory = (fourth == 1)
+		weight_count = file.get_32()
 
 	var weights := PackedFloat32Array()
 	weights.resize(weight_count)
@@ -207,7 +282,9 @@ static func load_from_file(path: String):
 
 	file.close()
 
-	var script = load("res://ai/neural_network.gd")
+	var script := load("res://ai/neural_network.gd")
 	var network = script.new(in_size, hid_size, out_size)
+	if has_memory:
+		network.enable_memory()
 	network.set_weights(weights)
 	return network
