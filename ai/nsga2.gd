@@ -96,7 +96,7 @@ static func crowding_distance(front: Array, objectives: Array) -> PackedFloat32A
 		# Extract objective values for this dimension
 		var obj_values: Array = []
 		for i in size:
-			var idx := front[i]
+			var idx: int = front[i]
 			var val: float
 			match obj:
 				0: val = objectives[idx].x

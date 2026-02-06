@@ -32,6 +32,10 @@ var current_eval_seed: int = 0  # Which seed we're currently evaluating
 # Fitness tracking - accumulate across multiple seeds
 var fitness_accumulator: Dictionary = {}  # {individual_index: [seed1_fitness, seed2_fitness, ...]}
 
+# Multi-objective tracking (NSGA-II)
+var use_nsga2: bool = false
+var objective_accumulator: Dictionary = {}  # {individual_index: [{survival, kills, powerups}, ...per seed]}
+
 # Pre-generated events for each seed (all individuals see same scenarios)
 var generation_events_by_seed: Array = []  # [{obstacles, enemy_spawns, powerup_spawns}, ...]
 
@@ -249,6 +253,7 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 		crossover_rate
 	)
 
+	evolution.use_nsga2 = use_nsga2
 	evolution.generation_complete.connect(_on_generation_complete)
 
 	# Clean up any leftover pause state
@@ -268,7 +273,9 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	curriculum_stage = 0
 	curriculum_generations_at_stage = 0
 	curriculum_enabled = bool(_sweep_config.get("curriculum_enabled", true))
+	use_nsga2 = bool(_sweep_config.get("use_nsga2", false))
 	fitness_accumulator.clear()
+	objective_accumulator.clear()
 	Engine.time_scale = time_scale
 
 	# Clear metric history
@@ -700,10 +707,17 @@ func _process_parallel_training(delta: float) -> void:
 				fitness_accumulator[eval.index] = []
 			fitness_accumulator[eval.index].append(fitness)
 
+			# Store per-objective scores for NSGA-II
+			var kill_score: float = eval.scene.score_from_kills
+			var powerup_score: float = eval.scene.score_from_powerups
+			var survival_score: float = eval.scene.score - kill_score - powerup_score
+			if not objective_accumulator.has(eval.index):
+				objective_accumulator[eval.index] = []
+			objective_accumulator[eval.index].append(Vector3(survival_score, kill_score, powerup_score))
+
 			# Accumulate stats for this generation (across all seeds)
-			generation_total_kill_score += eval.scene.score_from_kills
-			generation_total_powerup_score += eval.scene.score_from_powerups
-			var survival_score = eval.scene.score - eval.scene.score_from_kills - eval.scene.score_from_powerups
+			generation_total_kill_score += kill_score
+			generation_total_powerup_score += powerup_score
 			generation_total_survival_score += survival_score
 
 			eval.done = true
@@ -721,14 +735,23 @@ func _process_parallel_training(delta: float) -> void:
 
 		# Check if all seeds complete
 		if current_eval_seed >= evals_per_individual:
-			# Average fitness across seeds and set final fitness
+			# Average fitness across seeds and set final fitness/objectives
 			for idx in population_size:
-				var scores: Array = fitness_accumulator.get(idx, [0.0])
-				var avg_fitness: float = 0.0
-				for s in scores:
-					avg_fitness += s
-				avg_fitness /= scores.size()
-				evolution.set_fitness(idx, avg_fitness)
+				if use_nsga2:
+					# Average objectives across seeds
+					var obj_scores: Array = objective_accumulator.get(idx, [Vector3.ZERO])
+					var avg_obj := Vector3.ZERO
+					for o in obj_scores:
+						avg_obj += o
+					avg_obj /= obj_scores.size()
+					evolution.set_objectives(idx, avg_obj)
+				else:
+					var scores: Array = fitness_accumulator.get(idx, [0.0])
+					var avg_fitness: float = 0.0
+					for s in scores:
+						avg_fitness += s
+					avg_fitness /= scores.size()
+					evolution.set_fitness(idx, avg_fitness)
 
 			# Debug: print fitness distribution before evolving
 			var stats = evolution.get_stats()
@@ -742,6 +765,7 @@ func _process_parallel_training(delta: float) -> void:
 			# Reset for next generation
 			current_eval_seed = 0
 			fitness_accumulator.clear()
+			objective_accumulator.clear()
 			evaluated_count = 0
 			next_individual = 0
 
@@ -788,7 +812,12 @@ func update_training_stats_display() -> void:
 		if curriculum_enabled:
 			curriculum_text = " | %s" % get_curriculum_label()
 
-		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s | Speed: %.1fx | %s" % [
+		var nsga2_text = ""
+		if use_nsga2:
+			var front_size = evolution.pareto_front.size() if evolution else 0
+			nsga2_text = " | NSGA-II (F0: %d)" % front_size
+
+		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s%s | Speed: %.1fx | %s" % [
 			generation,
 			seed_info,
 			evaluated_count,
@@ -798,6 +827,7 @@ func update_training_stats_display() -> void:
 			generations_without_improvement,
 			stagnation_limit,
 			curriculum_text,
+			nsga2_text,
 			time_scale,
 			controls_hint
 		]
@@ -890,6 +920,9 @@ func _write_metrics_for_wandb() -> void:
 		"training_complete": training_complete,
 		"curriculum_stage": curriculum_stage,
 		"curriculum_label": get_curriculum_label(),
+		"use_nsga2": use_nsga2,
+		"pareto_front_size": evolution.pareto_front.size() if evolution and use_nsga2 else 0,
+		"hypervolume": evolution.last_hypervolume if evolution and use_nsga2 else 0.0,
 	}
 
 	# Use worker-specific metrics file if worker ID is set

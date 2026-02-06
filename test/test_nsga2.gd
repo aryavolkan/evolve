@@ -314,7 +314,7 @@ func _test_get_pareto_front() -> void:
 	var objectives := [
 		Vector3(10, 1, 5),
 		Vector3(1, 10, 5),
-		Vector3(3, 3, 3),
+		Vector3(1, 1, 1),  # Dominated by both 0 and 1
 	]
 	var pf := NSGA2Script.get_pareto_front(objectives)
 	assert_eq(pf.size(), 2, "Pareto front should have 2 members")
