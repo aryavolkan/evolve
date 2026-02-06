@@ -58,6 +58,7 @@ func _run_all_tests() -> void:
 		preload("res://test/test_neat_genome.gd"),
 		preload("res://test/test_neat_crossover.gd"),
 		preload("res://test/test_neat_species.gd"),
+		preload("res://test/test_neat_network.gd"),
 	]
 
 	for suite_script in test_suites:
