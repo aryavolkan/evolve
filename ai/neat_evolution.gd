@@ -5,7 +5,7 @@ class_name NeatEvolution
 ## organizes them into species, and produces new generations via
 ## species-proportionate reproduction with crossover and mutation.
 
-signal generation_complete(generation: int, best_fitness: float, avg_fitness: float)
+signal generation_complete(generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
 
 var config: NeatConfig
 var innovation_tracker: NeatInnovation
@@ -17,6 +17,11 @@ var best_fitness: float = 0.0
 var all_time_best_genome: NeatGenome = null
 var all_time_best_fitness: float = 0.0
 var _next_species_id: int = 0
+
+# Compatibility stubs for training_manager.gd integration
+var pareto_front: Array = []
+var last_hypervolume: float = 0.0
+var use_nsga2: bool = false
 
 
 func _init(p_config: NeatConfig) -> void:
@@ -164,13 +169,17 @@ func evolve() -> void:
 	# 6. Adjust compatibility threshold
 	NeatSpecies.adjust_compatibility_threshold(species_list, config)
 
-	# Compute average fitness for signal
+	# Compute average and min fitness for signal
 	var avg_fitness: float = 0.0
+	var min_fitness: float = INF
 	for genome in population:
 		avg_fitness += genome.fitness
+		min_fitness = minf(min_fitness, genome.fitness)
 	avg_fitness /= population.size() if not population.is_empty() else 1.0
+	if min_fitness == INF:
+		min_fitness = 0.0
 
-	generation_complete.emit(generation, best_fitness, avg_fitness)
+	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
 
 
 func _cull_stagnant_species() -> void:
@@ -200,7 +209,27 @@ func get_species_count() -> int:
 	return species_list.size()
 
 
+func get_generation() -> int:
+	return generation
+
+
+func get_best_fitness() -> float:
+	return best_fitness
+
+
+func get_all_time_best_fitness() -> float:
+	return all_time_best_fitness
+
+
 func get_stats() -> Dictionary:
+	var min_fit: float = INF
+	var max_fit: float = -INF
+	var total: float = 0.0
+	for genome in population:
+		min_fit = minf(min_fit, genome.fitness)
+		max_fit = maxf(max_fit, genome.fitness)
+		total += genome.fitness
+	var avg: float = total / population.size() if not population.is_empty() else 0.0
 	return {
 		"generation": generation,
 		"population_size": population.size(),
@@ -208,4 +237,29 @@ func get_stats() -> Dictionary:
 		"best_fitness": best_fitness,
 		"all_time_best": all_time_best_fitness,
 		"compatibility_threshold": config.compatibility_threshold,
+		"current_min": min_fit if min_fit != INF else 0.0,
+		"current_max": max_fit if max_fit != -INF else 0.0,
+		"current_avg": avg,
 	}
+
+
+func save_best(path: String) -> void:
+	## Save best genome to file (stub — full serialization in future PR).
+	if all_time_best_genome:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file:
+			file.store_string("NEAT_GENOME_V1\n")
+			file.store_string("fitness=%f\n" % all_time_best_fitness)
+			file.store_string("nodes=%d\n" % all_time_best_genome.node_genes.size())
+			file.store_string("connections=%d\n" % all_time_best_genome.connection_genes.size())
+			file.close()
+
+
+func save_population(path: String) -> void:
+	## Stub for population save (full serialization in future PR).
+	pass
+
+
+func restore_backup() -> void:
+	## Stub for backup restore (NEAT uses speciation, not rollback).
+	pass

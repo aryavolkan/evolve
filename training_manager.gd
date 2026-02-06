@@ -36,6 +36,9 @@ var fitness_accumulator: Dictionary = {}  # {individual_index: [seed1_fitness, s
 var use_nsga2: bool = false
 var objective_accumulator: Dictionary = {}  # {individual_index: [{survival, kills, powerups}, ...per seed]}
 
+# NEAT topology evolution
+var use_neat: bool = false
+
 # Pre-generated events for each seed (all individuals see same scenarios)
 var generation_events_by_seed: Array = []  # [{obstacles, enemy_spawns, powerup_spawns}, ...]
 
@@ -123,6 +126,8 @@ var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 var AISensorScript = preload("res://ai/sensor.gd")
 var AIControllerScript = preload("res://ai/ai_controller.gd")
 var EvolutionScript = preload("res://ai/evolution.gd")
+var NeatEvolutionScript = preload("res://ai/neat_evolution.gd")
+var NeatNetworkScript = preload("res://ai/neat_network.gd")
 var MainScenePacked = preload("res://main.tscn")
 
 
@@ -241,19 +246,30 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	var sensor_instance = AISensorScript.new()
 	var input_size: int = sensor_instance.TOTAL_INPUTS
 
-	# Initialize evolution with sweep params
-	evolution = EvolutionScript.new(
-		population_size,
-		input_size,
-		hidden_size,
-		6,
-		elite_count,
-		mutation_rate,
-		mutation_strength,
-		crossover_rate
-	)
+	# Initialize evolution system
+	use_neat = bool(_sweep_config.get("use_neat", use_neat))
+	if use_neat:
+		var neat_config := NeatConfig.new()
+		neat_config.input_count = input_size
+		neat_config.output_count = 6
+		neat_config.population_size = population_size
+		neat_config.crossover_rate = crossover_rate
+		neat_config.weight_mutate_rate = mutation_rate
+		neat_config.weight_perturb_strength = mutation_strength
+		evolution = NeatEvolutionScript.new(neat_config)
+	else:
+		evolution = EvolutionScript.new(
+			population_size,
+			input_size,
+			hidden_size,
+			6,
+			elite_count,
+			mutation_rate,
+			mutation_strength,
+			crossover_rate
+		)
+		evolution.use_nsga2 = use_nsga2
 
-	evolution.use_nsga2 = use_nsga2
 	evolution.generation_complete.connect(_on_generation_complete)
 
 	# Clean up any leftover pause state
@@ -298,8 +314,9 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	start_next_batch()
 
 	training_status_changed.emit("Training started")
-	print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d" % [
-		population_size, max_generations, parallel_count, evals_per_individual, stagnation_limit
+	var evo_type = "NEAT" if use_neat else ("NSGA-II" if use_nsga2 else "Standard")
+	print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d, evo=%s" % [
+		population_size, max_generations, parallel_count, evals_per_individual, stagnation_limit, evo_type
 	])
 
 
@@ -579,7 +596,10 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 	# Create AI controller
 	var controller = AIControllerScript.new()
 	controller.set_player(scene_player)
-	controller.set_network(evolution.get_individual(individual_index))
+	if use_neat:
+		controller.set_network(evolution.get_network(individual_index))
+	else:
+		controller.set_network(evolution.get_individual(individual_index))
 
 	# Hide UI elements we don't need
 	var ui = scene.get_node("CanvasLayer/UI")
@@ -818,7 +838,12 @@ func update_training_stats_display() -> void:
 			var front_size = evolution.pareto_front.size() if evolution else 0
 			nsga2_text = " | NSGA-II (F0: %d)" % front_size
 
-		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s%s | Speed: %.1fx | %s" % [
+		var neat_text = ""
+		if use_neat and evolution:
+			var evo_stats = evolution.get_stats()
+			neat_text = " | NEAT (Sp: %d, Ct: %.1f)" % [evo_stats.species_count, evo_stats.compatibility_threshold]
+
+		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s%s%s | Speed: %.1fx | %s" % [
 			generation,
 			seed_info,
 			evaluated_count,
@@ -829,6 +854,7 @@ func update_training_stats_display() -> void:
 			stagnation_limit,
 			curriculum_text,
 			nsga2_text,
+			neat_text,
 			time_scale,
 			controls_hint
 		]
@@ -883,8 +909,11 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	var curriculum_info = ""
 	if curriculum_enabled:
 		curriculum_info = " | %s" % get_curriculum_label()
-	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s" % [
-		gen, best, avg, avg_kill_score, avg_powerup_score, generations_without_improvement, stagnation_limit, curriculum_info
+	var neat_info = ""
+	if use_neat and evolution:
+		neat_info = " | Sp: %d" % evolution.get_species_count()
+	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s%s" % [
+		gen, best, avg, avg_kill_score, avg_powerup_score, generations_without_improvement, stagnation_limit, curriculum_info, neat_info
 	])
 
 	# Check curriculum advancement (before saving so metrics include new stage)
@@ -924,6 +953,9 @@ func _write_metrics_for_wandb() -> void:
 		"use_nsga2": use_nsga2,
 		"pareto_front_size": evolution.pareto_front.size() if evolution and use_nsga2 else 0,
 		"hypervolume": evolution.last_hypervolume if evolution and use_nsga2 else 0.0,
+		"use_neat": use_neat,
+		"neat_species_count": evolution.get_stats().species_count if evolution and use_neat else 0,
+		"neat_compatibility_threshold": evolution.get_stats().compatibility_threshold if evolution and use_neat else 0.0,
 	}
 
 	# Use worker-specific metrics file if worker ID is set
@@ -1163,7 +1195,8 @@ func get_stats() -> Dictionary:
 		"stagnation": generations_without_improvement,
 		"stagnation_limit": stagnation_limit,
 		"curriculum_stage": curriculum_stage,
-		"curriculum_label": get_curriculum_label()
+		"curriculum_label": get_curriculum_label(),
+		"use_neat": use_neat
 	}
 
 
