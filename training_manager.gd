@@ -54,6 +54,29 @@ var stagnation_limit: int = 10
 var generations_without_improvement: int = 0
 var best_avg_fitness: float = 0.0  # Best average fitness seen so far
 
+# Curriculum learning - progressive difficulty stages
+var curriculum_enabled: bool = true
+var curriculum_stage: int = 0
+var curriculum_generations_at_stage: int = 0
+
+const CURRICULUM_STAGES: Array[Dictionary] = [
+	# Stage 0: Tiny arena, pawns only, health powerups only
+	{"arena_scale": 0.25, "enemy_types": [0], "powerup_types": [0, 6],
+	 "advancement_threshold": 5000.0, "min_generations": 3, "label": "Nursery"},
+	# Stage 1: Small arena, pawns + knights, basic powerups
+	{"arena_scale": 0.5, "enemy_types": [0, 1], "powerup_types": [0, 2, 6],
+	 "advancement_threshold": 10000.0, "min_generations": 3, "label": "Elementary"},
+	# Stage 2: Medium arena, add bishops, most powerups
+	{"arena_scale": 0.75, "enemy_types": [0, 1, 2], "powerup_types": [0, 1, 2, 4, 5, 6],
+	 "advancement_threshold": 15000.0, "min_generations": 3, "label": "Intermediate"},
+	# Stage 3: Full arena, all except queen, all powerups
+	{"arena_scale": 1.0, "enemy_types": [0, 1, 2, 3], "powerup_types": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+	 "advancement_threshold": 12000.0, "min_generations": 3, "label": "Advanced"},
+	# Stage 4: Full arena, all enemy types, all powerups (final)
+	{"arena_scale": 1.0, "enemy_types": [0, 1, 2, 3, 4], "powerup_types": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+	 "advancement_threshold": 0.0, "min_generations": 0, "label": "Final"},
+]
+
 # Generation rollback (disabled - trust elitism, accept normal variance)
 var previous_avg_fitness: float = 0.0
 var rerun_count: int = 0
@@ -242,6 +265,9 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	previous_avg_fitness = 0.0
 	rerun_count = 0
 	current_eval_seed = 0
+	curriculum_stage = 0
+	curriculum_generations_at_stage = 0
+	curriculum_enabled = bool(_sweep_config.get("curriculum_enabled", true))
 	fitness_accumulator.clear()
 	Engine.time_scale = time_scale
 
@@ -758,7 +784,11 @@ func update_training_stats_display() -> void:
 		else:
 			controls_hint = "[Click]=Fullscreen [-/+]=Speed [SPACE]=Pause [T]=Stop"
 
-		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.1fx | %s" % [
+		var curriculum_text = ""
+		if curriculum_enabled:
+			curriculum_text = " | %s" % get_curriculum_label()
+
+		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s | Speed: %.1fx | %s" % [
 			generation,
 			seed_info,
 			evaluated_count,
@@ -767,6 +797,7 @@ func update_training_stats_display() -> void:
 			all_time_best,
 			generations_without_improvement,
 			stagnation_limit,
+			curriculum_text,
 			time_scale,
 			controls_hint
 		]
@@ -818,9 +849,15 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	else:
 		generations_without_improvement += 1
 
-	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d" % [
-		gen, best, avg, avg_kill_score, avg_powerup_score, generations_without_improvement, stagnation_limit
+	var curriculum_info = ""
+	if curriculum_enabled:
+		curriculum_info = " | %s" % get_curriculum_label()
+	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s" % [
+		gen, best, avg, avg_kill_score, avg_powerup_score, generations_without_improvement, stagnation_limit, curriculum_info
 	])
+
+	# Check curriculum advancement (before saving so metrics include new stage)
+	check_curriculum_advancement()
 
 	# Auto-save every generation
 	evolution.save_best(BEST_NETWORK_PATH)
@@ -851,6 +888,8 @@ func _write_metrics_for_wandb() -> void:
 		"evals_per_individual": evals_per_individual,
 		"time_scale": time_scale,
 		"training_complete": training_complete,
+		"curriculum_stage": curriculum_stage,
+		"curriculum_label": get_curriculum_label(),
 	}
 
 	# Use worker-specific metrics file if worker ID is set
@@ -862,6 +901,78 @@ func _write_metrics_for_wandb() -> void:
 	if file:
 		file.store_string(JSON.stringify(metrics))
 		file.close()
+
+
+# Curriculum learning functions
+func get_current_curriculum_config() -> Dictionary:
+	## Return the curriculum config for the current stage.
+	## Returns empty dict if curriculum is disabled.
+	if not curriculum_enabled:
+		return {}
+	if curriculum_stage < 0 or curriculum_stage >= CURRICULUM_STAGES.size():
+		return {}
+	return CURRICULUM_STAGES[curriculum_stage]
+
+
+func check_curriculum_advancement() -> bool:
+	## Check if agents should advance to the next curriculum stage.
+	## Called after each generation completes. Returns true if advanced.
+	if not curriculum_enabled:
+		return false
+	if curriculum_stage >= CURRICULUM_STAGES.size() - 1:
+		return false  # Already at final stage
+
+	curriculum_generations_at_stage += 1
+
+	var stage = CURRICULUM_STAGES[curriculum_stage]
+	var min_gens: int = stage.get("min_generations", 3)
+
+	# Need minimum generations to assess performance
+	if curriculum_generations_at_stage < min_gens:
+		return false
+
+	var threshold: float = stage.get("advancement_threshold", 0.0)
+	if threshold <= 0.0:
+		return false  # No threshold = stay here
+
+	# Check rolling average fitness over last min_gens generations
+	if history_avg_fitness.size() < min_gens:
+		return false
+
+	var recent_avg: float = 0.0
+	for i in range(min_gens):
+		recent_avg += history_avg_fitness[history_avg_fitness.size() - 1 - i]
+	recent_avg /= min_gens
+
+	if recent_avg >= threshold:
+		var old_stage = curriculum_stage
+		curriculum_stage += 1
+		curriculum_generations_at_stage = 0
+		# Reset stagnation counter on advancement (new stage = fresh start)
+		generations_without_improvement = 0
+		best_avg_fitness = 0.0
+		print("🎓 CURRICULUM ADVANCEMENT: Stage %d (%s) → Stage %d (%s) | rolling avg: %.0f ≥ %.0f" % [
+			old_stage, CURRICULUM_STAGES[old_stage].label,
+			curriculum_stage, CURRICULUM_STAGES[curriculum_stage].label,
+			recent_avg, threshold
+		])
+		return true
+
+	return false
+
+
+func get_curriculum_label() -> String:
+	## Get a display label for the current curriculum stage.
+	if not curriculum_enabled:
+		return ""
+	var config = get_current_curriculum_config()
+	if config.is_empty():
+		return ""
+	return "Stage %d/%d: %s (%.0f%%)" % [
+		curriculum_stage, CURRICULUM_STAGES.size() - 1,
+		config.get("label", "?"),
+		config.get("arena_scale", 1.0) * 100.0
+	]
 
 
 # Playback mode functions (unchanged from before)
@@ -1016,7 +1127,9 @@ func get_stats() -> Dictionary:
 		"playback_generation": playback_generation,
 		"max_playback_generation": max_playback_generation,
 		"stagnation": generations_without_improvement,
-		"stagnation_limit": stagnation_limit
+		"stagnation_limit": stagnation_limit,
+		"curriculum_stage": curriculum_stage,
+		"curriculum_label": get_curriculum_label()
 	}
 
 
