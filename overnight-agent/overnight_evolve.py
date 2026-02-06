@@ -42,6 +42,9 @@ GODOT_USER_DIR = os.path.expanduser("~/Library/Application Support/Godot/app_use
 # Generate unique worker ID for this process
 WORKER_ID = str(uuid.uuid4())[:8]
 
+# Global flag for visible mode (set by argparse, used by train())
+VISIBLE_MODE = False
+
 
 def get_metrics_path(worker_id=None):
     """Get metrics path, optionally with worker-specific suffix"""
@@ -70,8 +73,8 @@ def write_config_for_godot(config, worker_id=None):
         json.dump(config_dict, f)
 
 
-def run_godot_training(timeout_minutes=30, worker_id=None):
-    """Launch Godot in headless training mode"""
+def run_godot_training(timeout_minutes=30, worker_id=None, visible=False):
+    """Launch Godot in training mode (headless by default, or with window if visible=True)"""
 
     metrics_path = get_metrics_path(worker_id)
 
@@ -79,15 +82,13 @@ def run_godot_training(timeout_minutes=30, worker_id=None):
     if os.path.exists(metrics_path):
         os.remove(metrics_path)
 
-    # Run Godot headless with auto-training flag
-    cmd = [
-        GODOT_PATH,
-        "--path", PROJECT_PATH,
-        "--headless",  # No window
-        "--rendering-driver", "dummy",  # Skip rendering entirely
-        "--",  # Pass args to game
-        "--auto-train",  # Custom flag for your game to detect
-    ]
+    # Build command
+    cmd = [GODOT_PATH, "--path", PROJECT_PATH]
+
+    if not visible:
+        cmd.extend(["--headless", "--rendering-driver", "dummy"])
+
+    cmd.extend(["--", "--auto-train"])
 
     # Add worker ID if running multiple instances
     if worker_id:
@@ -192,8 +193,10 @@ def train():
     # Write config for Godot to read
     write_config_for_godot(config, worker_id)
 
-    # Run training (60 min should cover 50 generations with buffer)
-    results = run_godot_training(timeout_minutes=60, worker_id=worker_id)
+    # Scale timeout with population size: larger populations need more time per generation
+    # Formula: 30 base + 0.6 min per individual (pop 50→60min, pop 100→90min, pop 200→150min)
+    timeout_minutes = int(30 + config.population_size * 0.6)
+    results = run_godot_training(timeout_minutes=timeout_minutes, worker_id=worker_id, visible=VISIBLE_MODE)
 
     # Log comprehensive summary statistics
     wandb.summary['final_best_fitness'] = results['best_fitness']
@@ -217,7 +220,11 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='evolve-neuroevolution')
     parser.add_argument('--sweep-id', type=str, default=None, help='Join existing sweep instead of creating new one')
     parser.add_argument('--count', type=int, default=None, help='Number of runs for this agent (default: unlimited)')
+    parser.add_argument('--visible', action='store_true', help='Run with Godot window visible (default: headless)')
     args = parser.parse_args()
+
+    global VISIBLE_MODE
+    VISIBLE_MODE = args.visible
 
     if args.sweep_id:
         # Join existing sweep
