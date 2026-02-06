@@ -311,7 +311,7 @@ Press **T** to enter training mode. The screen displays 48 parallel arenas in a 
 
 **Features:**
 - Speed adjustable 1x-8x with `[-/+]` keys
-- Early stopping after 3 generations without improvement
+- Early stopping after 10 generations without improvement
 - Auto-saves best network every generation
 - Press **T** again or **H** to stop and return to human mode
 

@@ -223,8 +223,8 @@ if __name__ == '__main__':
     parser.add_argument('--visible', action='store_true', help='Run with Godot window visible (default: headless)')
     args = parser.parse_args()
 
-    global VISIBLE_MODE
-    VISIBLE_MODE = args.visible
+    if args.visible:
+        VISIBLE_MODE = True
 
     if args.sweep_id:
         # Join existing sweep
