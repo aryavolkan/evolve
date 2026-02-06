@@ -88,6 +88,9 @@ var pause_overlay: Control = null
 var saved_time_scale: float = 1.0
 var training_complete: bool = false  # Shows results screen at end
 
+# Fullscreen arena view
+var fullscreen_arena_index: int = -1  # -1 = grid view, 0+ = fullscreen arena slot
+
 # Preloaded scripts
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 var AISensorScript = preload("res://ai/sensor.gd")
@@ -101,6 +104,33 @@ func _ready() -> void:
 
 
 var _space_was_pressed: bool = false
+
+
+func _input(event: InputEvent) -> void:
+	if current_mode != Mode.TRAINING:
+		return
+
+	# ESC exits fullscreen
+	if event.is_action_pressed("ui_cancel") and fullscreen_arena_index >= 0:
+		exit_fullscreen()
+		get_viewport().set_input_as_handled()
+		return
+
+	# Mouse click toggles fullscreen
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var clicked_index = get_arena_at_position(event.position)
+
+		if fullscreen_arena_index >= 0:
+			# In fullscreen - only exit if clicking outside the arena
+			if clicked_index != fullscreen_arena_index:
+				exit_fullscreen()
+				get_viewport().set_input_as_handled()
+		else:
+			# In grid view - enter fullscreen if clicking on an arena
+			if clicked_index >= 0:
+				enter_fullscreen(clicked_index)
+				get_viewport().set_input_as_handled()
+
 
 func _process(_delta: float) -> void:
 	# Handle SPACE for pause toggle (runs even when paused due to PROCESS_MODE_ALWAYS)
@@ -259,6 +289,9 @@ func stop_training() -> void:
 		destroy_pause_overlay()
 		is_paused = false
 
+	# Reset fullscreen state
+	fullscreen_arena_index = -1
+
 	current_mode = Mode.HUMAN
 	Engine.time_scale = 1.0
 
@@ -378,6 +411,11 @@ func update_grid_layout() -> void:
 	# Ensure container is correctly sized first
 	_update_container_size()
 
+	# If in fullscreen mode, apply fullscreen layout instead
+	if fullscreen_arena_index >= 0:
+		_apply_fullscreen_layout()
+		return
+
 	var size = get_window_size()
 	var grid = get_grid_dimensions()
 	var cols = grid.cols
@@ -398,10 +436,73 @@ func update_grid_layout() -> void:
 		eval_instances[i].container.size = Vector2(arena_w, arena_h)
 
 
+func get_arena_at_position(pos: Vector2) -> int:
+	## Return the slot index of the arena at the given screen position, or -1 if none.
+	for i in eval_instances.size():
+		var container = eval_instances[i].container
+		if not is_instance_valid(container):
+			continue
+		var rect = Rect2(container.position, container.size)
+		if rect.has_point(pos):
+			return i
+	return -1
+
+
+func enter_fullscreen(slot_index: int) -> void:
+	## Expand the arena at slot_index to fullscreen.
+	if slot_index < 0 or slot_index >= eval_instances.size():
+		return
+
+	fullscreen_arena_index = slot_index
+
+	# Hide all other arena containers
+	for i in eval_instances.size():
+		if i != slot_index and is_instance_valid(eval_instances[i].container):
+			eval_instances[i].container.visible = false
+
+	# Emit size_changed to trigger proper layout update
+	get_tree().root.size_changed.emit()
+
+
+func exit_fullscreen() -> void:
+	## Return from fullscreen to grid view.
+	fullscreen_arena_index = -1
+
+	# Show all arena containers
+	for i in eval_instances.size():
+		if is_instance_valid(eval_instances[i].container):
+			eval_instances[i].container.visible = true
+
+	# Emit size_changed to trigger proper layout update
+	get_tree().root.size_changed.emit()
+
+
+func _apply_fullscreen_layout() -> void:
+	## Position the fullscreen arena to fill the screen below the stats bar.
+	if fullscreen_arena_index < 0 or fullscreen_arena_index >= eval_instances.size():
+		return
+
+	var container = eval_instances[fullscreen_arena_index].container
+	if not is_instance_valid(container):
+		return
+
+	var win_size = get_window_size()
+	var top_margin = 40
+	var gap = 4
+
+	var new_pos = Vector2(gap, top_margin + gap)
+	var new_size = Vector2(win_size.x - gap * 2, win_size.y - top_margin - gap * 2)
+
+	# Set position and size (same as grid layout does)
+	container.position = new_pos
+	container.size = new_size
+
+
 func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Dictionary:
 	## Create a SubViewport with a game instance for evaluation.
 	var container = SubViewportContainer.new()
 	container.stretch = true
+	container.mouse_filter = Control.MOUSE_FILTER_PASS  # Allow clicks to pass through for fullscreen toggle
 	training_container.add_child(container)
 
 	# Set initial position and size immediately (don't wait for deferred update)
@@ -489,6 +590,14 @@ func start_next_batch() -> void:
 		var instance = create_eval_instance(i, grid_x, grid_y)
 		eval_instances.append(instance)
 
+	# Restore fullscreen state if active
+	if fullscreen_arena_index >= 0:
+		# Hide all except fullscreen arena
+		for i in eval_instances.size():
+			if i != fullscreen_arena_index:
+				eval_instances[i].container.visible = false
+		_apply_fullscreen_layout()
+
 
 func replace_eval_instance(slot_index: int, individual_index: int) -> void:
 	## Replace a completed evaluation slot with a new individual.
@@ -504,6 +613,15 @@ func replace_eval_instance(slot_index: int, individual_index: int) -> void:
 	# Create new instance in same slot
 	var new_instance = create_eval_instance(individual_index, grid_x, grid_y)
 	eval_instances[slot_index] = new_instance
+
+	# Handle fullscreen mode
+	if fullscreen_arena_index >= 0:
+		if slot_index == fullscreen_arena_index:
+			# This is the fullscreen slot - resize to fullscreen
+			_apply_fullscreen_layout()
+		else:
+			# Not the fullscreen slot - hide it
+			new_instance.container.visible = false
 
 
 func cleanup_training_instances() -> void:
@@ -630,7 +748,15 @@ func update_training_stats_display() -> void:
 				best_current = eval.scene.score
 
 		var seed_info = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
-		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.1fx | [SPACE]=Pause [-/+]=Speed [T]=Stop" % [
+
+		# Show different controls hint based on fullscreen state
+		var controls_hint: String
+		if fullscreen_arena_index >= 0:
+			controls_hint = "[Click/ESC]=Grid [-/+]=Speed [SPACE]=Pause [T]=Stop"
+		else:
+			controls_hint = "[Click]=Fullscreen [-/+]=Speed [SPACE]=Pause [T]=Stop"
+
+		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d | Speed: %.1fx | %s" % [
 			generation,
 			seed_info,
 			evaluated_count,
@@ -639,7 +765,8 @@ func update_training_stats_display() -> void:
 			all_time_best,
 			generations_without_improvement,
 			stagnation_limit,
-			time_scale
+			time_scale,
+			controls_hint
 		]
 
 
