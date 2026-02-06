@@ -1,0 +1,16 @@
+# Godot cache
+.godot/
+
+# Godot UID files
+*.uid
+
+# Import cache (already in .godot, but just in case)
+*.import
+
+# Claude Code
+.claude/
+
+# W&B local data
+wandb/
+overnight-agent/wandb_logs/
+.venv/

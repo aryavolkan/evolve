@@ -30,7 +30,8 @@ sweep_config = {
         # Training
         'max_generations': {'value': 50},
         'evals_per_individual': {'values': [1, 2, 3]},
-        'time_scale': {'value': 8.0},  # 8x speed for faster training
+        'time_scale': {'value': 16.0},  # 16x speed for faster training
+        'parallel_count': {'value': 10},  # Reduced from 20 to prevent memory crashes
     }
 }
 
@@ -73,7 +74,7 @@ def write_config_for_godot(config, worker_id=None):
         json.dump(config_dict, f)
 
 
-def run_godot_training(timeout_minutes=30, worker_id=None, visible=False):
+def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_retries=2):
     """Launch Godot in training mode (headless by default, or with window if visible=True)"""
 
     metrics_path = get_metrics_path(worker_id)
@@ -96,21 +97,39 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False):
 
     print(f"Starting Godot training (timeout: {timeout_minutes}m, worker: {worker_id or 'default'})...")
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
     start_time = time.time()
     last_gen = -1
     best_fitness = 0
+    retries = 0
 
     # Track metrics history for summary stats
     fitness_history = []
     avg_fitness_history = []
 
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
     while time.time() - start_time < timeout_minutes * 60:
-        # Check if process died
+        # Check if process died unexpectedly
         if proc.poll() is not None:
-            print("Godot process ended")
-            break
+            exit_code = proc.returncode
+            elapsed = time.time() - start_time
+            # If it died early (< 80% of expected time) and we have retries left, restart
+            if exit_code != 0 and retries < max_retries and elapsed < timeout_minutes * 60 * 0.8:
+                retries += 1
+                stderr_out = proc.stderr.read().decode('utf-8', errors='replace')[-500:]
+                print(f"Godot crashed (exit {exit_code}, {elapsed:.0f}s in). Retry {retries}/{max_retries}...")
+                if stderr_out.strip():
+                    print(f"  stderr: {stderr_out.strip()[:200]}")
+                wandb.log({"crash_retry": retries}, step=last_gen if last_gen >= 0 else 0)
+                time.sleep(3)  # Brief cooldown before retry
+                # Clear stale metrics
+                if os.path.exists(metrics_path):
+                    os.remove(metrics_path)
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                continue
+            else:
+                print(f"Godot process ended (exit {exit_code}, {retries} retries used)")
+                break
 
         # Read metrics
         try:
@@ -193,9 +212,10 @@ def train():
     # Write config for Godot to read
     write_config_for_godot(config, worker_id)
 
-    # Scale timeout with population size: larger populations need more time per generation
-    # Formula: 30 base + 0.6 min per individual (pop 50→60min, pop 100→90min, pop 200→150min)
-    timeout_minutes = int(30 + config.population_size * 0.6)
+    # Scale timeout with population size and evals_per_individual
+    # More evals per individual = more time needed
+    evals = config.get('evals_per_individual', 1)
+    timeout_minutes = int(30 + config.population_size * 0.6 * evals)
     results = run_godot_training(timeout_minutes=timeout_minutes, worker_id=worker_id, visible=VISIBLE_MODE)
 
     # Log comprehensive summary statistics

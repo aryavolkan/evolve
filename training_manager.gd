@@ -202,6 +202,7 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	max_generations = int(_sweep_config.get("max_generations", generations))
 	evals_per_individual = int(_sweep_config.get("evals_per_individual", evals_per_individual))
 	time_scale = float(_sweep_config.get("time_scale", 16.0))  # Default to 16x speed for training
+	parallel_count = int(_sweep_config.get("parallel_count", parallel_count))  # Configurable parallel arenas
 
 	var hidden_size = int(_sweep_config.get("hidden_size", 32))
 	var elite_count = int(_sweep_config.get("elite_count", 10))
