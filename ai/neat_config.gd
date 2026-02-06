@@ -9,6 +9,8 @@ class_name NeatConfig
 
 var input_count: int = 86    ## From sensor.gd TOTAL_INPUTS
 var output_count: int = 6     ## move_x, move_y, shoot_up/down/left/right
+var use_bias: bool = false    ## Add a bias node to inputs
+var allow_recurrent: bool = false  ## Allow recurrent (backward) connections
 
 # ============================================================
 # COMPATIBILITY / SPECIATION
@@ -74,6 +76,8 @@ func duplicate() -> NeatConfig:
 	var copy := NeatConfig.new()
 	copy.input_count = input_count
 	copy.output_count = output_count
+	copy.use_bias = use_bias
+	copy.allow_recurrent = allow_recurrent
 	copy.compatibility_threshold = compatibility_threshold
 	copy.c1_excess = c1_excess
 	copy.c2_disjoint = c2_disjoint
