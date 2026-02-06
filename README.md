@@ -2,6 +2,8 @@
 
 A 2D arcade survival game built with Godot 4.5+ where you dodge chess-piece enemies, collect power-ups, and compete for high scores — or let a neuroevolution AI learn to play for you.
 
+![Gameplay](assets/gameplay.png)
+
 ## Gameplay
 
 - Move with **arrow keys**, shoot with **WASD**
@@ -24,6 +26,8 @@ godot --path . --play
 ```
 
 ## AI Training
+
+![AI Training](assets/training.png)
 
 Neural networks learn to play through neuroevolution — a population of agents evolves over generations using tournament selection, crossover, and mutation.
 
@@ -54,7 +58,6 @@ Run hyperparameter sweeps with Weights & Biases:
 
 ```bash
 cd overnight-agent
-source venv/bin/activate
 python overnight_evolve.py --project evolve-neuroevolution-new
 ```
 
