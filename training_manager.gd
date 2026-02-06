@@ -39,6 +39,11 @@ var objective_accumulator: Dictionary = {}  # {individual_index: [{survival, kil
 # NEAT topology evolution
 var use_neat: bool = false
 
+# MAP-Elites quality-diversity archive
+var use_map_elites: bool = true
+var map_elites_archive: MapElites = null
+var behavior_accumulator: Dictionary = {}  # {individual_index: [{kills, powerups_collected, survival_time}, ...per seed]}
+
 # Pre-generated events for each seed (all individuals see same scenarios)
 var generation_events_by_seed: Array = []  # [{obstacles, enemy_spawns, powerup_spawns}, ...]
 
@@ -292,6 +297,10 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	use_nsga2 = bool(_sweep_config.get("use_nsga2", false))
 	fitness_accumulator.clear()
 	objective_accumulator.clear()
+	behavior_accumulator.clear()
+	use_map_elites = bool(_sweep_config.get("use_map_elites", use_map_elites))
+	if use_map_elites:
+		map_elites_archive = MapElites.new(int(_sweep_config.get("map_elites_grid_size", 20)))
 	Engine.time_scale = time_scale
 
 	# Clear metric history
@@ -736,6 +745,16 @@ func _process_parallel_training(delta: float) -> void:
 				objective_accumulator[eval.index] = []
 			objective_accumulator[eval.index].append(Vector3(survival_score, kill_score, powerup_score))
 
+			# Collect behavior stats for MAP-Elites
+			if use_map_elites:
+				if not behavior_accumulator.has(eval.index):
+					behavior_accumulator[eval.index] = []
+				behavior_accumulator[eval.index].append({
+					"kills": eval.scene.kills,
+					"powerups_collected": eval.scene.powerups_collected,
+					"survival_time": eval.scene.survival_time,
+				})
+
 			# Accumulate stats for this generation (across all seeds)
 			generation_total_kill_score += kill_score
 			generation_total_powerup_score += powerup_score
@@ -774,6 +793,10 @@ func _process_parallel_training(delta: float) -> void:
 					avg_fitness /= scores.size()
 					evolution.set_fitness(idx, avg_fitness)
 
+			# Add to MAP-Elites archive before evolve() mutates the population
+			if use_map_elites and map_elites_archive:
+				_update_map_elites_archive()
+
 			# Debug: print fitness distribution before evolving
 			var stats = evolution.get_stats()
 			print("Gen %d complete: min=%.0f avg=%.0f max=%.0f best_ever=%.0f" % [
@@ -787,6 +810,7 @@ func _process_parallel_training(delta: float) -> void:
 			current_eval_seed = 0
 			fitness_accumulator.clear()
 			objective_accumulator.clear()
+			behavior_accumulator.clear()
 			evaluated_count = 0
 			next_individual = 0
 
@@ -843,7 +867,11 @@ func update_training_stats_display() -> void:
 			var evo_stats = evolution.get_stats()
 			neat_text = " | NEAT (Sp: %d, Ct: %.1f)" % [evo_stats.species_count, evo_stats.compatibility_threshold]
 
-		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s%s%s | Speed: %.1fx | %s" % [
+		var me_text = ""
+		if use_map_elites and map_elites_archive:
+			me_text = " | ME: %d/%d" % [map_elites_archive.get_occupied_count(), map_elites_archive.grid_size * map_elites_archive.grid_size]
+
+		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s%s%s%s | Speed: %.1fx | %s" % [
 			generation,
 			seed_info,
 			evaluated_count,
@@ -855,6 +883,7 @@ func update_training_stats_display() -> void:
 			curriculum_text,
 			nsga2_text,
 			neat_text,
+			me_text,
 			time_scale,
 			controls_hint
 		]
@@ -912,8 +941,11 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	var neat_info = ""
 	if use_neat and evolution:
 		neat_info = " | Sp: %d" % evolution.get_species_count()
-	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s%s" % [
-		gen, best, avg, avg_kill_score, avg_powerup_score, generations_without_improvement, stagnation_limit, curriculum_info, neat_info
+	var me_info = ""
+	if use_map_elites and map_elites_archive:
+		me_info = " | ME: %d (%.0f%%)" % [map_elites_archive.get_occupied_count(), map_elites_archive.get_coverage() * 100]
+	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s%s%s" % [
+		gen, best, avg, avg_kill_score, avg_powerup_score, generations_without_improvement, stagnation_limit, curriculum_info, neat_info, me_info
 	])
 
 	# Check curriculum advancement (before saving so metrics include new stage)
@@ -930,6 +962,48 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	if generations_without_improvement >= stagnation_limit:
 		print("Early stopping: No improvement for %d generations" % stagnation_limit)
 		show_training_complete("Early stopping: No improvement for %d generations" % stagnation_limit)
+
+
+func _update_map_elites_archive() -> void:
+	## Add current generation's individuals to the MAP-Elites archive.
+	## Called after fitness is set but before evolve() mutates the population.
+	for idx in population_size:
+		var beh_list: Array = behavior_accumulator.get(idx, [])
+		if beh_list.is_empty():
+			continue
+		# Average behavior stats across seeds
+		var avg_kills: float = 0.0
+		var avg_powerups: float = 0.0
+		var avg_survival: float = 0.0
+		for s in beh_list:
+			avg_kills += s.kills
+			avg_powerups += s.powerups_collected
+			avg_survival += s.survival_time
+		avg_kills /= beh_list.size()
+		avg_powerups /= beh_list.size()
+		avg_survival /= beh_list.size()
+
+		var behavior: Vector2 = MapElites.calculate_behavior({
+			"kills": avg_kills,
+			"powerups_collected": avg_powerups,
+			"survival_time": avg_survival,
+		})
+
+		# Average fitness across seeds
+		var fit_list: Array = fitness_accumulator.get(idx, [0.0])
+		var avg_fitness: float = 0.0
+		for f in fit_list:
+			avg_fitness += f
+		avg_fitness /= fit_list.size()
+
+		# Clone the solution before evolution mutates it
+		var solution
+		if use_neat:
+			solution = evolution.get_individual(idx).copy()
+		else:
+			solution = evolution.get_individual(idx).clone()
+
+		map_elites_archive.add(solution, behavior, avg_fitness)
 
 
 func _write_metrics_for_wandb() -> void:
@@ -956,6 +1030,10 @@ func _write_metrics_for_wandb() -> void:
 		"use_neat": use_neat,
 		"neat_species_count": evolution.get_stats().species_count if evolution and use_neat else 0,
 		"neat_compatibility_threshold": evolution.get_stats().compatibility_threshold if evolution and use_neat else 0.0,
+		"use_map_elites": use_map_elites,
+		"map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
+		"map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
+		"map_elites_best": map_elites_archive.get_best_fitness() if map_elites_archive else 0.0,
 	}
 
 	# Use worker-specific metrics file if worker ID is set
@@ -1196,7 +1274,10 @@ func get_stats() -> Dictionary:
 		"stagnation_limit": stagnation_limit,
 		"curriculum_stage": curriculum_stage,
 		"curriculum_label": get_curriculum_label(),
-		"use_neat": use_neat
+		"use_neat": use_neat,
+		"use_map_elites": use_map_elites,
+		"map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
+		"map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
 	}
 
 
