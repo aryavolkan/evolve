@@ -7,7 +7,7 @@ extends RefCounted
 signal generation_complete(generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
 
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
-# NSGA2 is available via class_name NSGA2 (ai/nsga2.gd)
+const NSGA2 = preload("res://ai/nsga2.gd")
 
 var population: Array = []
 var fitness_scores: PackedFloat32Array

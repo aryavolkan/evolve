@@ -1,4 +1,5 @@
 extends CharacterBody2D
+class_name Enemy
 
 # Chess piece types with their point values
 enum Type { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
