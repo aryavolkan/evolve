@@ -409,12 +409,12 @@ func _test_evolution_nsga2_preserves_elites() -> void:
 	var found_elite := false
 	for i in evo.elite_count:
 		var w: PackedFloat32Array = evo.get_individual(i).get_weights()
-		var match := true
+		var weights_match := true
 		for j in w.size():
 			if abs(w[j] - elite_weights[j]) > 0.0001:
-				match = false
+				weights_match = false
 				break
-		if match:
+		if weights_match:
 			found_elite = true
 			break
 	assert_true(found_elite, "Dominant individual should be preserved as elite")
@@ -466,7 +466,7 @@ func _test_evolution_nsga2_stats() -> void:
 	for i in 10:
 		evo.set_objectives(i, Vector3(float(i), float(10 - i), 5.0))
 	evo.evolve()
-	var stats := evo.get_stats()
+	var stats: Dictionary = evo.get_stats()
 	assert_true(stats.has("pareto_front_size"), "Stats should include pareto_front_size")
 	assert_true(stats.has("hypervolume"), "Stats should include hypervolume")
 	assert_true(stats.has("num_fronts"), "Stats should include num_fronts")
