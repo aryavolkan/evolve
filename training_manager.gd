@@ -596,7 +596,8 @@ func start_next_batch() -> void:
 		for i in eval_instances.size():
 			if i != fullscreen_arena_index:
 				eval_instances[i].container.visible = false
-		_apply_fullscreen_layout()
+		# Trigger layout update
+		get_tree().root.size_changed.emit()
 
 
 func replace_eval_instance(slot_index: int, individual_index: int) -> void:
@@ -617,8 +618,8 @@ func replace_eval_instance(slot_index: int, individual_index: int) -> void:
 	# Handle fullscreen mode
 	if fullscreen_arena_index >= 0:
 		if slot_index == fullscreen_arena_index:
-			# This is the fullscreen slot - resize to fullscreen
-			_apply_fullscreen_layout()
+			# This is the fullscreen slot - trigger layout update
+			get_tree().root.size_changed.emit()
 		else:
 			# Not the fullscreen slot - hide it
 			new_instance.container.visible = false
