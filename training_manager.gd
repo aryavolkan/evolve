@@ -300,9 +300,10 @@ func generate_all_seed_events() -> void:
 	## Pre-generate events for all evaluation seeds this generation.
 	generation_events_by_seed.clear()
 	var MainScene = load("res://main.gd")
+	var curr_config = get_current_curriculum_config()
 	for seed_idx in evals_per_individual:
 		var seed_val = generation * 1000 + seed_idx  # Unique seed per generation+seed combo
-		var events = MainScene.generate_random_events(seed_val)
+		var events = MainScene.generate_random_events(seed_val, curr_config)
 		generation_events_by_seed.append(events)
 
 
@@ -555,7 +556,7 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 
 	# Instantiate game scene with preset events for current seed
 	var scene: Node2D = MainScenePacked.instantiate()
-	scene.set_training_mode(true)  # Simplified: only pawns
+	scene.set_training_mode(true, get_current_curriculum_config())
 	if generation_events_by_seed.size() > current_eval_seed:
 		var events = generation_events_by_seed[current_eval_seed]
 		# Deep copy spawn arrays since they get modified during gameplay
@@ -1097,7 +1098,7 @@ func reset_game() -> void:
 	main_scene.name_entry.visible = false
 	main_scene.name_prompt.visible = false
 
-	var arena_center = Vector2(main_scene.ARENA_WIDTH / 2, main_scene.ARENA_HEIGHT / 2)
+	var arena_center = Vector2(main_scene.effective_arena_width / 2, main_scene.effective_arena_height / 2)
 	player.position = arena_center
 	player.is_hit = false
 	player.is_speed_boosted = false
