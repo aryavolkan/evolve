@@ -264,6 +264,103 @@ func compatibility(other: NeatGenome, p_config: NeatConfig) -> float:
 
 
 # ============================================================
+# CROSSOVER
+# ============================================================
+
+static func crossover(parent_a: NeatGenome, parent_b: NeatGenome) -> NeatGenome:
+	## NEAT crossover: align genes by innovation number.
+	## Matching genes inherited randomly from either parent.
+	## Disjoint/excess genes inherited from the fitter parent.
+	## If equal fitness, inherit disjoint/excess from both.
+	var child := NeatGenome.new()
+	child.config = parent_a.config
+	child.innovation_tracker = parent_a.innovation_tracker
+
+	# Ensure parent_a is the fitter (or equal) parent
+	var a := parent_a
+	var b := parent_b
+	if b.fitness > a.fitness:
+		a = parent_b
+		b = parent_a
+
+	var equal_fitness: bool = absf(a.fitness - b.fitness) < 0.001
+
+	# Build innovation → connection maps
+	var map_a: Dictionary = {}
+	for conn in a.connection_genes:
+		map_a[conn.innovation] = conn
+	var map_b: Dictionary = {}
+	for conn in b.connection_genes:
+		map_b[conn.innovation] = conn
+
+	# Collect all innovation numbers
+	var all_innovs: Dictionary = {}
+	for key in map_a:
+		all_innovs[key] = true
+	for key in map_b:
+		all_innovs[key] = true
+
+	# Inherit connection genes
+	var child_conns: Array = []
+	for innov in all_innovs:
+		var in_a: bool = map_a.has(innov)
+		var in_b: bool = map_b.has(innov)
+
+		if in_a and in_b:
+			# Matching gene: randomly pick from either parent
+			var source = map_a[innov] if randf() < 0.5 else map_b[innov]
+			var gene_copy = source.copy()
+			# If disabled in either parent, chance it stays disabled
+			if not map_a[innov].enabled or not map_b[innov].enabled:
+				gene_copy.enabled = randf() >= a.config.disabled_gene_inherit_rate
+			child_conns.append(gene_copy)
+		elif in_a:
+			# Disjoint/excess from fitter parent — always inherit
+			child_conns.append(map_a[innov].copy())
+		elif in_b and equal_fitness:
+			# Disjoint/excess from other parent — only if equal fitness
+			child_conns.append(map_b[innov].copy())
+		# else: disjoint/excess from less fit parent — skip
+
+	child.connection_genes = child_conns
+
+	# Inherit node genes: collect all node IDs referenced by child connections,
+	# plus all input/output nodes from the fitter parent
+	var needed_node_ids: Dictionary = {}
+	for node in a.node_genes:
+		if node.type == 0 or node.type == 2:  # input or output
+			needed_node_ids[node.id] = true
+	for conn in child_conns:
+		needed_node_ids[conn.in_id] = true
+		needed_node_ids[conn.out_id] = true
+
+	# Build node maps from both parents
+	var node_map_a: Dictionary = {}
+	for node in a.node_genes:
+		node_map_a[node.id] = node
+	var node_map_b: Dictionary = {}
+	for node in b.node_genes:
+		node_map_b[node.id] = node
+
+	var child_nodes: Array = []
+	for node_id in needed_node_ids:
+		if node_map_a.has(node_id):
+			child_nodes.append(node_map_a[node_id].copy())
+		elif node_map_b.has(node_id):
+			child_nodes.append(node_map_b[node_id].copy())
+
+	# Sort nodes: inputs first, then hidden, then outputs
+	child_nodes.sort_custom(func(x, y):
+		if x.type != y.type:
+			return x.type < y.type
+		return x.id < y.id
+	)
+	child.node_genes = child_nodes
+
+	return child
+
+
+# ============================================================
 # COPY
 # ============================================================
 
