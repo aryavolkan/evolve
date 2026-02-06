@@ -1,0 +1,108 @@
+{
+  "godot_version": "4.6-stable (official)",
+  "scenarios": [
+    {
+      "elapsed_ms": 4815,
+      "errors": [],
+      "frames": 300,
+      "name": "boot_and_run",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 15.5277777777778,
+        "max_frame_ms": 133.480666666667,
+        "peak_memory_mb": 26.306170463562
+      }
+    },
+    {
+      "elapsed_ms": 2156,
+      "errors": [],
+      "frames": 120,
+      "name": "player_movement",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 17.9852111111111,
+        "max_frame_ms": 55.7046666666668,
+        "peak_memory_mb": 26.5527296066284
+      }
+    },
+    {
+      "elapsed_ms": 2895,
+      "errors": [],
+      "frames": 180,
+      "name": "shooting_mechanics",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 16.1088981481481,
+        "max_frame_ms": 55.2336666666665,
+        "peak_memory_mb": 26.6728048324585
+      }
+    },
+    {
+      "elapsed_ms": 10546,
+      "errors": [],
+      "frames": 600,
+      "name": "enemy_spawning",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 17.5702883333333,
+        "max_frame_ms": 91.6666666666667,
+        "peak_memory_mb": 26.8453207015991
+      }
+    },
+    {
+      "elapsed_ms": 9447,
+      "errors": [],
+      "frames": 600,
+      "name": "powerup_collection",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 15.75,
+        "max_frame_ms": 56.02,
+        "peak_memory_mb": 26.8453207015991
+      }
+    },
+    {
+      "elapsed_ms": 2208,
+      "errors": [],
+      "frames": 120,
+      "name": "player_death_and_respawn",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 18.4027777777778,
+        "max_frame_ms": 55.3060000000005,
+        "peak_memory_mb": 26.9343938827515
+      }
+    },
+    {
+      "elapsed_ms": 5401,
+      "errors": [],
+      "frames": 300,
+      "name": "score_tracking",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 17.8938344444444,
+        "max_frame_ms": 131.878000000001,
+        "peak_memory_mb": 26.9343938827515
+      }
+    },
+    {
+      "elapsed_ms": 13323,
+      "errors": [],
+      "frames": 900,
+      "name": "performance_stress",
+      "passed": true,
+      "performance": {
+        "avg_frame_ms": 14.7938807407407,
+        "max_frame_ms": 56.593333333334,
+        "peak_memory_mb": 27.481104850769
+      }
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "failed": 0,
+    "passed": 8,
+    "total": 8
+  },
+  "timestamp": "2026-02-06T13:10:22"
+}
