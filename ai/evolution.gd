@@ -18,6 +18,7 @@ var use_nsga2: bool = false
 var objective_scores: Array = []  # Array of Vector3 per individual (survival, kills, powerups)
 var pareto_front: Array = []  # Current generation's Pareto front [{index, objectives}]
 var last_hypervolume: float = 0.0  # For stagnation detection in NSGA-II mode
+var _last_num_fronts: int = 0  # Cached front count from last evolve
 
 # Evolution parameters
 var population_size: int
@@ -224,6 +225,7 @@ func _evolve_nsga2() -> void:
 
 	# Non-dominated sorting
 	var fronts := NSGA2.non_dominated_sort(objective_scores)
+	_last_num_fronts = fronts.size()
 	pareto_front = NSGA2.get_pareto_front(objective_scores)
 
 	# Track best network: highest sum of objectives (backward compat)
@@ -472,7 +474,7 @@ func get_stats() -> Dictionary:
 		max_fit = maxf(max_fit, f)
 		total += f
 
-	return {
+	var stats := {
 		"generation": generation,
 		"population_size": population_size,
 		"best_fitness": best_fitness,
@@ -481,3 +483,10 @@ func get_stats() -> Dictionary:
 		"current_max": max_fit,
 		"current_avg": total / population_size if population_size > 0 else 0.0
 	}
+
+	if use_nsga2:
+		stats["pareto_front_size"] = pareto_front.size()
+		stats["hypervolume"] = last_hypervolume
+		stats["num_fronts"] = _last_num_fronts
+
+	return stats

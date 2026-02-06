@@ -5,6 +5,8 @@ var NSGA2Script = preload("res://ai/nsga2.gd")
 
 
 func _run_tests() -> void:
+	print("\n[NSGA-II Tests]")
+
 	# Dominance tests
 	_test("nsga2_dominates_clear", _test_dominates_clear)
 	_test("nsga2_dominates_equal", _test_dominates_equal)
@@ -41,6 +43,19 @@ func _run_tests() -> void:
 	_test("nsga2_hypervolume_simple", _test_hypervolume_simple)
 	_test("nsga2_hypervolume_empty", _test_hypervolume_empty)
 	_test("nsga2_hypervolume_two_points", _test_hypervolume_two_points)
+
+	# Integration tests: NSGA-II with evolution.gd
+	_test("evolution_nsga2_set_objectives", _test_evolution_nsga2_set_objectives)
+	_test("evolution_nsga2_evolve_increments_gen", _test_evolution_nsga2_evolve_increments_gen)
+	_test("evolution_nsga2_preserves_elites_from_front0", _test_evolution_nsga2_preserves_elites)
+	_test("evolution_nsga2_tracks_best_network", _test_evolution_nsga2_tracks_best)
+	_test("evolution_nsga2_resets_scores_after_evolve", _test_evolution_nsga2_resets_scores)
+	_test("evolution_nsga2_pareto_front_populated", _test_evolution_nsga2_pareto_front)
+	_test("evolution_nsga2_hypervolume_tracked", _test_evolution_nsga2_hypervolume)
+	_test("evolution_nsga2_stats_include_nsga2_fields", _test_evolution_nsga2_stats)
+	_test("evolution_nsga2_multiple_generations", _test_evolution_nsga2_multi_gen)
+	_test("evolution_nsga2_all_equal_objectives", _test_evolution_nsga2_all_equal)
+	_test("evolution_nsga2_single_dominant_individual", _test_evolution_nsga2_single_dominant)
 
 
 # ============================================================
@@ -350,3 +365,140 @@ func _test_hypervolume_two_points() -> void:
 	var front := [Vector2(10, 5), Vector2(5, 10)]
 	var hv := NSGA2Script.hypervolume_2d(front, Vector2(0, 0))
 	assert_approx(hv, 75.0, 0.01, "Two-point hypervolume should be 75")
+
+
+# ============================================================
+# INTEGRATION: Evolution + NSGA-II
+# ============================================================
+
+const Evolution = preload("res://ai/evolution.gd")
+
+func _create_nsga2_evo(pop_size: int = 10) -> RefCounted:
+	var evo = Evolution.new(pop_size, 5, 3, 2)
+	evo.use_nsga2 = true
+	return evo
+
+
+func _test_evolution_nsga2_set_objectives() -> void:
+	var evo = _create_nsga2_evo()
+	evo.set_objectives(0, Vector3(10, 20, 30))
+	assert_eq(evo.objective_scores[0], Vector3(10, 20, 30))
+	# Scalar fitness should be sum
+	assert_approx(evo.fitness_scores[0], 60.0, 0.001)
+
+
+func _test_evolution_nsga2_evolve_increments_gen() -> void:
+	var evo = _create_nsga2_evo()
+	for i in 10:
+		evo.set_objectives(i, Vector3(float(i), float(10 - i), 5.0))
+	evo.evolve()
+	assert_eq(evo.generation, 1)
+
+
+func _test_evolution_nsga2_preserves_elites() -> void:
+	var evo = _create_nsga2_evo()
+	# Individual 0 dominates all others on all objectives
+	evo.set_objectives(0, Vector3(100, 100, 100))
+	for i in range(1, 10):
+		evo.set_objectives(i, Vector3(float(i), float(i), float(i)))
+
+	var elite_weights: PackedFloat32Array = evo.get_individual(0).get_weights()
+	evo.evolve()
+
+	# The dominant individual should be preserved as an elite
+	var found_elite := false
+	for i in evo.elite_count:
+		var w: PackedFloat32Array = evo.get_individual(i).get_weights()
+		var match := true
+		for j in w.size():
+			if abs(w[j] - elite_weights[j]) > 0.0001:
+				match = false
+				break
+		if match:
+			found_elite = true
+			break
+	assert_true(found_elite, "Dominant individual should be preserved as elite")
+
+
+func _test_evolution_nsga2_tracks_best() -> void:
+	var evo = _create_nsga2_evo()
+	evo.set_objectives(0, Vector3(50, 30, 20))  # sum = 100
+	for i in range(1, 10):
+		evo.set_objectives(i, Vector3(1, 1, 1))  # sum = 3
+	evo.evolve()
+	assert_approx(evo.best_fitness, 100.0, 0.001)
+	assert_not_null(evo.best_network)
+	assert_approx(evo.all_time_best_fitness, 100.0, 0.001)
+
+
+func _test_evolution_nsga2_resets_scores() -> void:
+	var evo = _create_nsga2_evo()
+	for i in 10:
+		evo.set_objectives(i, Vector3(float(i), float(i), float(i)))
+	evo.evolve()
+	for i in 10:
+		assert_approx(evo.fitness_scores[i], 0.0, 0.001)
+		assert_eq(evo.objective_scores[i], Vector3.ZERO)
+
+
+func _test_evolution_nsga2_pareto_front() -> void:
+	var evo = _create_nsga2_evo()
+	# 3 non-dominated, rest dominated
+	evo.set_objectives(0, Vector3(10, 1, 1))
+	evo.set_objectives(1, Vector3(1, 10, 1))
+	evo.set_objectives(2, Vector3(1, 1, 10))
+	for i in range(3, 10):
+		evo.set_objectives(i, Vector3(0.5, 0.5, 0.5))
+	evo.evolve()
+	assert_eq(evo.pareto_front.size(), 3, "Pareto front should have 3 non-dominated")
+
+
+func _test_evolution_nsga2_hypervolume() -> void:
+	var evo = _create_nsga2_evo()
+	for i in 10:
+		evo.set_objectives(i, Vector3(float(i + 1) * 10, float(i + 1) * 5, 1.0))
+	evo.evolve()
+	assert_gt(evo.last_hypervolume, 0.0, "Hypervolume should be positive")
+
+
+func _test_evolution_nsga2_stats() -> void:
+	var evo = _create_nsga2_evo()
+	for i in 10:
+		evo.set_objectives(i, Vector3(float(i), float(10 - i), 5.0))
+	evo.evolve()
+	var stats := evo.get_stats()
+	assert_true(stats.has("pareto_front_size"), "Stats should include pareto_front_size")
+	assert_true(stats.has("hypervolume"), "Stats should include hypervolume")
+	assert_true(stats.has("num_fronts"), "Stats should include num_fronts")
+
+
+func _test_evolution_nsga2_multi_gen() -> void:
+	var evo = _create_nsga2_evo()
+	# Run 3 generations
+	for gen in 3:
+		for i in 10:
+			evo.set_objectives(i, Vector3(randf() * 100, randf() * 100, randf() * 100))
+		evo.evolve()
+	assert_eq(evo.generation, 3)
+	assert_eq(evo.population.size(), 10)
+
+
+func _test_evolution_nsga2_all_equal() -> void:
+	var evo = _create_nsga2_evo()
+	for i in 10:
+		evo.set_objectives(i, Vector3(50, 50, 50))
+	# Should not crash
+	evo.evolve()
+	assert_eq(evo.generation, 1)
+	assert_eq(evo.population.size(), 10)
+
+
+func _test_evolution_nsga2_single_dominant() -> void:
+	var evo = _create_nsga2_evo()
+	# One individual dominates all
+	evo.set_objectives(0, Vector3(100, 100, 100))
+	for i in range(1, 10):
+		evo.set_objectives(i, Vector3(1, 1, 1))
+	evo.evolve()
+	assert_eq(evo.pareto_front.size(), 1, "Only 1 individual on Pareto front")
+	assert_approx(evo.best_fitness, 300.0, 0.001)
