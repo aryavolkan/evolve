@@ -271,6 +271,50 @@ The sweep searches over:
 godot --path . --headless -- --auto-train
 ```
 
+## Research Roadmap
+
+### Phase 1: Quick Wins (1-2 weeks each)
+
+**1. Curriculum Learning — Automated Difficulty Staging**
+Progressive difficulty instead of full game from gen 0. 5 stages auto-advance when median fitness crosses threshold:
+- Stage 1: 960² arena, pawns only, health only (median survival > 30s)
+- Stage 2: 1920², + knights, + speed/shield (> 45s)
+- Stage 3: 3840², + bishops/rooks, all powerups (> 60s)
+- Stage 4: 3840², + queens, all (> 45s)
+- Stage 5: 3840² + obstacles, all enemies faster, rarer powerups (> 30s)
+
+Implementation: Parameterize arena setup in `training_manager.gd` + `main.gd`, gate on population stats. ~80 new lines. **Recommended first milestone** — low risk, cuts training time ~50%.
+
+**2. NSGA-II Multi-Objective Fitness**
+Replace single fitness with 3-objective Pareto optimization (survival, kills, collection). Eliminates fitness weight tuning, produces diverse strategies. Replace tournament selection with non-dominated sorting + crowding distance in `evolution.gd` (~150 lines).
+
+### Phase 2: Diversity + Memory (2-3 weeks)
+
+**3. MAP-Elites Quality-Diversity Archive**
+20×20 behavioral grid (aggression × collection focus). Each cell holds fittest agent with that behavioral profile → browsable strategy zoo. ~200 lines. New files: `ai/map_elites.gd`, `ai/map_elites_config.gd`.
+
+**4. Elman Recurrent Memory**
+Feed previous hidden state (32 values) back as input (86→118 inputs). Enables temporal strategies. Minimal change to `neural_network.gd`: store `prev_hidden`, concatenate to input on forward pass.
+
+### Phase 3: NEAT (3-4 weeks)
+
+**5. NEAT — Topology Evolution**
+Evolve both structure and weights. Start minimal (direct input→output), complexify via structural mutations. New files: `ai/neat_genome.gd`, `ai/neat_species.gd`, `ai/neat_population.gd`, `ai/neat_network.gd`. Biggest architectural change — do after validating pipeline with simpler improvements.
+
+### Phase 4: The Vision (4-6 weeks)
+
+**6. Competitive Co-Evolution**
+Give enemies neural networks. Two populations co-evolve. Hall of Fame archives top-5 enemies per gen to prevent cycling.
+
+**7. Live Evolution Sandbox (Endgame)**
+Real-time NEAT (rtNEAT), 20-50 visible agents, player interactions (place obstacles, spawn waves, bless/curse agents), live network visualization, phylogenetic tree, educational mode. Zero games on market combine this.
+
+### Implementation Priority
+1. **Immediate:** Curriculum learning → better W&B metrics → code cleanup
+2. **Short term:** NSGA-II → MAP-Elites planning
+3. **Medium term:** MAP-Elites + Elman memory → NEAT planning
+4. **Long term:** NEAT → co-evolution → live sandbox
+
 ## Testing
 
 Run tests with:
