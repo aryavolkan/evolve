@@ -11,6 +11,11 @@ var player: CharacterBody2D
 var point_value: int = 1
 var rng: RandomNumberGenerator  # Per-arena RNG passed from Main scene
 
+# AI-controlled enemy support (co-evolution Track A)
+var ai_controlled: bool = false
+var ai_network = null  # NeuralNetwork assigned by co-evolution
+var _ai_controller = null  # EnemyAIController (created lazily)
+
 # Movement state
 var move_timer: float = 0.0
 var move_cooldown: float = 0.8
@@ -139,7 +144,27 @@ func _physics_process(delta: float) -> void:
 			player.on_enemy_collision(self)
 			return
 
+func setup_ai(network) -> void:
+	## Enable AI control with the given neural network.
+	## Creates an EnemyAIController with sensor and wires it up.
+	var EnemyAIControllerScript = preload("res://ai/enemy_ai_controller.gd")
+	ai_controlled = true
+	ai_network = network
+	_ai_controller = EnemyAIControllerScript.new(network)
+	_ai_controller.set_enemy(self)
+
+
 func calculate_next_move() -> void:
+	# AI-controlled path: delegate to neural network controller
+	if ai_controlled and _ai_controller:
+		var move_offset: Vector2 = _ai_controller.get_move()
+		if move_offset != Vector2.ZERO:
+			move_start = position
+			move_target = position + move_offset
+			is_moving = true
+		return
+
+	# Original hardcoded logic
 	var to_player = player.global_position - global_position
 	var move_offset: Vector2
 
