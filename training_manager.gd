@@ -29,12 +29,11 @@ var next_individual: int = 0
 var evaluated_count: int = 0
 var current_eval_seed: int = 0  # Which seed we're currently evaluating
 
-# Fitness tracking - accumulate across multiple seeds
-var fitness_accumulator: Dictionary = {}  # {individual_index: [seed1_fitness, seed2_fitness, ...]}
+# Stats tracking (delegated to StatsTracker)
+var stats_tracker: RefCounted = preload("res://ai/stats_tracker.gd").new()
 
 # Multi-objective tracking (NSGA-II)
 var use_nsga2: bool = false
-var objective_accumulator: Dictionary = {}  # {individual_index: [{survival, kills, powerups}, ...per seed]}
 
 # NEAT topology evolution
 var use_neat: bool = false
@@ -42,7 +41,6 @@ var use_neat: bool = false
 # MAP-Elites quality-diversity archive
 var use_map_elites: bool = true
 var map_elites_archive: MapElites = null
-var behavior_accumulator: Dictionary = {}  # {individual_index: [{kills, powerups_collected, survival_time}, ...per seed]}
 
 # Pre-generated events for each seed (all individuals see same scenarios)
 var generation_events_by_seed: Array = []  # [{obstacles, enemy_spawns, powerup_spawns}, ...]
@@ -66,28 +64,30 @@ var stagnation_limit: int = 10
 var generations_without_improvement: int = 0
 var best_avg_fitness: float = 0.0  # Best average fitness seen so far
 
-# Curriculum learning - progressive difficulty stages
-var curriculum_enabled: bool = true
-var curriculum_stage: int = 0
-var curriculum_generations_at_stage: int = 0
+# Curriculum learning - progressive difficulty stages (delegated to CurriculumManager)
+var CurriculumManagerScript = preload("res://ai/curriculum_manager.gd")
+var curriculum: RefCounted = preload("res://ai/curriculum_manager.gd").new()
 
-const CURRICULUM_STAGES: Array[Dictionary] = [
-	# Stage 0: Tiny arena, pawns only, health powerups only
-	{"arena_scale": 0.25, "enemy_types": [0], "powerup_types": [0, 6],
-	 "advancement_threshold": 5000.0, "min_generations": 3, "label": "Nursery"},
-	# Stage 1: Small arena, pawns + knights, basic powerups
-	{"arena_scale": 0.5, "enemy_types": [0, 1], "powerup_types": [0, 2, 6],
-	 "advancement_threshold": 10000.0, "min_generations": 3, "label": "Elementary"},
-	# Stage 2: Medium arena, add bishops, most powerups
-	{"arena_scale": 0.75, "enemy_types": [0, 1, 2], "powerup_types": [0, 1, 2, 4, 5, 6],
-	 "advancement_threshold": 15000.0, "min_generations": 3, "label": "Intermediate"},
-	# Stage 3: Full arena, all except queen, all powerups
-	{"arena_scale": 1.0, "enemy_types": [0, 1, 2, 3], "powerup_types": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-	 "advancement_threshold": 12000.0, "min_generations": 3, "label": "Advanced"},
-	# Stage 4: Full arena, all enemy types, all powerups (final)
-	{"arena_scale": 1.0, "enemy_types": [0, 1, 2, 3, 4], "powerup_types": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-	 "advancement_threshold": 0.0, "min_generations": 0, "label": "Final"},
-]
+# Backward-compatible accessors for tests and external code
+var curriculum_enabled: bool:
+	get: return curriculum.enabled if curriculum else true
+	set(v):
+		if curriculum:
+			curriculum.enabled = v
+var curriculum_stage: int:
+	get: return curriculum.stage if curriculum else 0
+	set(v):
+		if curriculum:
+			curriculum.stage = v
+var curriculum_generations_at_stage: int:
+	get: return curriculum.generations_at_stage if curriculum else 0
+	set(v):
+		if curriculum:
+			curriculum.generations_at_stage = v
+
+# Expose CURRICULUM_STAGES for test compatibility — reads from CurriculumManager
+var CURRICULUM_STAGES: Array[Dictionary]:
+	get: return CurriculumManagerScript.STAGES
 
 # Generation rollback (disabled - trust elitism, accept normal variance)
 var previous_avg_fitness: float = 0.0
@@ -104,18 +104,25 @@ var eval_instances: Array = []  # Array of {viewport, scene, controller, index, 
 var training_container: Control  # Container for all training viewports
 var ai_controller = null  # For playback mode
 
-# Metric history for graphing
-var history_best_fitness: Array[float] = []
-var history_avg_fitness: Array[float] = []
-var history_min_fitness: Array[float] = []
-var history_avg_kill_score: Array[float] = []
-var history_avg_powerup_score: Array[float] = []
-var history_avg_survival_score: Array[float] = []
-
-# Per-generation accumulators
-var generation_total_kill_score: float = 0.0
-var generation_total_powerup_score: float = 0.0
-var generation_total_survival_score: float = 0.0
+# Metric history and per-generation accumulators — delegated to stats_tracker
+var history_best_fitness: Array[float]:
+	get: return stats_tracker.history_best_fitness
+var history_avg_fitness: Array[float]:
+	get: return stats_tracker.history_avg_fitness
+var history_min_fitness: Array[float]:
+	get: return stats_tracker.history_min_fitness
+var history_avg_kill_score: Array[float]:
+	get: return stats_tracker.history_avg_kill_score
+var history_avg_powerup_score: Array[float]:
+	get: return stats_tracker.history_avg_powerup_score
+var history_avg_survival_score: Array[float]:
+	get: return stats_tracker.history_avg_survival_score
+var generation_total_kill_score: float:
+	get: return stats_tracker.generation_total_kill_score
+var generation_total_powerup_score: float:
+	get: return stats_tracker.generation_total_powerup_score
+var generation_total_survival_score: float:
+	get: return stats_tracker.generation_total_survival_score
 
 # Pause state
 var is_paused: bool = false
@@ -291,28 +298,14 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	previous_avg_fitness = 0.0
 	rerun_count = 0
 	current_eval_seed = 0
-	curriculum_stage = 0
-	curriculum_generations_at_stage = 0
-	curriculum_enabled = bool(_sweep_config.get("curriculum_enabled", true))
+	curriculum.reset()
+	curriculum.enabled = bool(_sweep_config.get("curriculum_enabled", true))
 	use_nsga2 = bool(_sweep_config.get("use_nsga2", false))
-	fitness_accumulator.clear()
-	objective_accumulator.clear()
-	behavior_accumulator.clear()
+	stats_tracker.reset()
 	use_map_elites = bool(_sweep_config.get("use_map_elites", use_map_elites))
 	if use_map_elites:
 		map_elites_archive = MapElites.new(int(_sweep_config.get("map_elites_grid_size", 20)))
 	Engine.time_scale = time_scale
-
-	# Clear metric history
-	history_best_fitness.clear()
-	history_avg_fitness.clear()
-	history_min_fitness.clear()
-	history_avg_kill_score.clear()
-	history_avg_powerup_score.clear()
-	history_avg_survival_score.clear()
-	generation_total_kill_score = 0.0
-	generation_total_powerup_score = 0.0
-	generation_total_survival_score = 0.0
 
 	# Hide the main game and show training arenas
 	hide_main_game()
@@ -731,34 +724,16 @@ func _process_parallel_training(delta: float) -> void:
 		# Check if game over OR timeout (60 second max - faster iteration)
 		var timed_out = eval.time >= 60.0
 		if eval.scene.game_over or timed_out:
-			# Store fitness for this individual+seed combination
+			# Record fitness and score breakdown via stats tracker
 			var fitness: float = eval.scene.score
-			if not fitness_accumulator.has(eval.index):
-				fitness_accumulator[eval.index] = []
-			fitness_accumulator[eval.index].append(fitness)
-
-			# Store per-objective scores for NSGA-II
 			var kill_score: float = eval.scene.score_from_kills
 			var powerup_score: float = eval.scene.score_from_powerups
 			var survival_score: float = eval.scene.score - kill_score - powerup_score
-			if not objective_accumulator.has(eval.index):
-				objective_accumulator[eval.index] = []
-			objective_accumulator[eval.index].append(Vector3(survival_score, kill_score, powerup_score))
+			stats_tracker.record_eval_result(eval.index, fitness, kill_score, powerup_score, survival_score)
 
 			# Collect behavior stats for MAP-Elites
 			if use_map_elites:
-				if not behavior_accumulator.has(eval.index):
-					behavior_accumulator[eval.index] = []
-				behavior_accumulator[eval.index].append({
-					"kills": eval.scene.kills,
-					"powerups_collected": eval.scene.powerups_collected,
-					"survival_time": eval.scene.survival_time,
-				})
-
-			# Accumulate stats for this generation (across all seeds)
-			generation_total_kill_score += kill_score
-			generation_total_powerup_score += powerup_score
-			generation_total_survival_score += survival_score
+				stats_tracker.record_behavior(eval.index, eval.scene.kills, eval.scene.powerups_collected, eval.scene.survival_time)
 
 			eval.done = true
 			evaluated_count += 1
@@ -778,20 +753,9 @@ func _process_parallel_training(delta: float) -> void:
 			# Average fitness across seeds and set final fitness/objectives
 			for idx in population_size:
 				if use_nsga2:
-					# Average objectives across seeds
-					var obj_scores: Array = objective_accumulator.get(idx, [Vector3.ZERO])
-					var avg_obj := Vector3.ZERO
-					for o in obj_scores:
-						avg_obj += o
-					avg_obj /= obj_scores.size()
-					evolution.set_objectives(idx, avg_obj)
+					evolution.set_objectives(idx, stats_tracker.get_avg_objectives(idx))
 				else:
-					var scores: Array = fitness_accumulator.get(idx, [0.0])
-					var avg_fitness: float = 0.0
-					for s in scores:
-						avg_fitness += s
-					avg_fitness /= scores.size()
-					evolution.set_fitness(idx, avg_fitness)
+					evolution.set_fitness(idx, stats_tracker.get_avg_fitness(idx))
 
 			# Add to MAP-Elites archive before evolve() mutates the population
 			if use_map_elites and map_elites_archive:
@@ -808,9 +772,7 @@ func _process_parallel_training(delta: float) -> void:
 
 			# Reset for next generation
 			current_eval_seed = 0
-			fitness_accumulator.clear()
-			objective_accumulator.clear()
-			behavior_accumulator.clear()
+			stats_tracker.clear_accumulators()
 			evaluated_count = 0
 			next_individual = 0
 
@@ -909,24 +871,10 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	rerun_count = 0
 	previous_avg_fitness = avg
 
-	# Record metrics for graphing
-	history_best_fitness.append(best)
-	history_avg_fitness.append(avg)
-	history_min_fitness.append(min_fit)
-
-	# Record score breakdown averages (divide by total evaluations across all seeds)
-	var total_evals := population_size * evals_per_individual
-	var avg_kill_score := generation_total_kill_score / total_evals
-	var avg_powerup_score := generation_total_powerup_score / total_evals
-	var avg_survival_score := generation_total_survival_score / total_evals
-	history_avg_kill_score.append(avg_kill_score)
-	history_avg_powerup_score.append(avg_powerup_score)
-	history_avg_survival_score.append(avg_survival_score)
-
-	# Reset accumulators for next generation
-	generation_total_kill_score = 0.0
-	generation_total_powerup_score = 0.0
-	generation_total_survival_score = 0.0
+	# Record metrics for graphing (delegates to stats_tracker)
+	var score_breakdown = stats_tracker.record_generation(best, avg, min_fit, population_size, evals_per_individual)
+	var avg_kill_score: float = score_breakdown.avg_kill_score
+	var avg_powerup_score: float = score_breakdown.avg_powerup_score
 
 	# Track stagnation based on average fitness (more robust than all-time best)
 	if avg > best_avg_fitness:
@@ -968,33 +916,12 @@ func _update_map_elites_archive() -> void:
 	## Add current generation's individuals to the MAP-Elites archive.
 	## Called after fitness is set but before evolve() mutates the population.
 	for idx in population_size:
-		var beh_list: Array = behavior_accumulator.get(idx, [])
-		if beh_list.is_empty():
+		var avg_beh = stats_tracker.get_avg_behavior(idx)
+		if avg_beh.is_empty():
 			continue
-		# Average behavior stats across seeds
-		var avg_kills: float = 0.0
-		var avg_powerups: float = 0.0
-		var avg_survival: float = 0.0
-		for s in beh_list:
-			avg_kills += s.kills
-			avg_powerups += s.powerups_collected
-			avg_survival += s.survival_time
-		avg_kills /= beh_list.size()
-		avg_powerups /= beh_list.size()
-		avg_survival /= beh_list.size()
 
-		var behavior: Vector2 = MapElites.calculate_behavior({
-			"kills": avg_kills,
-			"powerups_collected": avg_powerups,
-			"survival_time": avg_survival,
-		})
-
-		# Average fitness across seeds
-		var fit_list: Array = fitness_accumulator.get(idx, [0.0])
-		var avg_fitness: float = 0.0
-		for f in fit_list:
-			avg_fitness += f
-		avg_fitness /= fit_list.size()
+		var behavior: Vector2 = MapElites.calculate_behavior(avg_beh)
+		var avg_fitness: float = stats_tracker.get_avg_fitness(idx)
 
 		# Clone the solution before evolution mutates it
 		var solution
@@ -1050,73 +977,22 @@ func _write_metrics_for_wandb() -> void:
 # Curriculum learning functions
 func get_current_curriculum_config() -> Dictionary:
 	## Return the curriculum config for the current stage.
-	## Returns empty dict if curriculum is disabled.
-	if not curriculum_enabled:
-		return {}
-	if curriculum_stage < 0 or curriculum_stage >= CURRICULUM_STAGES.size():
-		return {}
-	return CURRICULUM_STAGES[curriculum_stage]
+	return curriculum.get_current_config()
 
 
 func check_curriculum_advancement() -> bool:
 	## Check if agents should advance to the next curriculum stage.
-	## Called after each generation completes. Returns true if advanced.
-	if not curriculum_enabled:
-		return false
-	if curriculum_stage >= CURRICULUM_STAGES.size() - 1:
-		return false  # Already at final stage
-
-	curriculum_generations_at_stage += 1
-
-	var stage = CURRICULUM_STAGES[curriculum_stage]
-	var min_gens: int = stage.get("min_generations", 3)
-
-	# Need minimum generations to assess performance
-	if curriculum_generations_at_stage < min_gens:
-		return false
-
-	var threshold: float = stage.get("advancement_threshold", 0.0)
-	if threshold <= 0.0:
-		return false  # No threshold = stay here
-
-	# Check rolling average fitness over last min_gens generations
-	if history_avg_fitness.size() < min_gens:
-		return false
-
-	var recent_avg: float = 0.0
-	for i in range(min_gens):
-		recent_avg += history_avg_fitness[history_avg_fitness.size() - 1 - i]
-	recent_avg /= min_gens
-
-	if recent_avg >= threshold:
-		var old_stage = curriculum_stage
-		curriculum_stage += 1
-		curriculum_generations_at_stage = 0
+	var advanced = curriculum.check_advancement(history_avg_fitness)
+	if advanced:
 		# Reset stagnation counter on advancement (new stage = fresh start)
 		generations_without_improvement = 0
 		best_avg_fitness = 0.0
-		print("🎓 CURRICULUM ADVANCEMENT: Stage %d (%s) → Stage %d (%s) | rolling avg: %.0f ≥ %.0f" % [
-			old_stage, CURRICULUM_STAGES[old_stage].label,
-			curriculum_stage, CURRICULUM_STAGES[curriculum_stage].label,
-			recent_avg, threshold
-		])
-		return true
-
-	return false
+	return advanced
 
 
 func get_curriculum_label() -> String:
 	## Get a display label for the current curriculum stage.
-	if not curriculum_enabled:
-		return ""
-	var config = get_current_curriculum_config()
-	if config.is_empty():
-		return ""
-	return "Stage %d/%d: %s (%.0f%%)" % [
-		curriculum_stage, CURRICULUM_STAGES.size() - 1,
-		config.get("label", "?"),
-		config.get("arena_scale", 1.0) * 100.0
-	]
+	return curriculum.get_label()
 
 
 # Playback mode functions (unchanged from before)
@@ -1617,21 +1493,4 @@ func create_graph_line(data: Array[float], area: Rect2, min_val: float, max_val:
 
 
 func get_max_history_value() -> float:
-	var max_val = 100.0  # Minimum scale
-	for v in history_best_fitness:
-		max_val = maxf(max_val, v)
-	for v in history_avg_fitness:
-		max_val = maxf(max_val, v)
-	for v in history_avg_survival_score:
-		max_val = maxf(max_val, v)
-	for v in history_avg_kill_score:
-		max_val = maxf(max_val, v)
-	for v in history_avg_powerup_score:
-		max_val = maxf(max_val, v)
-	# Round up to nice number
-	if max_val <= 100:
-		return 100.0
-	elif max_val <= 500:
-		return ceilf(max_val / 100.0) * 100.0
-	else:
-		return ceilf(max_val / 500.0) * 500.0
+	return stats_tracker.get_max_history_value()
