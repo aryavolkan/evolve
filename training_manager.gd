@@ -5,7 +5,7 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK }
+enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK }
 
 var current_mode: Mode = Mode.HUMAN
 
@@ -98,6 +98,10 @@ const MAX_RERUNS: int = 0  # Disabled - rollback wastes compute and reduces dive
 var playback_generation: int = 1
 var max_playback_generation: int = 1
 var generation_networks: Array = []
+
+# Archive playback state (MAP-Elites cell → single arena playback)
+var archive_playback_cell: Vector2i = Vector2i(-1, -1)
+var archive_playback_fitness: float = 0.0
 
 # Parallel training instances
 var eval_instances: Array = []  # Array of {viewport, scene, controller, index, time, done}
@@ -704,6 +708,8 @@ func _physics_process(delta: float) -> void:
 		_process_playback()
 	elif current_mode == Mode.GENERATION_PLAYBACK:
 		_process_generation_playback()
+	elif current_mode == Mode.ARCHIVE_PLAYBACK:
+		_process_archive_playback()
 
 
 func _process_parallel_training(delta: float) -> void:
@@ -1099,6 +1105,61 @@ func _process_generation_playback() -> void:
 		player.enable_ai_control(false)
 
 
+func start_archive_playback(cell: Vector2i) -> void:
+	## Play back the MAP-Elites elite at the given grid cell.
+	if not map_elites_archive:
+		push_error("No MAP-Elites archive available")
+		return
+
+	var elite = map_elites_archive.get_elite(cell)
+	if elite == null:
+		push_error("No elite at cell (%d, %d)" % [cell.x, cell.y])
+		return
+
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	# If we were in training mode, stop it first
+	if current_mode == Mode.TRAINING:
+		stop_training()
+
+	archive_playback_cell = cell
+	archive_playback_fitness = elite.fitness
+
+	current_mode = Mode.ARCHIVE_PLAYBACK
+	Engine.time_scale = 1.0
+
+	ai_controller.set_network(elite.solution)
+	player.enable_ai_control(true)
+
+	reset_game()
+	training_status_changed.emit("Archive playback: cell (%d, %d), fitness %.0f" % [cell.x, cell.y, elite.fitness])
+	print("Archive playback: cell (%d, %d), fitness %.0f" % [cell.x, cell.y, elite.fitness])
+
+
+func stop_archive_playback() -> void:
+	## Return to human control from archive playback.
+	current_mode = Mode.HUMAN
+	player.enable_ai_control(false)
+	main_scene.get_tree().paused = false
+	training_status_changed.emit("Archive playback stopped")
+
+
+func _process_archive_playback() -> void:
+	# Get AI action and apply to player
+	var action: Dictionary = ai_controller.get_action()
+	player.set_ai_action(action.move_direction, action.shoot_direction)
+
+	if main_scene.game_over:
+		main_scene.game_over_label.text = "ARCHIVE CELL (%d, %d)\nArchive Fitness: %.0f\nGame Score: %d\n\nPress [P] to replay\nPress [H] for human mode" % [
+			archive_playback_cell.x, archive_playback_cell.y,
+			archive_playback_fitness, int(main_scene.score)
+		]
+		main_scene.game_over_label.visible = true
+		player.enable_ai_control(false)
+
+
 func reset_game() -> void:
 	## Reset game state for new evaluation.
 	main_scene.get_tree().paused = false
@@ -1316,15 +1377,93 @@ func create_pause_overlay() -> void:
 	]
 	pause_overlay.add_child(stats_label)
 
-	# Create graph panel
-	var graph_panel = create_graph_panel()
-	graph_panel.position = Vector2(40, 260)
-	pause_overlay.add_child(graph_panel)
+	# Layout: if MAP-Elites active, split space between graph and heatmap
+	var window_size = get_window_size()
+	var has_heatmap: bool = use_map_elites and map_elites_archive and map_elites_archive.get_occupied_count() > 0
+
+	if has_heatmap:
+		# Left side: graph panel (60% width)
+		var graph_panel = create_graph_panel()
+		var graph_w: float = (window_size.x - 100) * 0.58
+		graph_panel.position = Vector2(40, 260)
+		graph_panel.size = Vector2(graph_w, window_size.y - 320)
+		pause_overlay.add_child(graph_panel)
+
+		# Right side: MAP-Elites heatmap (40% width)
+		var heatmap := MapElitesHeatmap.new()
+		heatmap.name = "Heatmap"
+		heatmap.position = Vector2(60 + graph_w, 260)
+		heatmap.size = Vector2((window_size.x - 100) * 0.38, window_size.y - 320)
+		heatmap.mouse_filter = Control.MOUSE_FILTER_STOP
+
+		var grid: Array = map_elites_archive.get_archive_grid()
+		heatmap.set_data(
+			grid,
+			map_elites_archive.grid_size,
+			map_elites_archive.get_best_fitness(),
+			map_elites_archive.behavior_mins,
+			map_elites_archive.behavior_maxs
+		)
+		heatmap.cell_clicked.connect(_on_heatmap_cell_clicked)
+		pause_overlay.add_child(heatmap)
+
+		# Hint for heatmap clicks
+		var click_hint = Label.new()
+		click_hint.text = "Click a heatmap cell to watch that strategy play"
+		click_hint.position = Vector2(60 + graph_w, 245)
+		click_hint.add_theme_font_size_override("font_size", 12)
+		click_hint.add_theme_color_override("font_color", Color(0.5, 0.7, 0.5))
+		pause_overlay.add_child(click_hint)
+	else:
+		# Full-width graph panel (no heatmap)
+		var graph_panel = create_graph_panel()
+		graph_panel.position = Vector2(40, 260)
+		pause_overlay.add_child(graph_panel)
 
 	# Add to training canvas layer
 	if training_container:
 		var canvas = training_container.get_parent()
 		canvas.add_child(pause_overlay)
+
+
+func _on_heatmap_cell_clicked(cell: Vector2i) -> void:
+	## Handle click on a MAP-Elites heatmap cell during pause.
+	if not map_elites_archive:
+		return
+
+	var elite = map_elites_archive.get_elite(cell)
+	if elite == null:
+		print("No elite at cell (%d, %d)" % [cell.x, cell.y])
+		return
+
+	# Exit training pause and start archive playback
+	# First clean up training state
+	if is_paused:
+		destroy_pause_overlay()
+		is_paused = false
+
+	# Reset fullscreen state
+	fullscreen_arena_index = -1
+
+	# Stop training mode processing
+	var was_training := current_mode == Mode.TRAINING
+	current_mode = Mode.HUMAN
+	Engine.time_scale = 1.0
+
+	# Disconnect resize signal
+	if get_tree().root.size_changed.is_connected(_on_training_window_resized):
+		get_tree().root.size_changed.disconnect(_on_training_window_resized)
+
+	# Cleanup training instances
+	cleanup_training_instances()
+	if training_container:
+		var canvas_layer = training_container.get_parent()
+		canvas_layer.queue_free()
+		training_container = null
+
+	# Show main game and start archive playback
+	show_main_game()
+	start_archive_playback(cell)
 
 
 func destroy_pause_overlay() -> void:

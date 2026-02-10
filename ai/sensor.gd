@@ -2,6 +2,11 @@ extends RefCounted
 
 ## Raycast-based perception system for the AI agent.
 ## Casts rays around the player to detect enemies, obstacles, and power-ups.
+##
+## Performance: Entity lists are cached per-arena per-physics-frame via a static
+## registry. With 20 parallel arenas, this avoids 60 get_nodes_in_group() calls
+## per frame (20 arenas × 3 groups) and replaces them with 3 calls total plus
+## one O(entities) partitioning pass.
 
 const NUM_RAYS: int = 16
 const RAY_LENGTH: float = 2800.0  # Long enough to span 3840x3840 square arena diagonal
@@ -20,6 +25,52 @@ var arena_bounds: Rect2 = Rect2(40, 40, ARENA_WIDTH - 80, ARENA_HEIGHT - 80)
 
 var player: CharacterBody2D
 var ray_angles: PackedFloat32Array
+
+# ============================================================
+# Per-frame entity cache (static — shared across all sensors)
+# ============================================================
+# Built once per physics frame, maps parent_scene → Array of entities.
+# Reduces get_nodes_in_group() from O(arenas × groups) to O(groups) per frame.
+
+static var _cache_frame: int = -1
+static var _arena_enemies: Dictionary = {}   # Node → Array[Node]
+static var _arena_obstacles: Dictionary = {}  # Node → Array[Node]
+static var _arena_powerups: Dictionary = {}   # Node → Array[Node]
+
+
+static func _build_cache(tree: SceneTree) -> void:
+	## Rebuild the per-arena entity cache for the current physics frame.
+	## Called at most once per frame (skipped if already current).
+	var frame := Engine.get_physics_frames()
+	if frame == _cache_frame:
+		return
+	_cache_frame = frame
+	_arena_enemies.clear()
+	_arena_obstacles.clear()
+	_arena_powerups.clear()
+
+	for e in tree.get_nodes_in_group("enemy"):
+		var parent := e.get_parent()
+		if not _arena_enemies.has(parent):
+			_arena_enemies[parent] = []
+		_arena_enemies[parent].append(e)
+
+	for o in tree.get_nodes_in_group("obstacle"):
+		var parent := o.get_parent()
+		if not _arena_obstacles.has(parent):
+			_arena_obstacles[parent] = []
+		_arena_obstacles[parent].append(o)
+
+	for p in tree.get_nodes_in_group("powerup"):
+		var parent := p.get_parent()
+		if not _arena_powerups.has(parent):
+			_arena_powerups[parent] = []
+		_arena_powerups[parent].append(p)
+
+
+static func invalidate_cache() -> void:
+	## Force cache rebuild on next query (e.g. after bulk entity changes).
+	_cache_frame = -1
 
 
 func _init() -> void:
@@ -46,20 +97,11 @@ func get_inputs() -> PackedFloat32Array:
 	var player_pos := player.global_position
 	var player_scene := player.get_parent()
 
-	# Collect entities from player's scene only
-	var enemies: Array = []
-	var obstacles: Array = []
-	var powerups: Array = []
-
-	for e in player.get_tree().get_nodes_in_group("enemy"):
-		if e.get_parent() == player_scene:
-			enemies.append(e)
-	for o in player.get_tree().get_nodes_in_group("obstacle"):
-		if o.get_parent() == player_scene:
-			obstacles.append(o)
-	for p in player.get_tree().get_nodes_in_group("powerup"):
-		if p.get_parent() == player_scene:
-			powerups.append(p)
+	# Look up cached per-arena entity lists (built once per physics frame)
+	_build_cache(player.get_tree())
+	var enemies: Array = _arena_enemies.get(player_scene, [])
+	var obstacles: Array = _arena_obstacles.get(player_scene, [])
+	var powerups: Array = _arena_powerups.get(player_scene, [])
 
 	# Cast rays
 	var input_idx := 0

@@ -100,6 +100,27 @@ func get_stats() -> Dictionary:
 	}
 
 
+func get_archive_grid() -> Array:
+	## Return a 2D grid (Array of Arrays) representing the archive.
+	## grid[x][y] is either null (empty cell) or {fitness: float, behavior: Vector2}.
+	## Grid dimensions are grid_size × grid_size.
+	var grid: Array = []
+	grid.resize(grid_size)
+	for x in grid_size:
+		var col: Array = []
+		col.resize(grid_size)
+		col.fill(null)
+		for y in grid_size:
+			var bin := Vector2i(x, y)
+			if archive.has(bin):
+				col[y] = {
+					"fitness": archive[bin].fitness,
+					"behavior": archive[bin].behavior,
+				}
+		grid[x] = col
+	return grid
+
+
 func clear() -> void:
 	archive.clear()
 
