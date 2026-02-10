@@ -35,10 +35,27 @@ sweep_config = {
     }
 }
 
-# Paths
-GODOT_PATH = "/Applications/Godot.app/Contents/MacOS/Godot"  # Adjust for your system
-PROJECT_PATH = os.path.expanduser("~/Projects/evolve")
-GODOT_USER_DIR = os.path.expanduser("~/Library/Application Support/Godot/app_userdata/evolve")
+# Paths — configurable via environment variables for cross-platform support
+# macOS:   GODOT_PATH=/Applications/Godot.app/Contents/MacOS/Godot
+# Linux:   GODOT_PATH=/usr/bin/godot
+# Windows: GODOT_PATH=C:/Godot/Godot.exe
+GODOT_PATH = os.environ.get("GODOT_PATH", "/Applications/Godot.app/Contents/MacOS/Godot")
+PROJECT_PATH = os.environ.get("EVOLVE_PROJECT_PATH", os.path.expanduser("~/Projects/evolve"))
+
+
+def _default_godot_user_dir() -> str:
+    """Return the default Godot user data directory for the current platform."""
+    import platform
+    system = platform.system()
+    if system == "Darwin":
+        return os.path.expanduser("~/Library/Application Support/Godot/app_userdata/evolve")
+    elif system == "Windows":
+        return os.path.join(os.environ.get("APPDATA", ""), "Godot/app_userdata/evolve")
+    else:  # Linux and others
+        return os.path.expanduser("~/.local/share/godot/app_userdata/evolve")
+
+
+GODOT_USER_DIR = os.environ.get("GODOT_USER_DIR", _default_godot_user_dir())
 
 # Generate unique worker ID for this process
 WORKER_ID = str(uuid.uuid4())[:8]

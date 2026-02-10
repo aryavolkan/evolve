@@ -25,16 +25,73 @@ godot --path . --editor
 godot --path . --play
 ```
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Training Loop
+        TM[training_manager.gd\nOrchestrator]
+        CM[curriculum_manager.gd\nStage Progression]
+        ST[stats_tracker.gd\nFitness & Metrics]
+    end
+
+    subgraph Evolution
+        EVO[evolution.gd\nPopulation & Selection]
+        NEAT[neat_evolution.gd\nTopology Evolution]
+        NSGA[nsga2.gd\nMulti-Objective]
+        ME[map_elites.gd\nQuality-Diversity]
+    end
+
+    subgraph Neural Network
+        NN[neural_network.gd\nFixed Topology]
+        NEATN[neat_network.gd\nVariable Topology]
+    end
+
+    subgraph Agent
+        AIC[ai_controller.gd\nAction Selection]
+        SEN[sensor.gd\n16 Raycasts → 86 Inputs]
+    end
+
+    subgraph Game
+        MAIN[main.gd\nArena & Spawning]
+        PLAYER[player.gd\nMovement & Shooting]
+        ENEMY[enemy.gd\nChess Pieces]
+        PWR[powerup.gd\nCollectibles]
+    end
+
+    TM -->|creates & evolves| EVO
+    TM -->|or| NEAT
+    TM --> CM
+    TM --> ST
+    EVO --> NN
+    NEAT --> NEATN
+    EVO --> NSGA
+    EVO --> ME
+    NN --> AIC
+    NEATN --> AIC
+    AIC -->|move + shoot| PLAYER
+    SEN -->|86 floats| NN
+    SEN -->|86 floats| NEATN
+    SEN -.->|raycasts| ENEMY
+    SEN -.->|raycasts| PWR
+    MAIN --> PLAYER
+    MAIN --> ENEMY
+    MAIN --> PWR
+    ST -.->|W&B metrics.json| WB[wandb_bridge.py]
+```
+
+**Data flow:** Each generation, `training_manager` assigns neural networks from the evolution system to AI controllers in parallel arenas. Sensors feed 86 inputs (16 raycasts × 5 values + 6 player state) into the network, which outputs 6 actions (movement + shooting). Fitness scores flow back to the evolution system for selection and mutation.
+
 ## AI Training
 
 ![AI Training](assets/training.png)
 
 Neural networks learn to play through neuroevolution — a population of agents evolves over generations using tournament selection, crossover, and mutation.
 
-### Architecture
+### Network Architecture
 
 - **86 inputs**: 16 raycasts (enemy distance/type, obstacles, power-ups, walls) + player state
-- **32 hidden neurons** (tanh activation)
+- **80 hidden neurons** (tanh activation, configurable)
 - **6 outputs**: movement (x/y) + shoot directions
 
 ### Controls

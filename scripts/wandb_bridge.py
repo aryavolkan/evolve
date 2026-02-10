@@ -19,10 +19,29 @@ import argparse
 import os
 
 
+def _default_godot_user_dir() -> Path:
+    """Return the default Godot user data directory for the current platform."""
+    import platform
+    system = platform.system()
+    if system == "Darwin":
+        return Path.home() / "Library/Application Support/Godot/app_userdata/evolve"
+    elif system == "Windows":
+        appdata = os.environ.get("APPDATA", "")
+        return Path(appdata) / "Godot/app_userdata/evolve"
+    else:  # Linux and others
+        return Path.home() / ".local/share/godot/app_userdata/evolve"
+
+
 def get_metrics_path():
-    """Get the Godot user data path for metrics.json"""
-    # macOS path
-    base = Path.home() / "Library/Application Support/Godot/app_userdata/Evolve"
+    """Get the Godot user data path for metrics.json.
+
+    Override with GODOT_USER_DIR environment variable for non-default locations.
+    """
+    user_dir = os.environ.get("GODOT_USER_DIR")
+    if user_dir:
+        base = Path(user_dir)
+    else:
+        base = _default_godot_user_dir()
     return base / "metrics.json"
 
 
