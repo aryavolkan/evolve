@@ -5,7 +5,7 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK }
+enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, SANDBOX }
 
 var current_mode: Mode = Mode.HUMAN
 
@@ -102,6 +102,9 @@ var generation_networks: Array = []
 # Archive playback state (MAP-Elites cell → single arena playback)
 var archive_playback_cell: Vector2i = Vector2i(-1, -1)
 var archive_playback_fitness: float = 0.0
+
+# Sandbox state
+var sandbox_config: Dictionary = {}  # From sandbox_panel.get_config()
 
 # Parallel training instances
 var eval_instances: Array = []  # Array of {viewport, scene, controller, index, time, done}
@@ -710,6 +713,8 @@ func _physics_process(delta: float) -> void:
 		_process_generation_playback()
 	elif current_mode == Mode.ARCHIVE_PLAYBACK:
 		_process_archive_playback()
+	elif current_mode == Mode.SANDBOX:
+		_process_sandbox()
 
 
 func _process_parallel_training(delta: float) -> void:
@@ -1157,6 +1162,76 @@ func _process_archive_playback() -> void:
 			archive_playback_fitness, int(main_scene.score)
 		]
 		main_scene.game_over_label.visible = true
+		player.enable_ai_control(false)
+
+
+func start_sandbox(config: Dictionary) -> void:
+	## Start sandbox mode with custom configuration.
+	## config keys: enemy_types, spawn_rate_multiplier, powerup_frequency,
+	##              starting_difficulty, network_source
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	sandbox_config = config
+	current_mode = Mode.SANDBOX
+	Engine.time_scale = 1.0
+
+	# Configure the game based on sandbox settings
+	var enemy_types: Array = config.get("enemy_types", [0])
+	var spawn_mult: float = config.get("spawn_rate_multiplier", 1.0)
+	var powerup_freq: float = config.get("powerup_frequency", 1.0)
+	var difficulty: float = config.get("starting_difficulty", 0.0)
+	var net_source: String = config.get("network_source", "best")
+
+	# Apply difficulty by adjusting initial score (difficulty scales with score)
+	main_scene.score = difficulty * main_scene.DIFFICULTY_SCALE_SCORE
+
+	# Apply spawn rate by adjusting spawn interval
+	main_scene.next_spawn_score = main_scene.score + main_scene.BASE_SPAWN_INTERVAL / spawn_mult
+	main_scene.next_powerup_score = main_scene.score + 80.0 / powerup_freq
+
+	# Store sandbox config for use by spawn functions
+	main_scene.curriculum_config = {"enemy_types": enemy_types}
+
+	# Load network for AI control if requested
+	if net_source == "best":
+		var network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+		if network:
+			ai_controller.set_network(network)
+			player.enable_ai_control(true)
+		else:
+			push_warning("No saved network found, using human control")
+	else:
+		player.enable_ai_control(false)
+
+	reset_game()
+	training_status_changed.emit("Sandbox mode started")
+	print("Sandbox started: enemies=%s, spawn=%.1fx, powerups=%.1fx, difficulty=%.1f, network=%s" % [
+		enemy_types, spawn_mult, powerup_freq, difficulty, net_source
+	])
+
+
+func stop_sandbox() -> void:
+	## Stop sandbox mode and return to human control.
+	if current_mode != Mode.SANDBOX:
+		return
+
+	current_mode = Mode.HUMAN
+	player.enable_ai_control(false)
+	main_scene.curriculum_config = {}
+	main_scene.get_tree().paused = false
+	training_status_changed.emit("Sandbox stopped")
+
+
+func _process_sandbox() -> void:
+	## Process sandbox mode - drive AI if network loaded.
+	if player.ai_controlled:
+		var action: Dictionary = ai_controller.get_action()
+		player.set_ai_action(action.move_direction, action.shoot_direction)
+
+	if main_scene.game_over:
+		# Let the game over screen handle it
 		player.enable_ai_control(false)
 
 

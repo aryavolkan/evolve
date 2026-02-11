@@ -20,7 +20,8 @@ const MENU_ITEMS: Array = [
 	{"mode": "play", "label": "PLAY", "desc": "Human control — arrow keys to move, WASD to shoot", "key": "1"},
 	{"mode": "watch", "label": "WATCH AI", "desc": "Watch the best trained network play", "key": "2"},
 	{"mode": "train", "label": "TRAIN AI", "desc": "Evolve neural networks across generations", "key": "3"},
-	{"mode": "coevolution", "label": "CO-EVOLUTION", "desc": "Enemies and players co-evolve adversarially", "key": "4"},
+	{"mode": "sandbox", "label": "SANDBOX", "desc": "Custom arena — configure enemies, speed, difficulty", "key": "4"},
+	{"mode": "coevolution", "label": "CO-EVOLUTION", "desc": "Enemies and players co-evolve adversarially", "key": "5"},
 ]
 
 
@@ -66,6 +67,8 @@ func _gui_input(event: InputEvent) -> void:
 			KEY_3:
 				_select_mode("train")
 			KEY_4:
+				_select_mode("sandbox")
+			KEY_5:
 				_select_mode("coevolution")
 
 

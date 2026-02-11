@@ -25,6 +25,7 @@ var ai_status_label: Label
 var title_screen: Control = null
 var game_over_screen: Control = null
 var sensor_visualizer: Node2D = null
+var sandbox_panel: Control = null
 var game_started: bool = false  # False until player selects mode from title screen
 
 # Bonus points - kills/powerups dominate, survival is minor
@@ -300,6 +301,16 @@ func setup_ui_screens() -> void:
 	sensor_visualizer.setup(player)
 	sensor_visualizer.visible = false
 
+	# Sandbox panel
+	var SandboxPanelScript = preload("res://ui/sandbox_panel.gd")
+	sandbox_panel = SandboxPanelScript.new()
+	sandbox_panel.name = "SandboxPanel"
+	$CanvasLayer/UI.add_child(sandbox_panel)
+	sandbox_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sandbox_panel.visible = false
+	sandbox_panel.start_requested.connect(_on_sandbox_start)
+	sandbox_panel.back_requested.connect(_on_sandbox_back)
+
 
 func show_title_screen() -> void:
 	## Show title screen and pause game.
@@ -318,6 +329,11 @@ func show_title_screen() -> void:
 
 func _on_title_mode_selected(mode: String) -> void:
 	## Handle mode selection from the title screen.
+	if mode == "sandbox":
+		# Show sandbox config panel instead of starting game immediately
+		_show_sandbox_panel()
+		return
+
 	game_started = true
 	get_tree().paused = false
 	# Show gameplay UI
@@ -381,6 +397,34 @@ func _on_game_over_menu() -> void:
 	game_over_screen.hide_screen()
 	# Reset game state and show title
 	get_tree().reload_current_scene()
+
+
+func _show_sandbox_panel() -> void:
+	## Show the sandbox configuration panel.
+	if sandbox_panel:
+		sandbox_panel.visible = true
+
+
+func _on_sandbox_start(config: Dictionary) -> void:
+	## Start sandbox mode with given configuration.
+	sandbox_panel.visible = false
+	game_started = true
+	get_tree().paused = false
+	# Show gameplay UI
+	score_label.visible = true
+	lives_label.visible = true
+	scoreboard_label.visible = true
+	if ai_status_label:
+		ai_status_label.visible = true
+
+	if training_manager:
+		training_manager.start_sandbox(config)
+
+
+func _on_sandbox_back() -> void:
+	## Return to title screen from sandbox panel.
+	sandbox_panel.visible = false
+	show_title_screen()
 
 
 func _start_auto_training() -> void:
@@ -1173,6 +1217,8 @@ func handle_training_input() -> void:
 			training_manager.stop_playback()
 		elif training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
 			training_manager.stop_playback()
+		elif training_manager.get_mode() == training_manager.Mode.SANDBOX:
+			training_manager.stop_sandbox()
 
 	elif Input.is_physical_key_pressed(KEY_G):
 		if not _key_just_pressed("gen_playback"):
