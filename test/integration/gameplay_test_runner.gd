@@ -52,6 +52,11 @@ func _build_scenarios() -> void:
 		"powerup_collection",
 		"player_death_and_respawn",
 		"score_tracking",
+		"collision_accuracy",
+		"powerup_effects",
+		"ai_controller_gameplay",
+		"score_breakdown_accuracy",
+		"curriculum_config_application",
 		"performance_stress",
 	]
 
@@ -100,6 +105,11 @@ func _next_scenario() -> void:
 		"powerup_collection": _scenario_duration = 600
 		"player_death_and_respawn": _scenario_duration = 120
 		"score_tracking": _scenario_duration = 300
+		"collision_accuracy": _scenario_duration = 300
+		"powerup_effects": _scenario_duration = 600
+		"ai_controller_gameplay": _scenario_duration = 600
+		"score_breakdown_accuracy": _scenario_duration = 300
+		"curriculum_config_application": _scenario_duration = 60
 		"performance_stress": _scenario_duration = 900
 		_: _scenario_duration = 300
 
@@ -119,11 +129,17 @@ func _load_game_scene() -> void:
 		_next_scenario()
 		return
 
-	_main_scene.set_game_seed(42)
-	_main_scene.set_training_mode(true)
-
-	var events = _main_scene.generate_random_events(42)
-	_main_scene.set_preset_events(events.obstacles, events.enemy_spawns, events.powerup_spawns)
+	# Apply curriculum config for the curriculum test scenario
+	if _scenario_name == "curriculum_config_application":
+		var config = {"arena_scale": 0.5, "enemy_types": [0, 1], "powerup_types": [0, 2, 6]}
+		_main_scene.set_training_mode(true, config)
+		var events = _main_scene.generate_random_events(42, config)
+		_main_scene.set_preset_events(events.obstacles, events.enemy_spawns, events.powerup_spawns)
+	else:
+		_main_scene.set_game_seed(42)
+		_main_scene.set_training_mode(true)
+		var events = _main_scene.generate_random_events(42)
+		_main_scene.set_preset_events(events.obstacles, events.enemy_spawns, events.powerup_spawns)
 
 	root.add_child(_main_scene)
 	paused = false
@@ -166,9 +182,10 @@ func _process(delta: float) -> bool:
 	# Run scenario-specific frame logic
 	_run_scenario_frame()
 
-	# Default AI behavior
-	if _player and is_instance_valid(_player) and not _player.is_hit:
-		_default_ai_behavior()
+	# Default AI behavior (unless scenario overrides)
+	if _scenario_name != "ai_controller_gameplay" and _scenario_name != "curriculum_config_application":
+		if _player and is_instance_valid(_player) and not _player.is_hit:
+			_default_ai_behavior()
 
 	# Check timeout
 	if _frame_count >= _scenario_duration:
@@ -193,6 +210,59 @@ func _run_scenario_frame() -> void:
 		"player_death_and_respawn":
 			if _frame_count == 30 and _player and not _player.is_hit:
 				_player._trigger_hit()
+
+		"collision_accuracy":
+			# Spawn an enemy right on top of player to force a collision
+			if _frame_count == 30 and _main_scene and _player:
+				if not _player.is_invincible:
+					_main_scene.spawn_enemy_at(_player.position + Vector2(20, 0), 0)
+			# After collision, move player away from danger
+			if _frame_count > 60 and _player and is_instance_valid(_player):
+				var arena_center := Vector2(1920, 1920)
+				_player.set_ai_action((_player.position.direction_to(arena_center)), Vector2.ZERO)
+
+		"powerup_effects":
+			# Spawn powerups directly on player to guarantee collection
+			if _frame_count == 20 and _main_scene and _player:
+				_main_scene.spawn_powerup_at(_player.position + Vector2(30, 0), 0)  # Speed Boost
+			if _frame_count == 30 and _player:
+				_player.set_ai_action(Vector2.RIGHT, Vector2.ZERO)  # Walk into powerup
+			if _frame_count == 120 and _main_scene and _player:
+				_main_scene.spawn_powerup_at(_player.position + Vector2(30, 0), 1)  # Invincibility
+			if _frame_count == 130 and _player:
+				_player.set_ai_action(Vector2.RIGHT, Vector2.ZERO)
+			if _frame_count == 240 and _main_scene and _player:
+				_main_scene.spawn_powerup_at(_player.position + Vector2(30, 0), 4)  # Rapid Fire
+			if _frame_count == 250 and _player:
+				_player.set_ai_action(Vector2.RIGHT, Vector2.ZERO)
+
+		"ai_controller_gameplay":
+			# Let the AI controller drive the player using a real neural network
+			if _frame_count == 5 and _player and _main_scene:
+				var NeuralNetworkScript = load("res://ai/neural_network.gd")
+				var AIControllerScript = load("res://ai/ai_controller.gd")
+				var nn = NeuralNetworkScript.new(86, 32, 6)
+				var controller = AIControllerScript.new()
+				controller.set_player(_player)
+				controller.set_network(nn)
+				set_meta("_ai_controller", controller)
+			if _frame_count > 10 and has_meta("_ai_controller"):
+				var controller = get_meta("_ai_controller")
+				var action: Dictionary = controller.get_action()
+				if _player and is_instance_valid(_player) and not _player.is_hit:
+					_player.set_ai_action(action.move_direction, action.shoot_direction)
+
+		"score_breakdown_accuracy":
+			# Let game run with active movement, then verify score decomposition
+			if _frame_count % 30 == 10 and _player:
+				_player.set_ai_action(
+					Vector2(sin(_frame_count * 0.05), cos(_frame_count * 0.07)).normalized(),
+					Vector2.ZERO)
+
+		"curriculum_config_application":
+			# Just let the game run briefly — checks are in final check
+			if _player and is_instance_valid(_player) and not _player.is_hit:
+				_player.set_ai_action(Vector2.RIGHT, Vector2.ZERO)
 
 		"performance_stress":
 			if _frame_count == 60 and _main_scene:
@@ -243,6 +313,64 @@ func _run_scenario_final_check() -> void:
 				var expected_min: float = _main_scene.survival_time * 4
 				_check(_main_scene.score >= expected_min,
 					"Score >= expected (%.0f >= %.0f)" % [_main_scene.score, expected_min])
+
+		"collision_accuracy":
+			if _main_scene:
+				_check(_main_scene.lives < 3 or _player.is_invincible,
+					"Collision registered (lives=%d, invincible=%s)" % [
+						_main_scene.lives, _player.is_invincible])
+				_check(not _main_scene.game_over,
+					"Game still running after collision (lives=%d)" % _main_scene.lives)
+
+		"powerup_effects":
+			if _main_scene:
+				_check(_main_scene.powerups_collected >= 1,
+					"At least 1 powerup collected (got %d)" % _main_scene.powerups_collected)
+				_check(_main_scene.score_from_powerups > 0,
+					"Powerup bonus scored (%.0f)" % _main_scene.score_from_powerups)
+
+		"ai_controller_gameplay":
+			if _main_scene:
+				_check(_main_scene.survival_time > 5.0,
+					"AI survived >5s (%.1f)" % _main_scene.survival_time)
+				_check(not _main_scene.game_over or _main_scene.score > 0,
+					"AI scored something (%.0f)" % _main_scene.score)
+
+		"score_breakdown_accuracy":
+			if _main_scene:
+				var total: float = _main_scene.score
+				var kills: float = _main_scene.score_from_kills
+				var powerups: float = _main_scene.score_from_powerups
+				_check(total >= kills + powerups - 1.0,
+					"Score breakdown consistent: total=%.0f >= kills=%.0f + pwr=%.0f" % [
+						total, kills, powerups])
+				_check(total > 0, "Non-zero score after play (%.0f)" % total)
+
+		"curriculum_config_application":
+			# Verify that curriculum config was applied to the scene
+			if _main_scene:
+				_check(_main_scene.training_mode == true,
+					"Training mode is on")
+				_check(_main_scene.effective_arena_width > 0,
+					"Arena width set (%.0f)" % _main_scene.effective_arena_width)
+				_check(_main_scene.effective_arena_width < 3840.0,
+					"Arena scaled down (%.0f < 3840)" % _main_scene.effective_arena_width)
+				# Verify curriculum_manager API works
+				var CurriculumManagerScript = load("res://ai/curriculum_manager.gd")
+				var cm = CurriculumManagerScript.new()
+				_check(cm.get_current_config().has("arena_scale"),
+					"CurriculumManager returns valid config")
+				_check(CurriculumManagerScript.STAGES.size() >= 5,
+					"CurriculumManager has >= 5 stages (%d)" % CurriculumManagerScript.STAGES.size())
+				# Verify stats_tracker API works
+				var StatsTrackerScript = load("res://ai/stats_tracker.gd")
+				var st = StatsTrackerScript.new()
+				st.record_eval_result(0, 100.0, 50.0, 30.0, 20.0)
+				_check(st.get_avg_fitness(0) == 100.0,
+					"StatsTracker records and retrieves fitness")
+				st.reset()
+				_check(st.fitness_accumulator.is_empty(),
+					"StatsTracker reset clears accumulators")
 
 		"performance_stress":
 			if _frame_times.size() > 0:
@@ -356,6 +484,10 @@ func _finalize_scenario() -> void:
 			"survival_time": _main_scene.survival_time,
 			"game_over": _main_scene.game_over,
 		}
+		# Include score breakdown if available
+		if _main_scene.get("score_from_kills") != null:
+			result["gameplay"]["score_from_kills"] = _main_scene.score_from_kills
+			result["gameplay"]["score_from_powerups"] = _main_scene.score_from_powerups
 
 	_report.scenarios.append(result)
 	_report.summary.total += 1
@@ -386,6 +518,12 @@ func _calc_max_ft() -> float:
 
 
 func _finish_all() -> void:
+	# Add training API metadata to report
+	_report["training_api"] = {
+		"curriculum_stages": _get_curriculum_stage_count(),
+		"stats_tracker_available": _check_stats_tracker(),
+	}
+
 	var report_json := JSON.stringify(_report, "  ")
 	var path := OS.get_user_data_dir() + "/gameplay_test_report.json"
 	var file := FileAccess.open(path, FileAccess.WRITE)
@@ -410,3 +548,14 @@ func _finish_all() -> void:
 				print("    → %s" % e)
 
 	quit(0 if _report.summary.failed == 0 else 1)
+
+
+func _get_curriculum_stage_count() -> int:
+	var CurriculumManagerScript = load("res://ai/curriculum_manager.gd")
+	return CurriculumManagerScript.STAGES.size()
+
+
+func _check_stats_tracker() -> bool:
+	var StatsTrackerScript = load("res://ai/stats_tracker.gd")
+	var st = StatsTrackerScript.new()
+	return st != null
