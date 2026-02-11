@@ -132,6 +132,9 @@ func set_training_mode(enabled: bool, p_curriculum_config: Dictionary = {}) -> v
 
 var preset_powerup_spawns: Array = []  # [{time: float, pos: Vector2, type: int}, ...]
 
+# Co-evolution: if set, all spawned enemies use this neural network for AI control
+var enemy_ai_network = null
+
 func set_preset_events(obstacles: Array, enemy_spawns: Array, powerup_spawns: Array = []) -> void:
 	## Use pre-generated events for deterministic gameplay.
 	preset_obstacles = obstacles
@@ -642,6 +645,10 @@ func spawn_enemy() -> void:
 	enemy.rng = rng
 	add_child(enemy)
 
+	# Wire AI if co-evolution is active
+	if enemy_ai_network:
+		enemy.setup_ai(enemy_ai_network)
+
 	# Apply slow/freeze after adding to tree (so apply_type_config has run)
 	if freeze_active:
 		enemy.apply_freeze()
@@ -658,6 +665,10 @@ func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
 	enemy.position = pos
 	enemy.rng = rng
 	add_child(enemy)
+
+	# Wire AI if co-evolution is active
+	if enemy_ai_network:
+		enemy.setup_ai(enemy_ai_network)
 
 	if freeze_active:
 		enemy.apply_freeze()
@@ -686,6 +697,9 @@ func spawn_initial_enemies() -> void:
 		enemy.position = get_random_edge_spawn_position()
 		enemy.rng = rng
 		add_child(enemy)
+		# Wire AI if co-evolution is active
+		if enemy_ai_network:
+			enemy.setup_ai(enemy_ai_network)
 
 
 func count_local_powerups() -> int:
@@ -1250,7 +1264,7 @@ func setup_training_manager() -> void:
 	ai_status_label.add_theme_constant_override("shadow_offset_x", 1)
 	ai_status_label.add_theme_constant_override("shadow_offset_y", 1)
 	$CanvasLayer/UI.add_child(ai_status_label)
-	ai_status_label.text = "T=Train | P=Playback | H=Human"
+	ai_status_label.text = "T=Train | C=CoEvo | P=Playback | H=Human"
 
 
 func handle_training_input() -> void:
@@ -1282,11 +1296,21 @@ func handle_training_input() -> void:
 		else:
 			training_manager.start_playback()
 
+	elif Input.is_physical_key_pressed(KEY_C) and not Input.is_physical_key_pressed(KEY_SHIFT):
+		if not _key_just_pressed("coevo"):
+			return
+		if training_manager.get_mode() == training_manager.Mode.COEVOLUTION:
+			training_manager.stop_coevolution_training()
+		else:
+			training_manager.start_coevolution_training(100, 100)
+
 	elif Input.is_physical_key_pressed(KEY_H):
 		if not _key_just_pressed("human"):
 			return
 		if training_manager.get_mode() == training_manager.Mode.TRAINING:
 			training_manager.stop_training()
+		elif training_manager.get_mode() == training_manager.Mode.COEVOLUTION:
+			training_manager.stop_coevolution_training()
 		elif training_manager.get_mode() == training_manager.Mode.PLAYBACK:
 			training_manager.stop_playback()
 		elif training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
@@ -1310,7 +1334,7 @@ func handle_training_input() -> void:
 			training_manager.advance_generation_playback()
 
 	# Training mode controls (SPACE for pause is handled in training_manager._input)
-	if training_manager.get_mode() == training_manager.Mode.TRAINING:
+	if training_manager.get_mode() == training_manager.Mode.TRAINING or training_manager.get_mode() == training_manager.Mode.COEVOLUTION:
 		# Speed controls ([ and ] or - and =) - only when not paused
 		if not training_manager.is_paused:
 			var speed_down = Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS)
@@ -1354,6 +1378,13 @@ func update_ai_status_display() -> void:
 			stats.get("all_time_best", 0)
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.YELLOW)
+	elif mode_str == "COEVOLUTION":
+		ai_status_label.text = "CO-EVOLUTION | Gen: %d | P.Best: %.0f | E.Best: %.0f\n[C]=Stop [H]=Human" % [
+			stats.get("generation", 0),
+			stats.get("best_fitness", 0),
+			stats.get("enemy_best_fitness", 0),
+		]
+		ai_status_label.add_theme_color_override("font_color", Color.ORANGE)
 	elif mode_str == "PLAYBACK":
 		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network"
 		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
@@ -1364,5 +1395,5 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.GREEN)
 	else:
-		ai_status_label.text = "[T]=Train | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net"
+		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net"
 		ai_status_label.add_theme_color_override("font_color", Color.WHITE)
