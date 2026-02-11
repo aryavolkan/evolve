@@ -70,6 +70,7 @@ func _run_all_tests() -> void:
 		preload("res://test/test_game_over_screen.gd"),
 		preload("res://test/test_sensor_visualizer.gd"),
 		preload("res://test/test_sandbox_panel.gd"),
+		preload("res://test/test_comparison_panel.gd"),
 	]
 
 	for suite_script in test_suites:

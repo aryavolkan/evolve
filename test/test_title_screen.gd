@@ -15,7 +15,7 @@ func _run_tests() -> void:
 
 	_test("has_menu_items", func():
 		var screen = TitleScreenScript.new()
-		assert_eq(screen.MENU_ITEMS.size(), 5, "Should have 5 menu items")
+		assert_eq(screen.MENU_ITEMS.size(), 6, "Should have 6 menu items")
 	)
 
 	_test("menu_modes_correct", func():
@@ -27,6 +27,7 @@ func _run_tests() -> void:
 		assert_true("watch" in modes, "Should have watch mode")
 		assert_true("train" in modes, "Should have train mode")
 		assert_true("sandbox" in modes, "Should have sandbox mode")
+		assert_true("compare" in modes, "Should have compare mode")
 		assert_true("coevolution" in modes, "Should have coevolution mode")
 	)
 

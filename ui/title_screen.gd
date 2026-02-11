@@ -21,7 +21,8 @@ const MENU_ITEMS: Array = [
 	{"mode": "watch", "label": "WATCH AI", "desc": "Watch the best trained network play", "key": "2"},
 	{"mode": "train", "label": "TRAIN AI", "desc": "Evolve neural networks across generations", "key": "3"},
 	{"mode": "sandbox", "label": "SANDBOX", "desc": "Custom arena — configure enemies, speed, difficulty", "key": "4"},
-	{"mode": "coevolution", "label": "CO-EVOLUTION", "desc": "Enemies and players co-evolve adversarially", "key": "5"},
+	{"mode": "compare", "label": "COMPARE", "desc": "Run 2-4 strategies side-by-side with identical seeds", "key": "5"},
+	{"mode": "coevolution", "label": "CO-EVOLUTION", "desc": "Enemies and players co-evolve adversarially", "key": "6"},
 ]
 
 
@@ -69,6 +70,8 @@ func _gui_input(event: InputEvent) -> void:
 			KEY_4:
 				_select_mode("sandbox")
 			KEY_5:
+				_select_mode("compare")
+			KEY_6:
 				_select_mode("coevolution")
 
 

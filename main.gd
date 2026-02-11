@@ -26,6 +26,7 @@ var title_screen: Control = null
 var game_over_screen: Control = null
 var sensor_visualizer: Node2D = null
 var sandbox_panel: Control = null
+var comparison_panel: Control = null
 var game_started: bool = false  # False until player selects mode from title screen
 
 # Bonus points - kills/powerups dominate, survival is minor
@@ -311,6 +312,16 @@ func setup_ui_screens() -> void:
 	sandbox_panel.start_requested.connect(_on_sandbox_start)
 	sandbox_panel.back_requested.connect(_on_sandbox_back)
 
+	# Comparison panel
+	var ComparisonPanelScript = preload("res://ui/comparison_panel.gd")
+	comparison_panel = ComparisonPanelScript.new()
+	comparison_panel.name = "ComparisonPanel"
+	$CanvasLayer/UI.add_child(comparison_panel)
+	comparison_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	comparison_panel.visible = false
+	comparison_panel.start_requested.connect(_on_comparison_start)
+	comparison_panel.back_requested.connect(_on_comparison_back)
+
 
 func show_title_screen() -> void:
 	## Show title screen and pause game.
@@ -332,6 +343,11 @@ func _on_title_mode_selected(mode: String) -> void:
 	if mode == "sandbox":
 		# Show sandbox config panel instead of starting game immediately
 		_show_sandbox_panel()
+		return
+
+	if mode == "compare":
+		# Show comparison config panel
+		_show_comparison_panel()
 		return
 
 	game_started = true
@@ -424,6 +440,33 @@ func _on_sandbox_start(config: Dictionary) -> void:
 func _on_sandbox_back() -> void:
 	## Return to title screen from sandbox panel.
 	sandbox_panel.visible = false
+	show_title_screen()
+
+
+func _show_comparison_panel() -> void:
+	## Show the comparison configuration panel.
+	if comparison_panel:
+		comparison_panel.visible = true
+
+
+func _on_comparison_start(strategies: Array) -> void:
+	## Start comparison mode with selected strategies.
+	comparison_panel.visible = false
+	game_started = true
+	get_tree().paused = false
+	score_label.visible = false
+	lives_label.visible = false
+	scoreboard_label.visible = false
+	if ai_status_label:
+		ai_status_label.visible = false
+
+	if training_manager:
+		training_manager.start_comparison(strategies)
+
+
+func _on_comparison_back() -> void:
+	## Return to title screen from comparison panel.
+	comparison_panel.visible = false
 	show_title_screen()
 
 
@@ -1219,6 +1262,8 @@ func handle_training_input() -> void:
 			training_manager.stop_playback()
 		elif training_manager.get_mode() == training_manager.Mode.SANDBOX:
 			training_manager.stop_sandbox()
+		elif training_manager.get_mode() == training_manager.Mode.COMPARISON:
+			training_manager.stop_comparison()
 
 	elif Input.is_physical_key_pressed(KEY_G):
 		if not _key_just_pressed("gen_playback"):
