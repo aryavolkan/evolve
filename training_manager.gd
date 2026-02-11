@@ -5,7 +5,7 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION }
+enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION, SANDBOX, COMPARISON }
 
 var current_mode: Mode = Mode.HUMAN
 
@@ -114,6 +114,14 @@ var generation_networks: Array = []
 # Archive playback state (MAP-Elites cell → single arena playback)
 var archive_playback_cell: Vector2i = Vector2i(-1, -1)
 var archive_playback_fitness: float = 0.0
+
+# Sandbox state
+var sandbox_config: Dictionary = {}  # From sandbox_panel.get_config()
+
+# Comparison state
+var comparison_strategies: Array = []  # Array of strategy dicts
+var comparison_instances: Array = []  # Array of {container, viewport, scene, player, controller, done}
+var comparison_container: Control = null
 
 # Parallel training instances
 var eval_instances: Array = []  # Array of {viewport, scene, controller, index, time, done}
@@ -984,6 +992,10 @@ func _physics_process(delta: float) -> void:
 		_process_generation_playback()
 	elif current_mode == Mode.ARCHIVE_PLAYBACK:
 		_process_archive_playback()
+	elif current_mode == Mode.SANDBOX:
+		_process_sandbox()
+	elif current_mode == Mode.COMPARISON:
+		_process_comparison(delta)
 
 
 func _process_parallel_training(delta: float) -> void:
@@ -1640,6 +1652,293 @@ func _process_archive_playback() -> void:
 		]
 		main_scene.game_over_label.visible = true
 		player.enable_ai_control(false)
+
+
+func start_sandbox(config: Dictionary) -> void:
+	## Start sandbox mode with custom configuration.
+	## config keys: enemy_types, spawn_rate_multiplier, powerup_frequency,
+	##              starting_difficulty, network_source
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	sandbox_config = config
+	current_mode = Mode.SANDBOX
+	Engine.time_scale = 1.0
+
+	# Configure the game based on sandbox settings
+	var enemy_types: Array = config.get("enemy_types", [0])
+	var spawn_mult: float = config.get("spawn_rate_multiplier", 1.0)
+	var powerup_freq: float = config.get("powerup_frequency", 1.0)
+	var difficulty: float = config.get("starting_difficulty", 0.0)
+	var net_source: String = config.get("network_source", "best")
+
+	# Apply difficulty by adjusting initial score (difficulty scales with score)
+	main_scene.score = difficulty * main_scene.DIFFICULTY_SCALE_SCORE
+
+	# Apply spawn rate by adjusting spawn interval
+	main_scene.next_spawn_score = main_scene.score + main_scene.BASE_SPAWN_INTERVAL / spawn_mult
+	main_scene.next_powerup_score = main_scene.score + 80.0 / powerup_freq
+
+	# Store sandbox config for use by spawn functions
+	main_scene.curriculum_config = {"enemy_types": enemy_types}
+
+	# Load network for AI control if requested
+	if net_source == "best":
+		var network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+		if network:
+			ai_controller.set_network(network)
+			player.enable_ai_control(true)
+		else:
+			push_warning("No saved network found, using human control")
+	else:
+		player.enable_ai_control(false)
+
+	reset_game()
+	training_status_changed.emit("Sandbox mode started")
+	print("Sandbox started: enemies=%s, spawn=%.1fx, powerups=%.1fx, difficulty=%.1f, network=%s" % [
+		enemy_types, spawn_mult, powerup_freq, difficulty, net_source
+	])
+
+
+func stop_sandbox() -> void:
+	## Stop sandbox mode and return to human control.
+	if current_mode != Mode.SANDBOX:
+		return
+
+	current_mode = Mode.HUMAN
+	player.enable_ai_control(false)
+	main_scene.curriculum_config = {}
+	main_scene.get_tree().paused = false
+	training_status_changed.emit("Sandbox stopped")
+
+
+func _process_sandbox() -> void:
+	## Process sandbox mode - drive AI if network loaded.
+	if player.ai_controlled:
+		var action: Dictionary = ai_controller.get_action()
+		player.set_ai_action(action.move_direction, action.shoot_direction)
+
+	if main_scene.game_over:
+		# Let the game over screen handle it
+		player.enable_ai_control(false)
+
+
+func start_comparison(strategies: Array) -> void:
+	## Start side-by-side comparison with 2-4 strategies in parallel arenas.
+	## Each strategy: {source: "best"|"human", label: String, enabled: bool}
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	comparison_strategies = strategies
+	current_mode = Mode.COMPARISON
+	Engine.time_scale = 1.0
+
+	# Hide the main game and show comparison arenas
+	hide_main_game()
+
+	# Create comparison container (similar to training container)
+	var canvas_layer = CanvasLayer.new()
+	canvas_layer.name = "ComparisonCanvasLayer"
+	canvas_layer.layer = 100
+	get_tree().root.add_child(canvas_layer)
+
+	comparison_container = Control.new()
+	comparison_container.name = "ComparisonContainer"
+	canvas_layer.add_child(comparison_container)
+
+	# Background
+	var bg = ColorRect.new()
+	bg.name = "Background"
+	bg.color = Color(0.05, 0.05, 0.08, 1)
+	comparison_container.add_child(bg)
+
+	# Stats bar
+	var stats_label = Label.new()
+	stats_label.name = "StatsLabel"
+	stats_label.position = Vector2(10, 8)
+	stats_label.add_theme_font_size_override("font_size", 18)
+	stats_label.add_theme_color_override("font_color", Color.CYAN)
+	stats_label.text = "SIDE-BY-SIDE COMPARISON | [H]=Stop"
+	comparison_container.add_child(stats_label)
+
+	# Generate shared seed for all arenas
+	var shared_seed: int = randi()
+	var events = load("res://main.gd").generate_random_events(shared_seed)
+
+	# Create arenas
+	comparison_instances.clear()
+	var win_size = get_window_size()
+	var arena_count: int = strategies.size()
+	var cols: int = mini(arena_count, 2)
+	var rows: int = ceili(float(arena_count) / cols)
+	var gap: int = 4
+	var top_margin: int = 40
+	var arena_w: float = (win_size.x - gap * (cols + 1)) / cols
+	var arena_h: float = (win_size.y - top_margin - gap * (rows + 1)) / rows
+
+	# Set container to fill window
+	comparison_container.size = win_size
+	bg.size = win_size
+
+	for i in arena_count:
+		var col: int = i % cols
+		var row: int = i / cols
+		var x: float = gap + col * (arena_w + gap)
+		var y: float = top_margin + gap + row * (arena_h + gap)
+
+		var container = SubViewportContainer.new()
+		container.stretch = true
+		container.position = Vector2(x, y)
+		container.size = Vector2(arena_w, arena_h)
+		comparison_container.add_child(container)
+
+		var viewport = SubViewport.new()
+		viewport.size = Vector2(1280, 720)
+		viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		viewport.handle_input_locally = false
+		container.add_child(viewport)
+
+		var scene: Node2D = MainScenePacked.instantiate()
+		scene.set_game_seed(shared_seed)
+		# Deep copy the events so each arena can independently pop from arrays
+		var enemy_copy = events.enemy_spawns.duplicate(true)
+		var powerup_copy = events.powerup_spawns.duplicate(true)
+		scene.set_preset_events(events.obstacles, enemy_copy, powerup_copy)
+		viewport.add_child(scene)
+
+		var scene_player: CharacterBody2D = scene.get_node("Player")
+		var controller = null
+
+		var strategy = strategies[i]
+		if strategy.source == "best":
+			var network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+			if network:
+				scene_player.enable_ai_control(true)
+				controller = AIControllerScript.new()
+				controller.set_player(scene_player)
+				controller.set_network(network)
+		# If human or no network found, leave as human control (first arena only)
+		if not controller and i == 0:
+			scene_player.enable_ai_control(false)
+
+		# Customize UI: add strategy label
+		var ui = scene.get_node("CanvasLayer/UI")
+		for child in ui.get_children():
+			if child.name not in ["ScoreLabel", "LivesLabel"]:
+				child.visible = false
+
+		var strat_label = Label.new()
+		strat_label.name = "StrategyLabel"
+		strat_label.text = "Arena %d: %s" % [i + 1, strategy.get("label", "Unknown")]
+		strat_label.position = Vector2(5, 80)
+		strat_label.add_theme_font_size_override("font_size", 14)
+		strat_label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0, 0.9))
+		ui.add_child(strat_label)
+
+		comparison_instances.append({
+			"container": container,
+			"viewport": viewport,
+			"scene": scene,
+			"player": scene_player,
+			"controller": controller,
+			"strategy": strategy,
+			"done": false,
+		})
+
+	# Connect resize
+	get_tree().root.size_changed.connect(_on_comparison_window_resized)
+
+	training_status_changed.emit("Comparison started with %d strategies" % arena_count)
+	print("Comparison started: %d arenas, seed=%d" % [arena_count, shared_seed])
+
+
+func stop_comparison() -> void:
+	## Stop comparison mode.
+	if current_mode != Mode.COMPARISON:
+		return
+
+	current_mode = Mode.HUMAN
+	Engine.time_scale = 1.0
+
+	if get_tree().root.size_changed.is_connected(_on_comparison_window_resized):
+		get_tree().root.size_changed.disconnect(_on_comparison_window_resized)
+
+	for inst in comparison_instances:
+		if is_instance_valid(inst.container):
+			inst.container.queue_free()
+	comparison_instances.clear()
+
+	if comparison_container:
+		var canvas = comparison_container.get_parent()
+		canvas.queue_free()
+		comparison_container = null
+
+	show_main_game()
+	training_status_changed.emit("Comparison stopped")
+
+
+func _on_comparison_window_resized() -> void:
+	if current_mode != Mode.COMPARISON or not comparison_container:
+		return
+	var win_size = get_window_size()
+	comparison_container.size = win_size
+	var bg = comparison_container.get_node_or_null("Background")
+	if bg:
+		bg.size = win_size
+
+	var arena_count: int = comparison_instances.size()
+	var cols: int = mini(arena_count, 2)
+	var rows: int = ceili(float(arena_count) / cols)
+	var gap: int = 4
+	var top_margin: int = 40
+	var arena_w: float = (win_size.x - gap * (cols + 1)) / cols
+	var arena_h: float = (win_size.y - top_margin - gap * (rows + 1)) / rows
+
+	for i in comparison_instances.size():
+		var col: int = i % cols
+		var row: int = i / cols
+		var x: float = gap + col * (arena_w + gap)
+		var y: float = top_margin + gap + row * (arena_h + gap)
+		comparison_instances[i].container.position = Vector2(x, y)
+		comparison_instances[i].container.size = Vector2(arena_w, arena_h)
+
+
+func _process_comparison(delta: float) -> void:
+	## Drive AI controllers and update stats for comparison arenas.
+	var all_done := true
+
+	for inst in comparison_instances:
+		if inst.done:
+			continue
+
+		if inst.controller:
+			var action: Dictionary = inst.controller.get_action()
+			inst.player.set_ai_action(action.move_direction, action.shoot_direction)
+
+		if inst.scene.game_over:
+			inst.done = true
+		else:
+			all_done = false
+
+	# Update stats display
+	if comparison_container:
+		var stats_label = comparison_container.get_node_or_null("StatsLabel")
+		if stats_label:
+			var parts: Array = ["COMPARISON"]
+			for i in comparison_instances.size():
+				var inst = comparison_instances[i]
+				var status_str: String
+				if inst.done:
+					status_str = "Arena %d: Score %d (DONE)" % [i + 1, int(inst.scene.score)]
+				else:
+					status_str = "Arena %d: Score %d | Kills %d | Lives %d" % [
+						i + 1, int(inst.scene.score), inst.scene.kills, inst.scene.lives
+					]
+				parts.append(status_str)
+			parts.append("[H]=Stop")
+			stats_label.text = " | ".join(parts)
 
 
 func reset_game() -> void:

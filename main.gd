@@ -21,6 +21,15 @@ var spawned_obstacle_positions: Array = []
 var training_manager: Node
 var ai_status_label: Label
 
+# UI screens
+var title_screen: Control = null
+var game_over_screen: Control = null
+var sensor_visualizer: Node2D = null
+var sandbox_panel: Control = null
+var comparison_panel: Control = null
+var network_visualizer: Control = null
+var game_started: bool = false  # False until player selects mode from title screen
+
 # Bonus points - kills/powerups dominate, survival is minor
 const POWERUP_COLLECT_BONUS: int = 5000    # Massive incentive to collect powerups
 const SCREEN_CLEAR_BONUS: int = 8000       # Huge reward for screen clear
@@ -251,12 +260,243 @@ func _ready() -> void:
 	spawn_arena_obstacles()
 	spawn_initial_enemies()
 	setup_training_manager()
+	setup_ui_screens()
 
 	# Check for auto-train flag (for headless W&B sweeps)
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--auto-train":
 			call_deferred("_start_auto_training")
 			return
+
+	# Show title screen on startup (only for root viewport / human play)
+	if get_viewport() == get_tree().root:
+		show_title_screen()
+
+
+func setup_ui_screens() -> void:
+	## Create UI overlay screens (title, game over, sensor viz).
+	## Only set up for root viewport (not training sub-arenas).
+	if get_viewport() != get_tree().root:
+		return
+
+	# Title screen
+	var TitleScreenScript = preload("res://ui/title_screen.gd")
+	title_screen = TitleScreenScript.new()
+	title_screen.name = "TitleScreen"
+	$CanvasLayer/UI.add_child(title_screen)
+	title_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title_screen.mode_selected.connect(_on_title_mode_selected)
+	title_screen.hide_menu()
+
+	# Game over screen
+	var GameOverScript = preload("res://ui/game_over_screen.gd")
+	game_over_screen = GameOverScript.new()
+	game_over_screen.name = "GameOverScreen"
+	$CanvasLayer/UI.add_child(game_over_screen)
+	game_over_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	game_over_screen.hide_screen()
+	game_over_screen.restart_requested.connect(_on_game_over_restart)
+	game_over_screen.menu_requested.connect(_on_game_over_menu)
+
+	# Sensor visualizer (child of main scene, draws in world space)
+	var SensorVizScript = preload("res://ui/sensor_visualizer.gd")
+	sensor_visualizer = SensorVizScript.new()
+	sensor_visualizer.name = "SensorVisualizer"
+	add_child(sensor_visualizer)
+	sensor_visualizer.setup(player)
+	sensor_visualizer.visible = false
+
+	# Sandbox panel
+	var SandboxPanelScript = preload("res://ui/sandbox_panel.gd")
+	sandbox_panel = SandboxPanelScript.new()
+	sandbox_panel.name = "SandboxPanel"
+	$CanvasLayer/UI.add_child(sandbox_panel)
+	sandbox_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sandbox_panel.visible = false
+	sandbox_panel.start_requested.connect(_on_sandbox_start)
+	sandbox_panel.back_requested.connect(_on_sandbox_back)
+
+	# Comparison panel
+	var ComparisonPanelScript = preload("res://ui/comparison_panel.gd")
+	comparison_panel = ComparisonPanelScript.new()
+	comparison_panel.name = "ComparisonPanel"
+	$CanvasLayer/UI.add_child(comparison_panel)
+	comparison_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	comparison_panel.visible = false
+	comparison_panel.start_requested.connect(_on_comparison_start)
+	comparison_panel.back_requested.connect(_on_comparison_back)
+
+	# Network visualizer
+	var NetworkVizScript = preload("res://ui/network_visualizer.gd")
+	network_visualizer = NetworkVizScript.new()
+	network_visualizer.name = "NetworkVisualizer"
+	$CanvasLayer/UI.add_child(network_visualizer)
+	network_visualizer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	network_visualizer.visible = false
+
+
+func show_title_screen() -> void:
+	## Show title screen and pause game.
+	if not title_screen:
+		return
+	game_started = false
+	get_tree().paused = true
+	# Hide gameplay UI
+	score_label.visible = false
+	lives_label.visible = false
+	scoreboard_label.visible = false
+	if ai_status_label:
+		ai_status_label.visible = false
+	title_screen.show_menu()
+
+
+func _on_title_mode_selected(mode: String) -> void:
+	## Handle mode selection from the title screen.
+	if mode == "sandbox":
+		# Show sandbox config panel instead of starting game immediately
+		_show_sandbox_panel()
+		return
+
+	if mode == "compare":
+		# Show comparison config panel
+		_show_comparison_panel()
+		return
+
+	game_started = true
+	get_tree().paused = false
+	# Show gameplay UI
+	score_label.visible = true
+	lives_label.visible = true
+	scoreboard_label.visible = true
+	if ai_status_label:
+		ai_status_label.visible = true
+
+	match mode:
+		"play":
+			# Already set up for human play
+			pass
+		"watch":
+			if training_manager:
+				training_manager.start_playback()
+		"train":
+			if training_manager:
+				training_manager.start_training(100, 100)
+		"coevolution":
+			if training_manager:
+				# Start training with co-evolution mode flag
+				training_manager.start_training(100, 100)
+
+
+func _show_game_over_stats() -> void:
+	## Show the enhanced game over screen with stats.
+	if not game_over_screen:
+		return
+	# Hide the old game over label
+	game_over_label.visible = false
+	name_entry.visible = false
+	name_prompt.visible = false
+
+	var mode_str := "play"
+	if training_manager and training_manager.get_mode() == training_manager.Mode.PLAYBACK:
+		mode_str = "watch"
+	elif training_manager and training_manager.get_mode() == training_manager.Mode.ARCHIVE_PLAYBACK:
+		mode_str = "archive"
+
+	game_over_screen.show_stats({
+		"score": score,
+		"kills": kills,
+		"powerups_collected": powerups_collected,
+		"survival_time": survival_time,
+		"score_from_kills": score_from_kills,
+		"score_from_powerups": score_from_powerups,
+		"is_high_score": is_high_score(int(score)),
+		"mode": mode_str,
+	})
+
+
+func _on_game_over_restart() -> void:
+	## Restart game from the game over screen.
+	game_over_screen.hide_screen()
+	get_tree().reload_current_scene()
+
+
+func _on_game_over_menu() -> void:
+	## Return to title screen from game over.
+	game_over_screen.hide_screen()
+	# Reset game state and show title
+	get_tree().reload_current_scene()
+
+
+func _show_sandbox_panel() -> void:
+	## Show the sandbox configuration panel.
+	if sandbox_panel:
+		sandbox_panel.visible = true
+
+
+func _on_sandbox_start(config: Dictionary) -> void:
+	## Start sandbox mode with given configuration.
+	sandbox_panel.visible = false
+	game_started = true
+	get_tree().paused = false
+	# Show gameplay UI
+	score_label.visible = true
+	lives_label.visible = true
+	scoreboard_label.visible = true
+	if ai_status_label:
+		ai_status_label.visible = true
+
+	if training_manager:
+		training_manager.start_sandbox(config)
+
+
+func _on_sandbox_back() -> void:
+	## Return to title screen from sandbox panel.
+	sandbox_panel.visible = false
+	show_title_screen()
+
+
+func _show_comparison_panel() -> void:
+	## Show the comparison configuration panel.
+	if comparison_panel:
+		comparison_panel.visible = true
+
+
+func _on_comparison_start(strategies: Array) -> void:
+	## Start comparison mode with selected strategies.
+	comparison_panel.visible = false
+	game_started = true
+	get_tree().paused = false
+	score_label.visible = false
+	lives_label.visible = false
+	scoreboard_label.visible = false
+	if ai_status_label:
+		ai_status_label.visible = false
+
+	if training_manager:
+		training_manager.start_comparison(strategies)
+
+
+func _on_comparison_back() -> void:
+	## Return to title screen from comparison panel.
+	comparison_panel.visible = false
+	show_title_screen()
+
+
+func _toggle_network_visualizer() -> void:
+	## Toggle the network topology visualization.
+	if not network_visualizer:
+		return
+	network_visualizer.visible = not network_visualizer.visible
+	if network_visualizer.visible and training_manager:
+		# Try to get the current network being played
+		if training_manager.ai_controller and training_manager.ai_controller.network:
+			var net = training_manager.ai_controller.network
+			# Check if it's a NEAT network (has _connections property)
+			if net is NeatNetwork:
+				# For NEAT, we'd need the genome too — for now just show the network
+				network_visualizer.set_neat_data(null, net)
+			else:
+				network_visualizer.set_fixed_network(net)
 
 
 func _start_auto_training() -> void:
@@ -269,6 +509,16 @@ func _start_auto_training() -> void:
 func _process(delta: float) -> void:
 	# Handle AI training controls (always check these)
 	handle_training_input()
+
+	# Sensor viz toggle (V key)
+	if sensor_visualizer and Input.is_physical_key_pressed(KEY_V):
+		if _key_just_pressed("sensor_viz"):
+			sensor_visualizer.toggle()
+
+	# Network viz toggle (N key)
+	if network_visualizer and Input.is_physical_key_pressed(KEY_N):
+		if _key_just_pressed("net_viz"):
+			_toggle_network_visualizer()
 
 	if game_over:
 		if entering_name:
@@ -714,17 +964,31 @@ func _on_player_hit() -> void:
 		game_over = true
 		get_tree().paused = true
 
-		if is_high_score(int(score)):
-			entering_name = true
-			game_over_label.text = "NEW HIGH SCORE!\nScore: %d" % int(score)
-			game_over_label.visible = true
-			name_prompt.visible = true
-			name_entry.visible = true
-			name_entry.text = ""
-			name_entry.grab_focus()
+		# Use new game over screen if available (root viewport only)
+		if game_over_screen and get_viewport() == get_tree().root:
+			if is_high_score(int(score)):
+				# Still need name entry for high scores
+				entering_name = true
+				game_over_label.text = "NEW HIGH SCORE!\nScore: %d" % int(score)
+				game_over_label.visible = true
+				name_prompt.visible = true
+				name_entry.visible = true
+				name_entry.text = ""
+				name_entry.grab_focus()
+			else:
+				_show_game_over_stats()
 		else:
-			game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
-			game_over_label.visible = true
+			if is_high_score(int(score)):
+				entering_name = true
+				game_over_label.text = "NEW HIGH SCORE!\nScore: %d" % int(score)
+				game_over_label.visible = true
+				name_prompt.visible = true
+				name_entry.visible = true
+				name_entry.text = ""
+				name_entry.grab_focus()
+			else:
+				game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
+				game_over_label.visible = true
 	else:
 		# Respawn player at arena center with brief invincibility
 		var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
@@ -760,8 +1024,15 @@ func submit_high_score(player_name: String) -> void:
 	entering_name = false
 	name_entry.visible = false
 	name_prompt.visible = false
-	game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
+	game_over_label.visible = false
 	update_scoreboard_display()
+
+	# Show enhanced game over screen after name entry
+	if game_over_screen and get_viewport() == get_tree().root:
+		_show_game_over_stats()
+	else:
+		game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
+		game_over_label.visible = true
 
 func update_scoreboard_display() -> void:
 	var text = "HIGH SCORES\n"
@@ -1044,6 +1315,10 @@ func handle_training_input() -> void:
 			training_manager.stop_playback()
 		elif training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
 			training_manager.stop_playback()
+		elif training_manager.get_mode() == training_manager.Mode.SANDBOX:
+			training_manager.stop_sandbox()
+		elif training_manager.get_mode() == training_manager.Mode.COMPARISON:
+			training_manager.stop_comparison()
 
 	elif Input.is_physical_key_pressed(KEY_G):
 		if not _key_just_pressed("gen_playback"):
@@ -1111,7 +1386,7 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.ORANGE)
 	elif mode_str == "PLAYBACK":
-		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human"
+		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network"
 		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
 	elif mode_str == "GENERATION_PLAYBACK":
 		ai_status_label.text = "GENERATION %d/%d\n[SPACE]=Next [G]=Restart [H]=Human" % [
@@ -1120,5 +1395,5 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.GREEN)
 	else:
-		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Playback"
+		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net"
 		ai_status_label.add_theme_color_override("font_color", Color.WHITE)
