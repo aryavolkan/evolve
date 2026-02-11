@@ -75,7 +75,7 @@ def run_bridge(project_name: str, run_name: str = None):
                         last_generation = gen
 
                         # Log to W&B
-                        wandb.log({
+                        log_data = {
                             'generation': gen,
                             'best_fitness': data.get('best_fitness', 0),
                             'avg_fitness': data.get('avg_fitness', 0),
@@ -85,12 +85,30 @@ def run_bridge(project_name: str, run_name: str = None):
                             'avg_survival_score': data.get('avg_survival_score', 0),
                             'all_time_best': data.get('all_time_best', 0),
                             'stagnation': data.get('generations_without_improvement', 0),
-                        })
+                        }
+
+                        # Co-evolution metrics (if present)
+                        if data.get('coevolution', False):
+                            log_data.update({
+                                'enemy_best_fitness': data.get('enemy_best_fitness', 0),
+                                'enemy_avg_fitness': data.get('enemy_avg_fitness', 0),
+                                'enemy_min_fitness': data.get('enemy_min_fitness', 0),
+                                'enemy_all_time_best': data.get('enemy_all_time_best', 0),
+                                'hof_size': data.get('hof_size', 0),
+                                'is_hof_generation': data.get('is_hof_generation', False),
+                            })
+
+                        wandb.log(log_data)
+
+                        coevo_str = ""
+                        if data.get('coevolution', False):
+                            coevo_str = f" | E.Best: {data.get('enemy_best_fitness', 0):6.0f}"
 
                         print(f"Gen {gen:3d} | Best: {data.get('best_fitness', 0):8.1f} | "
                               f"Avg: {data.get('avg_fitness', 0):8.1f} | "
                               f"Kill$: {data.get('avg_kill_score', 0):6.0f} | "
-                              f"Pwr$: {data.get('avg_powerup_score', 0):6.0f}")
+                              f"Pwr$: {data.get('avg_powerup_score', 0):6.0f}"
+                              f"{coevo_str}")
 
                         # Check if training complete
                         if data.get('training_complete', False):
