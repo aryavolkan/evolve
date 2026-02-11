@@ -5,7 +5,7 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK }
+enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION }
 
 var current_mode: Mode = Mode.HUMAN
 
@@ -41,6 +41,18 @@ var use_neat: bool = false
 # MAP-Elites quality-diversity archive
 var use_map_elites: bool = true
 var map_elites_archive: MapElites = null
+
+# Co-evolution (Track A)
+var coevolution = null  # CoEvolution coordinator (dual-population)
+var CoevolutionScript = preload("res://ai/coevolution.gd")
+var EnemyAIControllerScript = preload("res://ai/enemy_ai_controller.gd")
+var coevo_enemy_fitness: Dictionary = {}  # {enemy_index: [fitness_values_from_evals]}
+var coevo_enemy_stats: Dictionary = {}    # {enemy_index: {damage, proximity, survival, dir_changes}}
+var coevo_is_hof_generation: bool = false  # True when evaluating against Hall of Fame
+
+# Co-evolution paths
+const ENEMY_POPULATION_PATH := "user://enemy_population.evo"
+const ENEMY_HOF_PATH := "user://enemy_hof.evo"
 
 # Pre-generated events for each seed (all individuals see same scenarios)
 var generation_events_by_seed: Array = []  # [{obstacles, enemy_spawns, powerup_spawns}, ...]
@@ -155,7 +167,7 @@ var _space_was_pressed: bool = false
 
 
 func _input(event: InputEvent) -> void:
-	if current_mode != Mode.TRAINING:
+	if current_mode != Mode.TRAINING and current_mode != Mode.COEVOLUTION:
 		return
 
 	# ESC exits fullscreen
@@ -184,7 +196,7 @@ func _process(_delta: float) -> void:
 	# Handle SPACE for pause toggle (runs even when paused due to PROCESS_MODE_ALWAYS)
 	var space_pressed = Input.is_physical_key_pressed(KEY_SPACE)
 	if space_pressed and not _space_was_pressed:
-		if current_mode == Mode.TRAINING:
+		if current_mode == Mode.TRAINING or current_mode == Mode.COEVOLUTION:
 			toggle_pause()
 	_space_was_pressed = space_pressed
 
@@ -326,6 +338,110 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	])
 
 
+func start_coevolution_training(pop_size: int = 100, generations: int = 100) -> void:
+	## Begin co-evolutionary training: player and enemy populations evolve together.
+	## Each arena gets a player AI + enemy AI controlling all enemies.
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	_load_sweep_config()
+
+	population_size = int(_sweep_config.get("population_size", pop_size))
+	max_generations = int(_sweep_config.get("max_generations", generations))
+	evals_per_individual = int(_sweep_config.get("evals_per_individual", 1))  # Default 1 seed for coevo (faster)
+	time_scale = float(_sweep_config.get("time_scale", 16.0))
+	parallel_count = int(_sweep_config.get("parallel_count", parallel_count))
+
+	var hidden_size = int(_sweep_config.get("hidden_size", 32))
+	var elite_count = int(_sweep_config.get("elite_count", 10))
+	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.20))
+	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.3))
+	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.7))
+
+	# Get input size from player sensor
+	var sensor_instance = AISensorScript.new()
+	var input_size: int = sensor_instance.TOTAL_INPUTS
+
+	# Initialize co-evolution coordinator (wraps two Evolution instances)
+	coevolution = CoevolutionScript.new(
+		population_size, input_size, hidden_size, 6,
+		population_size,  # Enemy pop same size as player pop
+		elite_count, mutation_rate, mutation_strength, crossover_rate
+	)
+
+	# Clean up any leftover pause state
+	if pause_overlay:
+		destroy_pause_overlay()
+	is_paused = false
+	training_complete = false
+
+	current_mode = Mode.COEVOLUTION
+	current_batch_start = 0
+	generation = 0
+	generations_without_improvement = 0
+	best_avg_fitness = 0.0
+	previous_avg_fitness = 0.0
+	current_eval_seed = 0
+	curriculum.reset()
+	curriculum.enabled = bool(_sweep_config.get("curriculum_enabled", true))
+	stats_tracker.reset()
+	coevo_enemy_fitness.clear()
+	coevo_enemy_stats.clear()
+	coevo_is_hof_generation = false
+	Engine.time_scale = time_scale
+
+	# Try to load existing enemy HoF
+	coevolution.load_hall_of_fame(ENEMY_HOF_PATH)
+
+	hide_main_game()
+	create_training_container()
+
+	generate_all_seed_events()
+	_coevo_start_next_batch()
+
+	training_status_changed.emit("Co-evolution training started")
+	print("Co-evolution started: pop=%d, max_gen=%d, parallel=%d" % [
+		population_size, max_generations, parallel_count
+	])
+
+
+func stop_coevolution_training() -> void:
+	## Stop co-evolution training and save progress.
+	if current_mode != Mode.COEVOLUTION:
+		return
+
+	if is_paused:
+		destroy_pause_overlay()
+		is_paused = false
+
+	fullscreen_arena_index = -1
+	current_mode = Mode.HUMAN
+	Engine.time_scale = 1.0
+
+	if get_tree().root.size_changed.is_connected(_on_training_window_resized):
+		get_tree().root.size_changed.disconnect(_on_training_window_resized)
+
+	cleanup_training_instances()
+	if training_container:
+		var canvas_layer = training_container.get_parent()
+		canvas_layer.queue_free()
+		training_container = null
+
+	show_main_game()
+
+	if coevolution:
+		coevolution.save_populations(POPULATION_PATH, ENEMY_POPULATION_PATH)
+		coevolution.save_hall_of_fame(ENEMY_HOF_PATH)
+		coevolution.player_evolution.save_best(BEST_NETWORK_PATH)
+		var stats = coevolution.get_stats()
+		print("Saved co-evolution (player best: %.1f, enemy best: %.1f)" % [
+			stats.player.best_fitness, stats.enemy.best_fitness
+		])
+
+	training_status_changed.emit("Co-evolution stopped")
+
+
 func generate_all_seed_events() -> void:
 	## Pre-generate events for all evaluation seeds this generation.
 	generation_events_by_seed.clear()
@@ -340,6 +456,9 @@ func generate_all_seed_events() -> void:
 func stop_training() -> void:
 	## Stop training and save progress.
 	if current_mode != Mode.TRAINING:
+		# If in coevolution mode, delegate to stop_coevolution_training
+		if current_mode == Mode.COEVOLUTION:
+			stop_coevolution_training()
 		return
 
 	# Clean up pause state first
@@ -448,7 +567,7 @@ func _update_container_size() -> void:
 
 func _on_training_window_resized() -> void:
 	## Update grid layout when window is resized.
-	if current_mode != Mode.TRAINING or not training_container:
+	if (current_mode != Mode.TRAINING and current_mode != Mode.COEVOLUTION) or not training_container:
 		return
 
 	update_grid_layout()
@@ -694,6 +813,159 @@ func cleanup_training_instances() -> void:
 	eval_instances.clear()
 
 
+# ============================================================
+# Co-evolution batch management
+# ============================================================
+
+func _coevo_start_next_batch() -> void:
+	## Start evaluating player-enemy pairs for co-evolution.
+	## Each arena gets one player AI and one enemy AI controlling all enemies.
+	## Random sampling: each player is paired with a random enemy from opposing pop.
+	cleanup_training_instances()
+
+	next_individual = mini(parallel_count, population_size)
+	evaluated_count = 0
+	coevo_enemy_fitness.clear()
+	coevo_enemy_stats.clear()
+
+	var seed_label = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
+	print("Gen %d (%s): Co-evolving %d player-enemy pairs..." % [generation, seed_label, population_size])
+
+	var grid = get_grid_dimensions()
+	for i in range(mini(parallel_count, population_size)):
+		var grid_x: int = i % grid.cols
+		var grid_y: int = i / grid.cols
+		var enemy_idx: int = _pick_enemy_index(i)
+		var instance = _coevo_create_eval_instance(i, enemy_idx, grid_x, grid_y)
+		eval_instances.append(instance)
+
+	if fullscreen_arena_index >= 0:
+		for i in eval_instances.size():
+			if i != fullscreen_arena_index:
+				eval_instances[i].container.visible = false
+		get_tree().root.size_changed.emit()
+
+
+func _pick_enemy_index(player_index: int) -> int:
+	## Pick an enemy index for this player evaluation.
+	## During HoF generations, we don't use this (HoF networks are used directly).
+	## Otherwise: random sampling from enemy population.
+	return randi() % population_size
+
+
+func _coevo_create_eval_instance(player_index: int, enemy_index: int, grid_x: int, grid_y: int) -> Dictionary:
+	## Create a SubViewport with a game instance for co-evolution evaluation.
+	## Similar to create_eval_instance() but also wires enemy AI.
+	var container = SubViewportContainer.new()
+	container.stretch = true
+	container.mouse_filter = Control.MOUSE_FILTER_PASS
+	training_container.add_child(container)
+
+	var size = get_window_size()
+	var grid = get_grid_dimensions()
+	var cols = grid.cols
+	var rows = grid.rows
+	var gap = 4
+	var top_margin = 40
+	var arena_w = (size.x - gap * (cols + 1)) / cols
+	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
+	var x = gap + grid_x * (arena_w + gap)
+	var y = top_margin + gap + grid_y * (arena_h + gap)
+	container.position = Vector2(x, y)
+	container.size = Vector2(arena_w, arena_h)
+
+	var viewport = SubViewport.new()
+	viewport.size = Vector2(1280, 720)
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport.handle_input_locally = false
+	container.add_child(viewport)
+
+	var scene: Node2D = MainScenePacked.instantiate()
+	scene.set_training_mode(true, get_current_curriculum_config())
+	if generation_events_by_seed.size() > current_eval_seed:
+		var events = generation_events_by_seed[current_eval_seed]
+		var enemy_copy = events.enemy_spawns.duplicate(true)
+		var powerup_copy = events.powerup_spawns.duplicate(true)
+		scene.set_preset_events(events.obstacles, enemy_copy, powerup_copy)
+	viewport.add_child(scene)
+
+	# Player AI
+	var scene_player: CharacterBody2D = scene.get_node("Player")
+	scene_player.enable_ai_control(true)
+	var controller = AIControllerScript.new()
+	controller.set_player(scene_player)
+	controller.set_network(coevolution.get_player_network(player_index))
+
+	# Enemy AI: get the network to use (current population or HoF)
+	var enemy_network
+	if coevo_is_hof_generation:
+		var hof_nets = coevolution.get_hof_networks()
+		enemy_network = hof_nets[enemy_index % hof_nets.size()] if not hof_nets.is_empty() else coevolution.get_enemy_network(enemy_index)
+	else:
+		enemy_network = coevolution.get_enemy_network(enemy_index)
+
+	# Set enemy_ai_network on the scene so all spawned enemies auto-wire
+	scene.enemy_ai_network = enemy_network
+
+	var ui = scene.get_node("CanvasLayer/UI")
+	for child in ui.get_children():
+		if child.name not in ["ScoreLabel", "LivesLabel"]:
+			child.visible = false
+
+	var index_label = Label.new()
+	index_label.text = "P#%d vs E#%d" % [player_index, enemy_index]
+	index_label.position = Vector2(5, 80)
+	index_label.add_theme_font_size_override("font_size", 14)
+	index_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+	ui.add_child(index_label)
+
+	return {
+		"container": container,
+		"viewport": viewport,
+		"scene": scene,
+		"player": scene_player,
+		"controller": controller,
+		"index": player_index,
+		"enemy_index": enemy_index,
+		"time": 0.0,
+		"done": false,
+		"last_player_dir": Vector2.ZERO,
+		"direction_changes": 0,
+		"proximity_sum": 0.0,
+		"proximity_samples": 0,
+	}
+
+
+func _is_descendant_of(node: Node, ancestor: Node) -> bool:
+	var current = node.get_parent()
+	while current:
+		if current == ancestor:
+			return true
+		current = current.get_parent()
+	return false
+
+
+func _coevo_replace_eval_instance(slot_index: int, player_index: int) -> void:
+	## Replace a completed co-evolution slot with a new player-enemy pair.
+	var old_eval = eval_instances[slot_index]
+	var grid = get_grid_dimensions()
+	var grid_x: int = slot_index % grid.cols
+	var grid_y: int = int(slot_index / grid.cols)
+
+	if is_instance_valid(old_eval.container):
+		old_eval.container.queue_free()
+
+	var enemy_idx: int = _pick_enemy_index(player_index)
+	var new_instance = _coevo_create_eval_instance(player_index, enemy_idx, grid_x, grid_y)
+	eval_instances[slot_index] = new_instance
+
+	if fullscreen_arena_index >= 0:
+		if slot_index == fullscreen_arena_index:
+			get_tree().root.size_changed.emit()
+		else:
+			new_instance.container.visible = false
+
+
 func _physics_process(delta: float) -> void:
 	if current_mode == Mode.HUMAN:
 		return
@@ -704,6 +976,8 @@ func _physics_process(delta: float) -> void:
 
 	if current_mode == Mode.TRAINING:
 		_process_parallel_training(delta)
+	elif current_mode == Mode.COEVOLUTION:
+		_process_coevolution_training(delta)
 	elif current_mode == Mode.PLAYBACK:
 		_process_playback()
 	elif current_mode == Mode.GENERATION_PLAYBACK:
@@ -799,6 +1073,203 @@ func _process_parallel_training(delta: float) -> void:
 	update_training_stats_display()
 
 	stats_updated.emit(get_stats())
+
+
+func _process_coevolution_training(delta: float) -> void:
+	## Process co-evolution: each arena has player AI + enemy AI.
+	## Player fitness = game score (unchanged).
+	## Enemy fitness = adversarial (damage dealt, proximity, player survival penalty).
+	var active_count := 0
+
+	for i in eval_instances.size():
+		var eval = eval_instances[i]
+		if eval.done:
+			continue
+
+		active_count += 1
+		eval.time += delta
+
+		# Drive player AI controller
+		var action: Dictionary = eval.controller.get_action()
+		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
+
+		# Track proximity pressure (average distance of nearest enemy to player)
+		var nearest_dist := INF
+		for enemy in eval.scene.get_tree().get_nodes_in_group("enemy"):
+			if is_instance_valid(enemy) and _is_descendant_of(enemy, eval.scene):
+				var d = enemy.global_position.distance_to(eval.player.global_position)
+				nearest_dist = minf(nearest_dist, d)
+		if nearest_dist < INF:
+			var closeness := 1.0 - clampf(nearest_dist / 3840.0, 0.0, 1.0)
+			eval.proximity_sum += closeness
+			eval.proximity_samples += 1
+
+		# Track direction changes (player movement direction changed significantly)
+		var current_dir = eval.player.velocity.normalized()
+		if current_dir.length() > 0.1 and eval.last_player_dir.length() > 0.1:
+			var dot = current_dir.dot(eval.last_player_dir)
+			if dot < 0.5:  # >60 degree change counts
+				eval.direction_changes += 1
+		eval.last_player_dir = current_dir
+
+		# Check game over or timeout
+		var timed_out = eval.time >= 60.0
+		if eval.scene.game_over or timed_out:
+			# Player fitness (same as standard training)
+			var player_fitness: float = eval.scene.score
+			var kill_score: float = eval.scene.score_from_kills
+			var powerup_score: float = eval.scene.score_from_powerups
+			var survival_score: float = eval.scene.score - kill_score - powerup_score
+			stats_tracker.record_eval_result(eval.index, player_fitness, kill_score, powerup_score, survival_score)
+
+			# Enemy adversarial fitness
+			var damage_dealt: float = 3.0 - eval.scene.lives  # Lives lost (starts at 3)
+			var avg_proximity: float = eval.proximity_sum / maxf(eval.proximity_samples, 1)
+			var survival_time: float = eval.scene.survival_time
+			var dir_changes: float = eval.direction_changes
+
+			var enemy_fitness := CoevolutionScript.compute_enemy_fitness(
+				damage_dealt, avg_proximity, survival_time, dir_changes
+			)
+
+			# Accumulate enemy fitness (each enemy may face multiple players)
+			if not coevo_is_hof_generation:
+				var eidx: int = eval.enemy_index
+				if not coevo_enemy_fitness.has(eidx):
+					coevo_enemy_fitness[eidx] = []
+				coevo_enemy_fitness[eidx].append(enemy_fitness)
+
+			eval.done = true
+			evaluated_count += 1
+			active_count -= 1
+
+			if next_individual < population_size:
+				_coevo_replace_eval_instance(i, next_individual)
+				next_individual += 1
+
+	# Check if all individuals evaluated for current seed
+	if evaluated_count >= population_size:
+		current_eval_seed += 1
+
+		if current_eval_seed >= evals_per_individual:
+			# Set player fitness
+			for idx in population_size:
+				coevolution.set_player_fitness(idx, stats_tracker.get_avg_fitness(idx))
+
+			# Set enemy fitness (average across all pairings)
+			if not coevo_is_hof_generation:
+				for eidx in population_size:
+					var scores: Array = coevo_enemy_fitness.get(eidx, [0.0])
+					var avg_ef: float = 0.0
+					for s in scores:
+						avg_ef += s
+					avg_ef /= scores.size()
+					coevolution.set_enemy_fitness(eidx, avg_ef)
+
+			# Print stats before evolving
+			var p_stats = coevolution.player_evolution.get_stats()
+			var e_stats = coevolution.enemy_evolution.get_stats()
+			var hof_tag = " [HoF eval]" if coevo_is_hof_generation else ""
+			print("Gen %d complete%s: P(min=%.0f avg=%.0f max=%.0f) E(min=%.0f avg=%.0f max=%.0f)" % [
+				generation, hof_tag,
+				p_stats.current_min, p_stats.current_avg, p_stats.current_max,
+				e_stats.current_min, e_stats.current_avg, e_stats.current_max
+			])
+
+			# Evolve both populations
+			coevolution.evolve_both()
+			generation = coevolution.get_generation()
+			best_fitness = coevolution.player_evolution.get_best_fitness()
+			all_time_best = coevolution.player_evolution.get_all_time_best_fitness()
+
+			# Track stagnation (player avg fitness)
+			var avg = p_stats.current_avg
+			if avg > best_avg_fitness:
+				generations_without_improvement = 0
+				best_avg_fitness = avg
+			else:
+				generations_without_improvement += 1
+
+			# Record for graphing
+			stats_tracker.record_generation(p_stats.current_max, avg, p_stats.current_min, population_size, evals_per_individual)
+
+			# Check curriculum advancement
+			check_curriculum_advancement()
+
+			# Auto-save
+			coevolution.player_evolution.save_best(BEST_NETWORK_PATH)
+			coevolution.save_populations(POPULATION_PATH, ENEMY_POPULATION_PATH)
+			coevolution.save_hall_of_fame(ENEMY_HOF_PATH)
+			_write_metrics_for_wandb()
+
+			# Early stopping
+			if generations_without_improvement >= stagnation_limit:
+				print("Early stopping: No improvement for %d generations" % stagnation_limit)
+				show_training_complete("Early stopping: No improvement for %d generations" % stagnation_limit)
+				return
+
+			if generation >= max_generations:
+				show_training_complete("Reached max generations (%d)" % max_generations)
+				return
+
+			# Reset for next generation
+			current_eval_seed = 0
+			stats_tracker.clear_accumulators()
+			coevo_is_hof_generation = coevolution.should_eval_against_hof()
+			generate_all_seed_events()
+			_coevo_start_next_batch()
+		else:
+			# Next seed pass
+			evaluated_count = 0
+			next_individual = 0
+			_coevo_start_next_batch()
+
+	# Update stats display
+	_update_coevo_stats_display()
+	stats_updated.emit(get_stats())
+
+
+func _update_coevo_stats_display() -> void:
+	if not training_container:
+		return
+	var stats_label = training_container.get_node_or_null("StatsLabel")
+	if not stats_label:
+		return
+
+	var best_current = 0.0
+	for eval in eval_instances:
+		if not eval.done and eval.scene.score > best_current:
+			best_current = eval.scene.score
+
+	var seed_info = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
+	var hof_tag = " [HoF]" if coevo_is_hof_generation else ""
+
+	var controls_hint: String
+	if fullscreen_arena_index >= 0:
+		controls_hint = "[Click/ESC]=Grid [-/+]=Speed [SPACE]=Pause [C]=Stop"
+	else:
+		controls_hint = "[Click]=Fullscreen [-/+]=Speed [SPACE]=Pause [C]=Stop"
+
+	var curriculum_text = ""
+	if curriculum_enabled:
+		curriculum_text = " | %s" % get_curriculum_label()
+
+	var enemy_best_str = "?"
+	if coevolution:
+		enemy_best_str = "%.0f" % coevolution.enemy_evolution.get_best_fitness()
+
+	var hof_text = ""
+	if coevolution and coevolution.get_hof_size() > 0:
+		hof_text = " | HoF: %d" % coevolution.get_hof_size()
+
+	stats_label.text = "COEVO Gen %d%s (%s) | Progress: %d/%d | P.Best: %.0f | P.All-time: %.0f | E.Best: %s%s%s | Stagnant: %d/%d | Speed: %.1fx | %s" % [
+		generation, hof_tag, seed_info,
+		evaluated_count, population_size,
+		best_current, all_time_best,
+		enemy_best_str, curriculum_text, hof_text,
+		generations_without_improvement, stagnation_limit,
+		time_scale, controls_hint
+	]
 
 
 func update_training_stats_display() -> void:
@@ -968,6 +1439,17 @@ func _write_metrics_for_wandb() -> void:
 		"map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
 		"map_elites_best": map_elites_archive.get_best_fitness() if map_elites_archive else 0.0,
 	}
+
+	# Add co-evolution metrics if active
+	if coevolution:
+		var e_stats = coevolution.enemy_evolution.get_stats()
+		metrics["coevolution"] = true
+		metrics["enemy_best_fitness"] = e_stats.best_fitness
+		metrics["enemy_all_time_best"] = e_stats.all_time_best
+		metrics["enemy_avg_fitness"] = e_stats.current_avg
+		metrics["enemy_min_fitness"] = e_stats.current_min
+		metrics["hof_size"] = coevolution.get_hof_size()
+		metrics["is_hof_generation"] = coevo_is_hof_generation
 
 	# Use worker-specific metrics file if worker ID is set
 	var metrics_path = "user://metrics.json"
@@ -1197,7 +1679,7 @@ func reset_game() -> void:
 
 
 func get_stats() -> Dictionary:
-	return {
+	var stats := {
 		"mode": Mode.keys()[current_mode],
 		"generation": generation,
 		"evaluated_count": evaluated_count,
@@ -1216,6 +1698,12 @@ func get_stats() -> Dictionary:
 		"map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
 		"map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
 	}
+	if coevolution:
+		stats["enemy_best_fitness"] = coevolution.enemy_evolution.get_best_fitness()
+		stats["enemy_all_time_best"] = coevolution.enemy_evolution.get_all_time_best_fitness()
+		stats["hof_size"] = coevolution.get_hof_size()
+		stats["is_hof_generation"] = coevo_is_hof_generation
+	return stats
 
 
 func get_mode() -> Mode:
@@ -1246,12 +1734,15 @@ func adjust_speed(delta: float) -> void:
 
 # Pause functionality with metric graphs
 func toggle_pause() -> void:
-	if current_mode != Mode.TRAINING:
+	if current_mode != Mode.TRAINING and current_mode != Mode.COEVOLUTION:
 		return
 
 	# If training complete, SPACE exits to human mode
 	if training_complete:
-		stop_training()
+		if current_mode == Mode.COEVOLUTION:
+			stop_coevolution_training()
+		else:
+			stop_training()
 		return
 
 	if is_paused:
