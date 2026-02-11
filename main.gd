@@ -27,6 +27,7 @@ var game_over_screen: Control = null
 var sensor_visualizer: Node2D = null
 var sandbox_panel: Control = null
 var comparison_panel: Control = null
+var network_visualizer: Control = null
 var game_started: bool = false  # False until player selects mode from title screen
 
 # Bonus points - kills/powerups dominate, survival is minor
@@ -322,6 +323,14 @@ func setup_ui_screens() -> void:
 	comparison_panel.start_requested.connect(_on_comparison_start)
 	comparison_panel.back_requested.connect(_on_comparison_back)
 
+	# Network visualizer
+	var NetworkVizScript = preload("res://ui/network_visualizer.gd")
+	network_visualizer = NetworkVizScript.new()
+	network_visualizer.name = "NetworkVisualizer"
+	$CanvasLayer/UI.add_child(network_visualizer)
+	network_visualizer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	network_visualizer.visible = false
+
 
 func show_title_screen() -> void:
 	## Show title screen and pause game.
@@ -470,6 +479,23 @@ func _on_comparison_back() -> void:
 	show_title_screen()
 
 
+func _toggle_network_visualizer() -> void:
+	## Toggle the network topology visualization.
+	if not network_visualizer:
+		return
+	network_visualizer.visible = not network_visualizer.visible
+	if network_visualizer.visible and training_manager:
+		# Try to get the current network being played
+		if training_manager.ai_controller and training_manager.ai_controller.network:
+			var net = training_manager.ai_controller.network
+			# Check if it's a NEAT network (has _connections property)
+			if net is NeatNetwork:
+				# For NEAT, we'd need the genome too — for now just show the network
+				network_visualizer.set_neat_data(null, net)
+			else:
+				network_visualizer.set_fixed_network(net)
+
+
 func _start_auto_training() -> void:
 	## Start training automatically (for headless sweep runs)
 	if training_manager:
@@ -485,6 +511,11 @@ func _process(delta: float) -> void:
 	if sensor_visualizer and Input.is_physical_key_pressed(KEY_V):
 		if _key_just_pressed("sensor_viz"):
 			sensor_visualizer.toggle()
+
+	# Network viz toggle (N key)
+	if network_visualizer and Input.is_physical_key_pressed(KEY_N):
+		if _key_just_pressed("net_viz"):
+			_toggle_network_visualizer()
 
 	if game_over:
 		if entering_name:
@@ -1324,7 +1355,7 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.YELLOW)
 	elif mode_str == "PLAYBACK":
-		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensor Viz"
+		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network"
 		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
 	elif mode_str == "GENERATION_PLAYBACK":
 		ai_status_label.text = "GENERATION %d/%d\n[SPACE]=Next [G]=Restart [H]=Human" % [
@@ -1333,5 +1364,5 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.GREEN)
 	else:
-		ai_status_label.text = "[T]=Train | [P]=Playback | [G]=Gen Playback | [V]=Sensor Viz"
+		ai_status_label.text = "[T]=Train | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net"
 		ai_status_label.add_theme_color_override("font_color", Color.WHITE)
