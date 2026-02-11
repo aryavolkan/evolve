@@ -223,6 +223,9 @@ def train():
     run = wandb.init()
     config = wandb.config
 
+    # Sync all metrics to generation step
+    wandb.define_metric("*", step_metric="generation")
+
     # Use unique worker ID for this run to allow parallel execution
     worker_id = WORKER_ID
 
