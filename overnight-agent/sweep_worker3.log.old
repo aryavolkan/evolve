@@ -1,0 +1,215 @@
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /Users/aryasen/.netrc.
+wandb: Agent Starting Run: ajj27pe1 with config:
+wandb: 	crossover_rate: 0.8112134272893549
+wandb: 	elite_count: 25
+wandb: 	evals_per_individual: 1
+wandb: 	hidden_size: 48
+wandb: 	max_generations: 50
+wandb: 	mutation_rate: 0.2737892235735896
+wandb: 	mutation_strength: 0.1399674310823424
+wandb: 	parallel_count: 10
+wandb: 	population_size: 120
+wandb: 	time_scale: 16
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /Users/aryasen/.netrc.
+wandb: Currently logged in as: aryavolkan (aryavolkan-personal) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /Users/aryasen/Projects/evolve/overnight-agent/wandb/run-20260209_214223-ajj27pe1
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run clear-sweep-18
+wandb: ⭐️ View project at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution
+wandb: 🧹 View sweep at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/sweeps/x0cst76l
+wandb: 🚀 View run at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/runs/ajj27pe1
+wandb: updating run metadata
+wandb: uploading output.log; uploading wandb-summary.json; uploading config.yaml
+wandb: 
+wandb: Run history:
+wandb:      all_time_best ▁▁▂▂▂▂▂▂▂▂▂▂▂▂▂▂▃▃▃▃▃▃▃▃▃▃▄▆▆▆▆▆▇▇▇▇████
+wandb:        avg_fitness ▁▂▃▁▂▂▂▁▁▁▁▁▁▁▂▂▂▂▁▁▂▂▂▂▃▂▃▄▃▄▄█▇▄▄▅▄▆▅▅
+wandb:     avg_kill_score ▂▃▃▃▃▃▃▂▁▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▃▁▂▃▅▂▂▅▃▂▅█▃▄
+wandb:  avg_powerup_score ▁▃▅▁▂▂▁▂▂▂▂▂▃▁▄▃▄▄▂▂▃▃▄▃▆▅▅▇▆▃▇▅█▇█▄▆▆█▆
+wandb: avg_survival_score ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▁▄▁█▅▁▂▄▁▂▃▄
+wandb:       best_fitness ▂▂▂▂▂▂▂▁▁▂▂▂▂▁▂▁▃▃▁▂▁▂▂▃▂▃▄▆▃▆▅▆▇▆▆▅██▇▆
+wandb:   curriculum_stage ▁▁▃▃▃▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▆▆█████████████
+wandb:  elite_avg_fitness ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:    fitness_std_dev ▁▂▃▁▂▂▂▁▁▁▁▁▁▁▂▂▂▂▁▁▂▂▂▂▃▂▃▄▃▄▄█▇▄▄▅▄▆▅▅
+wandb:         generation ▁▁▁▁▂▂▂▂▂▃▃▃▃▃▄▄▄▄▄▄▅▅▅▅▅▅▆▆▆▆▆▇▇▇▇▇████
+wandb:                 +6 ...
+wandb: 
+wandb: Run summary:
+wandb:      all_time_best 115355.07812
+wandb:        avg_fitness 20779.79764
+wandb:     avg_kill_score 4836.66667
+wandb:  avg_powerup_score 13494.52675
+wandb: avg_survival_score 2448.60418
+wandb:       best_fitness 69428.14844
+wandb:   curriculum_stage 4
+wandb:  elite_avg_fitness 0
+wandb:  final_avg_fitness 20779.79764
+wandb: final_best_fitness 115355.07812
+wandb:                +12 ...
+wandb: 
+wandb: 🚀 View run clear-sweep-18 at: https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/runs/ajj27pe1
+wandb: ⭐️ View project at: https://wandb.ai/aryavolkan-personal/evolve-neuroevolution
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260209_214223-ajj27pe1/logs
+wandb: Agent Starting Run: pv9kf4a9 with config:
+wandb: 	crossover_rate: 0.7100477285691472
+wandb: 	elite_count: 25
+wandb: 	evals_per_individual: 1
+wandb: 	hidden_size: 80
+wandb: 	max_generations: 50
+wandb: 	mutation_rate: 0.27423713547734124
+wandb: 	mutation_strength: 0.1084282070330221
+wandb: 	parallel_count: 10
+wandb: 	population_size: 150
+wandb: 	time_scale: 16
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /Users/aryasen/.netrc.
+wandb: setting up run pv9kf4a9
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /Users/aryasen/Projects/evolve/overnight-agent/wandb/run-20260209_221921-pv9kf4a9
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run deep-sweep-23
+wandb: ⭐️ View project at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution
+wandb: 🧹 View sweep at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/sweeps/x0cst76l
+wandb: 🚀 View run at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/runs/pv9kf4a9
+wandb: updating run metadata
+wandb: uploading output.log; uploading wandb-summary.json; uploading config.yaml
+wandb: 
+wandb: Run history:
+wandb:      all_time_best ▁▂▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▅▆▆▆▆▆▆▆▆▆▇▇███
+wandb:        avg_fitness ▁▂▃▁▂▂▁▂▂▂▂▂▂▃▂▃▃▃▃▃▃▅▄█▆▅▅▆█▇▆█▆▆
+wandb:     avg_kill_score ▁▁▁▂▂▁▁▁▁▂▁▂▁▂▂▂▂▂▂▁▂▁▃▄▆▇▅▅▃▆▇█▆▇
+wandb:  avg_powerup_score ▁▃▄▂▃▂▁▂▂▂▃▂▃▄▂▃▄▄▄▃▄▄▆▅▅▄▅▅▆█▆▆▇▅
+wandb: avg_survival_score ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▂▄▁█▃▁▃▅▇▂▂▄▁▃
+wandb:       best_fitness ▁▂▃▁▂▂▂▂▁▁▂▂▁▃▂▂▂▃▃▅▆▅▃▆▆▄▆▅▆▇▆█▄▇
+wandb:   curriculum_stage ▁▁▃▃▃▅▅▅▅▅▅▅▅▅▅▅▅▅▆▆▆█████████████
+wandb:  elite_avg_fitness ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:    fitness_std_dev ▁▂▃▁▂▂▁▂▂▂▂▂▂▃▂▃▃▃▃▃▃▅▄█▆▅▅▆█▇▆█▆▆
+wandb:         generation ▁▁▁▂▂▂▂▂▃▃▃▃▄▄▄▄▄▅▅▅▅▅▆▆▆▆▇▇▇▇▇███
+wandb:                 +6 ...
+wandb: 
+wandb: Run summary:
+wandb:      all_time_best 117117.75
+wandb:        avg_fitness 25826.1273
+wandb:     avg_kill_score 9941.33333
+wandb:  avg_powerup_score 11936.74436
+wandb: avg_survival_score 3948.04956
+wandb:       best_fitness 102194.90625
+wandb:   curriculum_stage 4
+wandb:  elite_avg_fitness 0
+wandb:  final_avg_fitness 25826.1273
+wandb: final_best_fitness 117117.75
+wandb:                +12 ...
+wandb: 
+wandb: 🚀 View run deep-sweep-23 at: https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/runs/pv9kf4a9
+wandb: ⭐️ View project at: https://wandb.ai/aryavolkan-personal/evolve-neuroevolution
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260209_221921-pv9kf4a9/logs
+
+Joining sweep: https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/sweeps/x0cst76l
+Worker ID: 22d86a9c
+Starting Godot training (timeout: 102m, worker: 22d86a9c)...
+  Gen 1: best=36987.5, avg=10338.2
+  Gen 2: best=41530.8, avg=13485.4
+  Gen 3: best=45573.7, avg=16910.9
+  Gen 4: best=45573.7, avg=12008.9
+  Gen 5: best=45573.7, avg=12465.6
+  Gen 6: best=45573.7, avg=13439.5
+  Gen 7: best=45573.7, avg=12944.3
+  Gen 8: best=45573.7, avg=11276.5
+  Gen 9: best=45573.7, avg=10548.6
+  Gen 10: best=45573.7, avg=10153.2
+  Gen 11: best=45573.7, avg=10788.8
+  Gen 12: best=45573.7, avg=10446.7
+  Gen 13: best=45573.7, avg=11306.4
+  Gen 14: best=45573.7, avg=12192.1
+  Gen 15: best=45573.7, avg=10371.3
+  Gen 16: best=45573.7, avg=12270.1
+  Gen 17: best=45573.7, avg=14240.3
+  Gen 18: best=45573.7, avg=12692.0
+  Gen 19: best=54862.4, avg=14575.0
+  Gen 20: best=54862.4, avg=14233.5
+  Gen 21: best=54862.4, avg=10939.3
+  Gen 22: best=54862.4, avg=11599.4
+  Gen 23: best=54862.4, avg=13384.6
+  Gen 24: best=54862.4, avg=12594.2
+  Gen 25: best=54862.4, avg=13229.0
+  Gen 26: best=54862.4, avg=14829.0
+  Gen 27: best=54862.4, avg=12968.8
+  Gen 28: best=54862.4, avg=16615.1
+  Gen 29: best=54862.4, avg=15508.5
+  Gen 30: best=68812.4, avg=17186.5
+  Gen 31: best=90758.6, avg=24697.4
+  Gen 32: best=96415.2, avg=23371.5
+  Gen 33: best=96415.2, avg=16981.7
+  Gen 34: best=96415.2, avg=23581.5
+  Gen 35: best=96415.2, avg=24029.3
+  Gen 36: best=96415.2, avg=40282.5
+  Gen 37: best=107724.9, avg=34706.2
+  Gen 38: best=107724.9, avg=34052.2
+  Gen 39: best=107724.9, avg=22963.0
+  Gen 40: best=107724.9, avg=25045.3
+  Gen 41: best=107724.9, avg=26323.6
+  Gen 42: best=110974.2, avg=22985.0
+  Gen 43: best=115355.1, avg=32225.2
+  Gen 44: best=115355.1, avg=25231.0
+  Gen 45: best=115355.1, avg=29485.6
+  Gen 46: best=115355.1, avg=20779.8
+Training complete signal received
+Starting Godot training (timeout: 120m, worker: 22d86a9c)...
+  Gen 1: best=27172.1, avg=7635.3
+  Gen 2: best=38301.1, avg=10669.5
+  Gen 3: best=48452.4, avg=13069.1
+  Gen 4: best=48452.4, avg=9290.2
+  Gen 5: best=48452.4, avg=11223.6
+  Gen 6: best=48452.4, avg=9856.0
+  Gen 7: best=48452.4, avg=8865.8
+  Gen 8: best=48452.4, avg=10312.4
+  Gen 9: best=48452.4, avg=9922.5
+  Gen 10: best=48452.4, avg=10752.5
+  Gen 11: best=48452.4, avg=11078.5
+  Gen 12: best=48452.4, avg=11395.3
+  Gen 13: best=48452.4, avg=11566.7
+  Gen 14: best=48452.4, avg=13687.3
+  Gen 15: best=48452.4, avg=10830.9
+  Gen 16: best=48452.4, avg=12843.8
+  Gen 17: best=48452.4, avg=14993.3
+  Gen 18: best=48452.4, avg=14577.2
+  Gen 19: best=55593.3, avg=15593.2
+  Gen 20: best=81903.1, avg=15866.4
+  Gen 21: best=93205.3, avg=16081.5
+  Gen 22: best=93205.3, avg=20203.2
+  Gen 23: best=93205.3, avg=18562.1
+  Gen 24: best=93205.3, avg=31931.8
+  Gen 25: best=93205.3, avg=24964.5
+  Gen 26: best=93205.3, avg=21786.3
+  Gen 27: best=96007.7, avg=23199.5
+  Gen 28: best=96007.7, avg=25517.4
+  Gen 29: best=96007.7, avg=30930.4
+  Gen 30: best=103923.5, avg=27621.6
+  Gen 31: best=103923.5, avg=25607.2
+  Gen 32: best=117117.8, avg=31142.3
+  Gen 33: best=117117.8, avg=25412.3
+  Gen 34: best=117117.8, avg=25826.1
+Training complete signal received
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /Users/aryasen/.netrc.
+wandb: Agent Starting Run: axtsd2j3 with config:
+wandb: 	crossover_rate: 0.7181870923944308
+wandb: 	elite_count: 15
+wandb: 	evals_per_individual: 3
+wandb: 	hidden_size: 96
+wandb: 	max_generations: 50
+wandb: 	mutation_rate: 0.2208889232810733
+wandb: 	mutation_strength: 0.11820180289909268
+wandb: 	parallel_count: 10
+wandb: 	population_size: 100
+wandb: 	time_scale: 16
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /Users/aryasen/.netrc.
+wandb: Currently logged in as: aryavolkan (aryavolkan-personal) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.24.2
+wandb: Run data is saved locally in /Users/aryasen/Projects/evolve/overnight-agent/wandb/run-20260210_114726-axtsd2j3
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run wandering-sweep-3
+wandb: ⭐️ View project at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution
+wandb: 🧹 View sweep at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/sweeps/32g71hrl
+wandb: 🚀 View run at https://wandb.ai/aryavolkan-personal/evolve-neuroevolution/runs/axtsd2j3

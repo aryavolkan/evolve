@@ -66,6 +66,9 @@ func _run_all_tests() -> void:
 		preload("res://test/test_enemy_sensor.gd"),
 		preload("res://test/test_enemy_ai_controller.gd"),
 		preload("res://test/test_coevolution.gd"),
+		preload("res://test/test_title_screen.gd"),
+		preload("res://test/test_game_over_screen.gd"),
+		preload("res://test/test_sensor_visualizer.gd"),
 	]
 
 	for suite_script in test_suites:
