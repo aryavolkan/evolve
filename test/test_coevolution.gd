@@ -124,16 +124,28 @@ func _test_signal_emitted_on_evolve() -> void:
 	_set_all_fitness(coevo, 20, true)
 	_set_all_fitness(coevo, 20, false)
 
-	var signal_received := false
-	var received_gen := -1
-	coevo.generation_complete.connect(func(gen, p_best, e_best):
-		signal_received = true
-		received_gen = gen
-	)
+	# Create a helper object to capture signal emission
+	var signal_tracker = SignalTracker.new()
+	coevo.generation_complete.connect(signal_tracker.on_generation_complete)
+	
 	coevo.evolve_both()
+	
+	assert_true(signal_tracker.was_called, "generation_complete signal should be emitted")
+	assert_eq(signal_tracker.generation, 1, "Signal should report generation 1")
 
-	assert_true(signal_received, "generation_complete signal should be emitted")
-	assert_eq(received_gen, 1, "Signal should report generation 1")
+
+# Helper class to track signal emissions
+class SignalTracker extends RefCounted:
+	var was_called := false
+	var generation := -1
+	var player_best := -1.0
+	var enemy_best := -1.0
+	
+	func on_generation_complete(gen: int, p_best: float, e_best: float) -> void:
+		was_called = true
+		generation = gen
+		player_best = p_best
+		enemy_best = e_best
 
 
 func _test_independent_populations() -> void:
