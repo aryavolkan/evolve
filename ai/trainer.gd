@@ -1,5 +1,6 @@
 extends Node
 
+## @deprecated Use training_manager.gd for all training. Retained for test compatibility.
 ## Training harness for evolving neural network agents.
 ## Manages population evaluation and evolution cycles.
 

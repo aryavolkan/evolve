@@ -17,7 +17,9 @@ var current_batch_start: int = 0
 var main_scene: Node2D
 var player: CharacterBody2D
 
-# Configuration
+# Configuration (centralized in TrainingConfig)
+var config: RefCounted = preload("res://ai/training_config.gd").new()
+var arena_pool: RefCounted = preload("res://ai/arena_pool.gd").new()
 var population_size: int = 150
 var max_generations: int = 100
 var time_scale: float = 1.0
@@ -38,6 +40,9 @@ var use_nsga2: bool = false
 # NEAT topology evolution
 var use_neat: bool = false
 
+# Elman recurrent memory
+var use_memory: bool = false
+
 # MAP-Elites quality-diversity archive
 var use_map_elites: bool = true
 var map_elites_archive: MapElites = null
@@ -50,21 +55,30 @@ var coevo_enemy_fitness: Dictionary = {}  # {enemy_index: [fitness_values_from_e
 var coevo_enemy_stats: Dictionary = {}    # {enemy_index: {damage, proximity, survival, dir_changes}}
 var coevo_is_hof_generation: bool = false  # True when evaluating against Hall of Fame
 
-# Co-evolution paths
-const ENEMY_POPULATION_PATH := "user://enemy_population.evo"
-const ENEMY_HOF_PATH := "user://enemy_hof.evo"
+# Co-evolution paths (aliases from config)
+var ENEMY_POPULATION_PATH: String:
+	get: return config.ENEMY_POPULATION_PATH
+var ENEMY_HOF_PATH: String:
+	get: return config.ENEMY_HOF_PATH
 
 # Pre-generated events for each seed (all individuals see same scenarios)
 var generation_events_by_seed: Array = []  # [{obstacles, enemy_spawns, powerup_spawns}, ...]
 
-# Paths
-const BEST_NETWORK_PATH := "user://best_network.nn"
-const POPULATION_PATH := "user://population.evo"
-const SWEEP_CONFIG_PATH := "user://sweep_config.json"
+# Path aliases (constants live in config)
+var BEST_NETWORK_PATH: String:
+	get: return config.BEST_NETWORK_PATH
+var POPULATION_PATH: String:
+	get: return config.POPULATION_PATH
 
-# Sweep config (loaded from file for hyperparameter search)
-var _sweep_config: Dictionary = {}
-var _worker_id: String = ""  # Worker ID for parallel sweep runs
+# Island model migration (NEAT only)
+var MIGRATION_POOL_DIR: String:
+	get: return config.MIGRATION_POOL_DIR
+const MIGRATION_IMPORT_INTERVAL: int = 5  # Import every N generations
+const MIGRATION_MAX_IMMIGRANTS: int = 2   # Per normal import cycle
+const MIGRATION_STAGNATION_THRESHOLD: int = 3  # Trigger early import
+const MIGRATION_STAGNATION_IMMIGRANTS: int = 3  # More aggressive when stuck
+var _imported_migrations: Dictionary = {}  # {"worker_id:generation": true} — tracks what we've already imported
+var _generations_since_import: int = 0
 
 # Stats
 var generation: int = 0
@@ -120,12 +134,10 @@ var sandbox_config: Dictionary = {}  # From sandbox_panel.get_config()
 
 # Comparison state
 var comparison_strategies: Array = []  # Array of strategy dicts
-var comparison_instances: Array = []  # Array of {container, viewport, scene, player, controller, done}
-var comparison_container: Control = null
+var comparison_instances: Array = []  # Array of {slot_index, scene, player, controller, done}
 
 # Parallel training instances
-var eval_instances: Array = []  # Array of {viewport, scene, controller, index, time, done}
-var training_container: Control  # Container for all training viewports
+var eval_instances: Array = []  # Array of {slot_index, scene, controller, index, time, done}
 var ai_controller = null  # For playback mode
 
 # Metric history and per-generation accumulators — delegated to stats_tracker
@@ -154,8 +166,16 @@ var pause_overlay: Control = null
 var saved_time_scale: float = 1.0
 var training_complete: bool = false  # Shows results screen at end
 
-# Fullscreen arena view
-var fullscreen_arena_index: int = -1  # -1 = grid view, 0+ = fullscreen arena slot
+# Fullscreen arena view (delegated to arena_pool)
+var fullscreen_arena_index: int:
+	get: return arena_pool.fullscreen_index if arena_pool else -1
+	set(v):
+		if arena_pool:
+			arena_pool.fullscreen_index = v
+
+# Backward-compatible accessor for training_container
+var training_container: Control:
+	get: return arena_pool.container if arena_pool else null
 
 # Preloaded scripts
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
@@ -179,24 +199,24 @@ func _input(event: InputEvent) -> void:
 		return
 
 	# ESC exits fullscreen
-	if event.is_action_pressed("ui_cancel") and fullscreen_arena_index >= 0:
-		exit_fullscreen()
+	if event.is_action_pressed("ui_cancel") and arena_pool.fullscreen_index >= 0:
+		arena_pool.exit_fullscreen()
 		get_viewport().set_input_as_handled()
 		return
 
 	# Mouse click toggles fullscreen
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var clicked_index = get_arena_at_position(event.position)
+		var clicked_index = arena_pool.get_slot_at_position(event.position)
 
-		if fullscreen_arena_index >= 0:
+		if arena_pool.fullscreen_index >= 0:
 			# In fullscreen - only exit if clicking outside the arena
-			if clicked_index != fullscreen_arena_index:
-				exit_fullscreen()
+			if clicked_index != arena_pool.fullscreen_index:
+				arena_pool.exit_fullscreen()
 				get_viewport().set_input_as_handled()
 		else:
 			# In grid view - enter fullscreen if clicking on an arena
 			if clicked_index >= 0:
-				enter_fullscreen(clicked_index)
+				arena_pool.enter_fullscreen(clicked_index)
 				get_viewport().set_input_as_handled()
 
 
@@ -219,41 +239,9 @@ func initialize(scene: Node2D) -> void:
 	ai_controller.set_player(player)
 
 
-func _load_sweep_config() -> void:
-	## Load hyperparameters from sweep config if available (for W&B sweeps)
-	_sweep_config.clear()
-
-	# Check for worker ID from command line args
-	_worker_id = ""
-	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--worker-id="):
-			_worker_id = arg.substr(12)  # len("--worker-id=") = 12
-			print("Worker ID: ", _worker_id)
-			break
-
-	# Try worker-specific config first, then fall back to default
-	var config_path = SWEEP_CONFIG_PATH
-	if _worker_id != "":
-		var worker_config_path = "user://sweep_config_%s.json" % _worker_id
-		if FileAccess.file_exists(worker_config_path):
-			config_path = worker_config_path
-
-	if not FileAccess.file_exists(config_path):
-		return
-
-	var file = FileAccess.open(config_path, FileAccess.READ)
-	if not file:
-		return
-
-	var json = JSON.new()
-	var error = json.parse(file.get_as_text())
-	file.close()
-
-	if error != OK:
-		return
-
-	_sweep_config = json.data
-	print("Loaded sweep config from %s: %s" % [config_path, _sweep_config])
+func _load_sweep_config(fallback_pop_size: int = 150, fallback_max_gen: int = 100) -> void:
+	## Load hyperparameters from sweep config via TrainingConfig.
+	config.load_from_sweep(fallback_pop_size, fallback_max_gen)
 
 
 func start_training(pop_size: int = 100, generations: int = 100) -> void:
@@ -263,48 +251,45 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 		return
 
 	# Load sweep config (overrides defaults if present)
-	_load_sweep_config()
+	_load_sweep_config(pop_size, generations)
 
-	# Apply sweep config or use defaults
-	population_size = int(_sweep_config.get("population_size", pop_size))
-	max_generations = int(_sweep_config.get("max_generations", generations))
-	evals_per_individual = int(_sweep_config.get("evals_per_individual", evals_per_individual))
-	time_scale = float(_sweep_config.get("time_scale", 16.0))  # Default to 16x speed for training
-	parallel_count = int(_sweep_config.get("parallel_count", parallel_count))  # Configurable parallel arenas
-
-	var hidden_size = int(_sweep_config.get("hidden_size", 80))
-	var elite_count = int(_sweep_config.get("elite_count", 20))
-	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.30))
-	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.09))
-	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.73))
+	# Apply config values to local state
+	population_size = config.population_size
+	max_generations = config.max_generations
+	evals_per_individual = config.evals_per_individual
+	time_scale = config.time_scale
+	parallel_count = config.parallel_count
 
 	# Get input size from sensor
 	var sensor_instance = AISensorScript.new()
 	var input_size: int = sensor_instance.TOTAL_INPUTS
 
 	# Initialize evolution system
-	use_neat = bool(_sweep_config.get("use_neat", use_neat))
+	use_neat = config.use_neat
+	use_memory = config.use_memory
 	if use_neat:
 		var neat_config := NeatConfig.new()
 		neat_config.input_count = input_size
 		neat_config.output_count = 6
 		neat_config.population_size = population_size
-		neat_config.crossover_rate = crossover_rate
-		neat_config.weight_mutate_rate = mutation_rate
-		neat_config.weight_perturb_strength = mutation_strength
+		neat_config.crossover_rate = config.crossover_rate
+		neat_config.weight_mutate_rate = config.mutation_rate
+		neat_config.weight_perturb_strength = config.mutation_strength
 		evolution = NeatEvolutionScript.new(neat_config)
 	else:
 		evolution = EvolutionScript.new(
 			population_size,
 			input_size,
-			hidden_size,
+			config.hidden_size,
 			6,
-			elite_count,
-			mutation_rate,
-			mutation_strength,
-			crossover_rate
+			config.elite_count,
+			config.mutation_rate,
+			config.mutation_strength,
+			config.crossover_rate
 		)
 		evolution.use_nsga2 = use_nsga2
+		if use_memory:
+			evolution.enable_population_memory()
 
 	evolution.generation_complete.connect(_on_generation_complete)
 
@@ -323,12 +308,12 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	rerun_count = 0
 	current_eval_seed = 0
 	curriculum.reset()
-	curriculum.enabled = bool(_sweep_config.get("curriculum_enabled", true))
-	use_nsga2 = bool(_sweep_config.get("use_nsga2", false))
+	curriculum.enabled = config.curriculum_enabled
+	use_nsga2 = config.use_nsga2
 	stats_tracker.reset()
-	use_map_elites = bool(_sweep_config.get("use_map_elites", use_map_elites))
+	use_map_elites = config.use_map_elites
 	if use_map_elites:
-		map_elites_archive = MapElites.new(int(_sweep_config.get("map_elites_grid_size", 20)))
+		map_elites_archive = MapElites.new(config.map_elites_grid_size)
 	Engine.time_scale = time_scale
 
 	# Hide the main game and show training arenas
@@ -340,7 +325,8 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	start_next_batch()
 
 	training_status_changed.emit("Training started")
-	var evo_type = "NEAT" if use_neat else ("NSGA-II" if use_nsga2 else "Standard")
+	var mem_label = "+memory" if use_memory else ""
+	var evo_type = ("NEAT" if use_neat else ("NSGA-II" if use_nsga2 else "Standard")) + mem_label
 	print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d, evo=%s" % [
 		population_size, max_generations, parallel_count, evals_per_individual, stagnation_limit, evo_type
 	])
@@ -353,19 +339,14 @@ func start_coevolution_training(pop_size: int = 100, generations: int = 100) -> 
 		push_error("Training manager not initialized")
 		return
 
-	_load_sweep_config()
+	_load_sweep_config(pop_size, generations)
 
-	population_size = int(_sweep_config.get("population_size", pop_size))
-	max_generations = int(_sweep_config.get("max_generations", generations))
-	evals_per_individual = int(_sweep_config.get("evals_per_individual", 1))  # Default 1 seed for coevo (faster)
-	time_scale = float(_sweep_config.get("time_scale", 16.0))
-	parallel_count = int(_sweep_config.get("parallel_count", parallel_count))
-
-	var hidden_size = int(_sweep_config.get("hidden_size", 80))
-	var elite_count = int(_sweep_config.get("elite_count", 20))
-	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.30))
-	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.09))
-	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.73))
+	# Apply config values to local state
+	population_size = config.population_size
+	max_generations = config.max_generations
+	evals_per_individual = config.evals_per_individual
+	time_scale = config.time_scale
+	parallel_count = config.parallel_count
 
 	# Get input size from player sensor
 	var sensor_instance = AISensorScript.new()
@@ -373,9 +354,9 @@ func start_coevolution_training(pop_size: int = 100, generations: int = 100) -> 
 
 	# Initialize co-evolution coordinator (wraps two Evolution instances)
 	coevolution = CoevolutionScript.new(
-		population_size, input_size, hidden_size, 6,
+		population_size, input_size, config.hidden_size, 6,
 		population_size,  # Enemy pop same size as player pop
-		elite_count, mutation_rate, mutation_strength, crossover_rate
+		config.elite_count, config.mutation_rate, config.mutation_strength, config.crossover_rate
 	)
 
 	# Clean up any leftover pause state
@@ -392,7 +373,7 @@ func start_coevolution_training(pop_size: int = 100, generations: int = 100) -> 
 	previous_avg_fitness = 0.0
 	current_eval_seed = 0
 	curriculum.reset()
-	curriculum.enabled = bool(_sweep_config.get("curriculum_enabled", true))
+	curriculum.enabled = config.curriculum_enabled
 	stats_tracker.reset()
 	coevo_enemy_fitness.clear()
 	coevo_enemy_stats.clear()
@@ -423,18 +404,11 @@ func stop_coevolution_training() -> void:
 		destroy_pause_overlay()
 		is_paused = false
 
-	fullscreen_arena_index = -1
 	current_mode = Mode.HUMAN
 	Engine.time_scale = 1.0
 
-	if get_tree().root.size_changed.is_connected(_on_training_window_resized):
-		get_tree().root.size_changed.disconnect(_on_training_window_resized)
-
-	cleanup_training_instances()
-	if training_container:
-		var canvas_layer = training_container.get_parent()
-		canvas_layer.queue_free()
-		training_container = null
+	eval_instances.clear()
+	arena_pool.destroy()
 
 	show_main_game()
 
@@ -474,22 +448,12 @@ func stop_training() -> void:
 		destroy_pause_overlay()
 		is_paused = false
 
-	# Reset fullscreen state
-	fullscreen_arena_index = -1
-
 	current_mode = Mode.HUMAN
 	Engine.time_scale = 1.0
 
-	# Disconnect resize signal
-	if get_tree().root.size_changed.is_connected(_on_training_window_resized):
-		get_tree().root.size_changed.disconnect(_on_training_window_resized)
-
-	# Cleanup training instances
-	cleanup_training_instances()
-	if training_container:
-		var canvas_layer = training_container.get_parent()
-		canvas_layer.queue_free()
-		training_container = null
+	# Cleanup training instances and visual layer
+	eval_instances.clear()
+	arena_pool.destroy()
 
 	# Show main game again
 	show_main_game()
@@ -527,189 +491,24 @@ func show_main_game() -> void:
 
 func get_window_size() -> Vector2:
 	## Get current window size reliably.
-	return get_viewport().get_visible_rect().size
+	return arena_pool.get_window_size() if arena_pool else get_viewport().get_visible_rect().size
 
 
 func create_training_container() -> void:
 	## Create a CanvasLayer with SubViewports for parallel training.
-	# Use CanvasLayer to ensure proper screen-space positioning
-	var canvas_layer = CanvasLayer.new()
-	canvas_layer.name = "TrainingCanvasLayer"
-	canvas_layer.layer = 100  # On top of everything
-	get_tree().root.add_child(canvas_layer)
-
-	training_container = Control.new()
-	training_container.name = "TrainingContainer"
-	canvas_layer.add_child(training_container)
-
-	# Background
-	var bg = ColorRect.new()
-	bg.name = "Background"
-	bg.color = Color(0.05, 0.05, 0.08, 1)
-	training_container.add_child(bg)
-
-	# Stats label at top
-	var stats_label = Label.new()
-	stats_label.name = "StatsLabel"
-	stats_label.position = Vector2(10, 8)
-	stats_label.add_theme_font_size_override("font_size", 20)
-	stats_label.add_theme_color_override("font_color", Color.YELLOW)
-	training_container.add_child(stats_label)
-
-	# Set initial size
-	_update_container_size()
-
-	# Connect to window resize
-	get_tree().root.size_changed.connect(_on_training_window_resized)
-
-
-func _update_container_size() -> void:
-	var size = get_window_size()
-	training_container.position = Vector2.ZERO
-	training_container.size = size
-	var bg = training_container.get_node_or_null("Background")
-	if bg:
-		bg.position = Vector2.ZERO
-		bg.size = size
-
-
-func _on_training_window_resized() -> void:
-	## Update grid layout when window is resized.
-	if (current_mode != Mode.TRAINING and current_mode != Mode.COEVOLUTION) or not training_container:
-		return
-
-	update_grid_layout()
+	arena_pool.setup(get_tree(), parallel_count)
 
 
 func get_grid_dimensions() -> Dictionary:
 	## Calculate optimal grid dimensions for current parallel count.
-	var cols = 5
-	var rows = ceili(float(parallel_count) / cols)
-	return {"cols": cols, "rows": rows}
+	return arena_pool.get_grid_dimensions()
 
 
-func update_grid_layout() -> void:
-	## Recalculate and apply grid positions/sizes for all arenas.
-	if eval_instances.is_empty():
-		return
-
-	# Ensure container is correctly sized first
-	_update_container_size()
-
-	# If in fullscreen mode, apply fullscreen layout instead
-	if fullscreen_arena_index >= 0:
-		_apply_fullscreen_layout()
-		return
-
-	var size = get_window_size()
-	var grid = get_grid_dimensions()
-	var cols = grid.cols
-	var rows = grid.rows
-	var gap = 4
-	var top_margin = 40
-
-	# Simple calculation: divide available space evenly
-	var arena_w = (size.x - gap * (cols + 1)) / cols
-	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
-
-	for i in eval_instances.size():
-		var col: int = i % cols
-		var row: int = int(i / cols)
-		var x = gap + col * (arena_w + gap)
-		var y = top_margin + gap + row * (arena_h + gap)
-		eval_instances[i].container.position = Vector2(x, y)
-		eval_instances[i].container.size = Vector2(arena_w, arena_h)
-
-
-func get_arena_at_position(pos: Vector2) -> int:
-	## Return the slot index of the arena at the given screen position, or -1 if none.
-	for i in eval_instances.size():
-		var container = eval_instances[i].container
-		if not is_instance_valid(container):
-			continue
-		var rect = Rect2(container.position, container.size)
-		if rect.has_point(pos):
-			return i
-	return -1
-
-
-func enter_fullscreen(slot_index: int) -> void:
-	## Expand the arena at slot_index to fullscreen.
-	if slot_index < 0 or slot_index >= eval_instances.size():
-		return
-
-	fullscreen_arena_index = slot_index
-
-	# Hide all other arena containers
-	for i in eval_instances.size():
-		if i != slot_index and is_instance_valid(eval_instances[i].container):
-			eval_instances[i].container.visible = false
-
-	# Emit size_changed to trigger proper layout update
-	get_tree().root.size_changed.emit()
-
-
-func exit_fullscreen() -> void:
-	## Return from fullscreen to grid view.
-	fullscreen_arena_index = -1
-
-	# Show all arena containers
-	for i in eval_instances.size():
-		if is_instance_valid(eval_instances[i].container):
-			eval_instances[i].container.visible = true
-
-	# Emit size_changed to trigger proper layout update
-	get_tree().root.size_changed.emit()
-
-
-func _apply_fullscreen_layout() -> void:
-	## Position the fullscreen arena to fill the screen below the stats bar.
-	if fullscreen_arena_index < 0 or fullscreen_arena_index >= eval_instances.size():
-		return
-
-	var container = eval_instances[fullscreen_arena_index].container
-	if not is_instance_valid(container):
-		return
-
-	var win_size = get_window_size()
-	var top_margin = 40
-	var gap = 4
-
-	var new_pos = Vector2(gap, top_margin + gap)
-	var new_size = Vector2(win_size.x - gap * 2, win_size.y - top_margin - gap * 2)
-
-	# Set position and size (same as grid layout does)
-	container.position = new_pos
-	container.size = new_size
-
-
-func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Dictionary:
+func create_eval_instance(individual_index: int, _grid_x: int = 0, _grid_y: int = 0) -> Dictionary:
 	## Create a SubViewport with a game instance for evaluation.
-	var container = SubViewportContainer.new()
-	container.stretch = true
-	container.mouse_filter = Control.MOUSE_FILTER_PASS  # Allow clicks to pass through for fullscreen toggle
-	training_container.add_child(container)
-
-	# Set initial position and size immediately (don't wait for deferred update)
-	var size = get_window_size()
-	var grid = get_grid_dimensions()
-	var cols = grid.cols
-	var rows = grid.rows
-	var gap = 4
-	var top_margin = 40
-	var arena_w = (size.x - gap * (cols + 1)) / cols
-	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
-	var x = gap + grid_x * (arena_w + gap)
-	var y = top_margin + gap + grid_y * (arena_h + gap)
-	container.position = Vector2(x, y)
-	container.size = Vector2(arena_w, arena_h)
-
-	# Create SubViewport
-	var viewport = SubViewport.new()
-	viewport.size = Vector2(1280, 720)  # Internal resolution
-	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	viewport.handle_input_locally = false
-	container.add_child(viewport)
+	var slot = arena_pool.create_slot()
+	var viewport = slot.viewport
+	var slot_index = slot.index
 
 	# Instantiate game scene with preset events for current seed
 	var scene: Node2D = MainScenePacked.instantiate()
@@ -733,6 +532,7 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 		controller.set_network(evolution.get_network(individual_index))
 	else:
 		controller.set_network(evolution.get_individual(individual_index))
+		controller.network.reset_memory()
 
 	# Hide UI elements we don't need
 	var ui = scene.get_node("CanvasLayer/UI")
@@ -749,7 +549,7 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 	ui.add_child(index_label)
 
 	return {
-		"container": container,
+		"slot_index": slot_index,
 		"viewport": viewport,
 		"scene": scene,
 		"player": scene_player,
@@ -771,53 +571,65 @@ func start_next_batch() -> void:
 	var seed_label = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
 	print("Gen %d (%s): Evaluating %d individuals..." % [generation, seed_label, population_size])
 
-	var grid = get_grid_dimensions()
 	for i in range(mini(parallel_count, population_size)):
-		var grid_x: int = i % grid.cols
-		var grid_y: int = i / grid.cols
-		var instance = create_eval_instance(i, grid_x, grid_y)
+		var instance = create_eval_instance(i)
 		eval_instances.append(instance)
-
-	# Restore fullscreen state if active
-	if fullscreen_arena_index >= 0:
-		# Hide all except fullscreen arena
-		for i in eval_instances.size():
-			if i != fullscreen_arena_index:
-				eval_instances[i].container.visible = false
-		# Trigger layout update
-		get_tree().root.size_changed.emit()
 
 
 func replace_eval_instance(slot_index: int, individual_index: int) -> void:
 	## Replace a completed evaluation slot with a new individual.
-	var old_eval = eval_instances[slot_index]
-	var grid = get_grid_dimensions()
-	var grid_x: int = slot_index % grid.cols
-	var grid_y: int = int(slot_index / grid.cols)
+	# Arena pool handles viewport replacement; we rebuild game/AI wiring
+	var slot = arena_pool.replace_slot(slot_index)
+	var viewport = slot.viewport
 
-	# Clean up old instance
-	if is_instance_valid(old_eval.container):
-		old_eval.container.queue_free()
+	# Instantiate game scene with preset events for current seed
+	var scene: Node2D = MainScenePacked.instantiate()
+	scene.set_training_mode(true, get_current_curriculum_config())
+	if generation_events_by_seed.size() > current_eval_seed:
+		var events = generation_events_by_seed[current_eval_seed]
+		var enemy_copy = events.enemy_spawns.duplicate(true)
+		var powerup_copy = events.powerup_spawns.duplicate(true)
+		scene.set_preset_events(events.obstacles, enemy_copy, powerup_copy)
+	viewport.add_child(scene)
 
-	# Create new instance in same slot
-	var new_instance = create_eval_instance(individual_index, grid_x, grid_y)
-	eval_instances[slot_index] = new_instance
+	var scene_player: CharacterBody2D = scene.get_node("Player")
+	scene_player.enable_ai_control(true)
 
-	# Handle fullscreen mode
-	if fullscreen_arena_index >= 0:
-		if slot_index == fullscreen_arena_index:
-			# This is the fullscreen slot - trigger layout update
-			get_tree().root.size_changed.emit()
-		else:
-			# Not the fullscreen slot - hide it
-			new_instance.container.visible = false
+	var controller = AIControllerScript.new()
+	controller.set_player(scene_player)
+	if use_neat:
+		controller.set_network(evolution.get_network(individual_index))
+	else:
+		controller.set_network(evolution.get_individual(individual_index))
+		controller.network.reset_memory()
+
+	var ui = scene.get_node("CanvasLayer/UI")
+	for child in ui.get_children():
+		if child.name not in ["ScoreLabel", "LivesLabel"]:
+			child.visible = false
+
+	var index_label = Label.new()
+	index_label.text = "#%d" % individual_index
+	index_label.position = Vector2(5, 80)
+	index_label.add_theme_font_size_override("font_size", 14)
+	index_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+	ui.add_child(index_label)
+
+	eval_instances[slot_index] = {
+		"slot_index": slot_index,
+		"viewport": viewport,
+		"scene": scene,
+		"player": scene_player,
+		"controller": controller,
+		"index": individual_index,
+		"time": 0.0,
+		"done": false
+	}
 
 
 func cleanup_training_instances() -> void:
 	## Clean up completed evaluation instances.
-	for eval in eval_instances:
-		if is_instance_valid(eval.container):
-			eval.container.queue_free()
+	arena_pool.cleanup_all()
 	eval_instances.clear()
 
 
@@ -839,19 +651,10 @@ func _coevo_start_next_batch() -> void:
 	var seed_label = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
 	print("Gen %d (%s): Co-evolving %d player-enemy pairs..." % [generation, seed_label, population_size])
 
-	var grid = get_grid_dimensions()
 	for i in range(mini(parallel_count, population_size)):
-		var grid_x: int = i % grid.cols
-		var grid_y: int = i / grid.cols
 		var enemy_idx: int = _pick_enemy_index(i)
-		var instance = _coevo_create_eval_instance(i, enemy_idx, grid_x, grid_y)
+		var instance = _coevo_create_eval_instance(i, enemy_idx)
 		eval_instances.append(instance)
-
-	if fullscreen_arena_index >= 0:
-		for i in eval_instances.size():
-			if i != fullscreen_arena_index:
-				eval_instances[i].container.visible = false
-		get_tree().root.size_changed.emit()
 
 
 func _pick_enemy_index(player_index: int) -> int:
@@ -861,32 +664,12 @@ func _pick_enemy_index(player_index: int) -> int:
 	return randi() % population_size
 
 
-func _coevo_create_eval_instance(player_index: int, enemy_index: int, grid_x: int, grid_y: int) -> Dictionary:
+func _coevo_create_eval_instance(player_index: int, enemy_index: int, _grid_x: int = 0, _grid_y: int = 0) -> Dictionary:
 	## Create a SubViewport with a game instance for co-evolution evaluation.
 	## Similar to create_eval_instance() but also wires enemy AI.
-	var container = SubViewportContainer.new()
-	container.stretch = true
-	container.mouse_filter = Control.MOUSE_FILTER_PASS
-	training_container.add_child(container)
-
-	var size = get_window_size()
-	var grid = get_grid_dimensions()
-	var cols = grid.cols
-	var rows = grid.rows
-	var gap = 4
-	var top_margin = 40
-	var arena_w = (size.x - gap * (cols + 1)) / cols
-	var arena_h = (size.y - top_margin - gap * (rows + 1)) / rows
-	var x = gap + grid_x * (arena_w + gap)
-	var y = top_margin + gap + grid_y * (arena_h + gap)
-	container.position = Vector2(x, y)
-	container.size = Vector2(arena_w, arena_h)
-
-	var viewport = SubViewport.new()
-	viewport.size = Vector2(1280, 720)
-	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	viewport.handle_input_locally = false
-	container.add_child(viewport)
+	var slot = arena_pool.create_slot()
+	var viewport = slot.viewport
+	var slot_index = slot.index
 
 	var scene: Node2D = MainScenePacked.instantiate()
 	scene.set_training_mode(true, get_current_curriculum_config())
@@ -903,6 +686,7 @@ func _coevo_create_eval_instance(player_index: int, enemy_index: int, grid_x: in
 	var controller = AIControllerScript.new()
 	controller.set_player(scene_player)
 	controller.set_network(coevolution.get_player_network(player_index))
+	controller.network.reset_memory()
 
 	# Enemy AI: get the network to use (current population or HoF)
 	var enemy_network
@@ -928,7 +712,7 @@ func _coevo_create_eval_instance(player_index: int, enemy_index: int, grid_x: in
 	ui.add_child(index_label)
 
 	return {
-		"container": container,
+		"slot_index": slot_index,
 		"viewport": viewport,
 		"scene": scene,
 		"player": scene_player,
@@ -955,23 +739,63 @@ func _is_descendant_of(node: Node, ancestor: Node) -> bool:
 
 func _coevo_replace_eval_instance(slot_index: int, player_index: int) -> void:
 	## Replace a completed co-evolution slot with a new player-enemy pair.
-	var old_eval = eval_instances[slot_index]
-	var grid = get_grid_dimensions()
-	var grid_x: int = slot_index % grid.cols
-	var grid_y: int = int(slot_index / grid.cols)
-
-	if is_instance_valid(old_eval.container):
-		old_eval.container.queue_free()
+	# Arena pool handles viewport replacement
+	var slot = arena_pool.replace_slot(slot_index)
+	var viewport = slot.viewport
 
 	var enemy_idx: int = _pick_enemy_index(player_index)
-	var new_instance = _coevo_create_eval_instance(player_index, enemy_idx, grid_x, grid_y)
-	eval_instances[slot_index] = new_instance
 
-	if fullscreen_arena_index >= 0:
-		if slot_index == fullscreen_arena_index:
-			get_tree().root.size_changed.emit()
-		else:
-			new_instance.container.visible = false
+	var scene: Node2D = MainScenePacked.instantiate()
+	scene.set_training_mode(true, get_current_curriculum_config())
+	if generation_events_by_seed.size() > current_eval_seed:
+		var events = generation_events_by_seed[current_eval_seed]
+		var enemy_copy = events.enemy_spawns.duplicate(true)
+		var powerup_copy = events.powerup_spawns.duplicate(true)
+		scene.set_preset_events(events.obstacles, enemy_copy, powerup_copy)
+	viewport.add_child(scene)
+
+	var scene_player: CharacterBody2D = scene.get_node("Player")
+	scene_player.enable_ai_control(true)
+	var controller = AIControllerScript.new()
+	controller.set_player(scene_player)
+	controller.set_network(coevolution.get_player_network(player_index))
+	controller.network.reset_memory()
+
+	var enemy_network
+	if coevo_is_hof_generation:
+		var hof_nets = coevolution.get_hof_networks()
+		enemy_network = hof_nets[enemy_idx % hof_nets.size()] if not hof_nets.is_empty() else coevolution.get_enemy_network(enemy_idx)
+	else:
+		enemy_network = coevolution.get_enemy_network(enemy_idx)
+	scene.enemy_ai_network = enemy_network
+
+	var ui = scene.get_node("CanvasLayer/UI")
+	for child in ui.get_children():
+		if child.name not in ["ScoreLabel", "LivesLabel"]:
+			child.visible = false
+
+	var index_label = Label.new()
+	index_label.text = "P#%d vs E#%d" % [player_index, enemy_idx]
+	index_label.position = Vector2(5, 80)
+	index_label.add_theme_font_size_override("font_size", 14)
+	index_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+	ui.add_child(index_label)
+
+	eval_instances[slot_index] = {
+		"slot_index": slot_index,
+		"viewport": viewport,
+		"scene": scene,
+		"player": scene_player,
+		"controller": controller,
+		"index": player_index,
+		"enemy_index": enemy_idx,
+		"time": 0.0,
+		"done": false,
+		"last_player_dir": Vector2.ZERO,
+		"direction_changes": 0,
+		"proximity_sum": 0.0,
+		"proximity_samples": 0,
+	}
 
 
 func _physics_process(delta: float) -> void:
@@ -1245,12 +1069,6 @@ func _process_coevolution_training(delta: float) -> void:
 
 
 func _update_coevo_stats_display() -> void:
-	if not training_container:
-		return
-	var stats_label = training_container.get_node_or_null("StatsLabel")
-	if not stats_label:
-		return
-
 	var best_current = 0.0
 	for eval in eval_instances:
 		if not eval.done and eval.scene.score > best_current:
@@ -1260,7 +1078,7 @@ func _update_coevo_stats_display() -> void:
 	var hof_tag = " [HoF]" if coevo_is_hof_generation else ""
 
 	var controls_hint: String
-	if fullscreen_arena_index >= 0:
+	if arena_pool.fullscreen_index >= 0:
 		controls_hint = "[Click/ESC]=Grid [-/+]=Speed [SPACE]=Pause [C]=Stop"
 	else:
 		controls_hint = "[Click]=Fullscreen [-/+]=Speed [SPACE]=Pause [C]=Stop"
@@ -1277,70 +1095,65 @@ func _update_coevo_stats_display() -> void:
 	if coevolution and coevolution.get_hof_size() > 0:
 		hof_text = " | HoF: %d" % coevolution.get_hof_size()
 
-	stats_label.text = "COEVO Gen %d%s (%s) | Progress: %d/%d | P.Best: %.0f | P.All-time: %.0f | E.Best: %s%s%s | Stagnant: %d/%d | Speed: %.1fx | %s" % [
+	arena_pool.set_stats_text("COEVO Gen %d%s (%s) | Progress: %d/%d | P.Best: %.0f | P.All-time: %.0f | E.Best: %s%s%s | Stagnant: %d/%d | Speed: %.1fx | %s" % [
 		generation, hof_tag, seed_info,
 		evaluated_count, population_size,
 		best_current, all_time_best,
 		enemy_best_str, curriculum_text, hof_text,
 		generations_without_improvement, stagnation_limit,
 		time_scale, controls_hint
-	]
+	])
 
 
 func update_training_stats_display() -> void:
-	if not training_container:
-		return
+	var best_current = 0.0
+	for eval in eval_instances:
+		if not eval.done and eval.scene.score > best_current:
+			best_current = eval.scene.score
 
-	var stats_label = training_container.get_node_or_null("StatsLabel")
-	if stats_label:
-		var best_current = 0.0
-		for eval in eval_instances:
-			if not eval.done and eval.scene.score > best_current:
-				best_current = eval.scene.score
+	var seed_info = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
 
-		var seed_info = "seed %d/%d" % [current_eval_seed + 1, evals_per_individual]
+	# Show different controls hint based on fullscreen state
+	var controls_hint: String
+	if arena_pool.fullscreen_index >= 0:
+		controls_hint = "[Click/ESC]=Grid [-/+]=Speed [SPACE]=Pause [T]=Stop"
+	else:
+		controls_hint = "[Click]=Fullscreen [-/+]=Speed [SPACE]=Pause [T]=Stop"
 
-		# Show different controls hint based on fullscreen state
-		var controls_hint: String
-		if fullscreen_arena_index >= 0:
-			controls_hint = "[Click/ESC]=Grid [-/+]=Speed [SPACE]=Pause [T]=Stop"
-		else:
-			controls_hint = "[Click]=Fullscreen [-/+]=Speed [SPACE]=Pause [T]=Stop"
+	var curriculum_text = ""
+	if curriculum_enabled:
+		curriculum_text = " | %s" % get_curriculum_label()
 
-		var curriculum_text = ""
-		if curriculum_enabled:
-			curriculum_text = " | %s" % get_curriculum_label()
+	var nsga2_text = ""
+	if use_nsga2:
+		var front_size = evolution.pareto_front.size() if evolution else 0
+		nsga2_text = " | NSGA-II (F0: %d)" % front_size
 
-		var nsga2_text = ""
-		if use_nsga2:
-			var front_size = evolution.pareto_front.size() if evolution else 0
-			nsga2_text = " | NSGA-II (F0: %d)" % front_size
+	var neat_text = ""
+	if use_neat and evolution:
+		var evo_stats = evolution.get_stats()
+		neat_text = " | NEAT (Sp: %d, Ct: %.1f)" % [evo_stats.species_count, evo_stats.compatibility_threshold]
 
-		var neat_text = ""
-		if use_neat and evolution:
-			var evo_stats = evolution.get_stats()
-			neat_text = " | NEAT (Sp: %d, Ct: %.1f)" % [evo_stats.species_count, evo_stats.compatibility_threshold]
+	var me_text = ""
+	if use_map_elites and map_elites_archive:
+		me_text = " | ME: %d/%d" % [map_elites_archive.get_occupied_count(), map_elites_archive.grid_size * map_elites_archive.grid_size]
 
-		var me_text = ""
-		if use_map_elites and map_elites_archive:
-			me_text = " | ME: %d/%d" % [map_elites_archive.get_occupied_count(), map_elites_archive.grid_size * map_elites_archive.grid_size]
-
-		stats_label.text = "Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s%s%s%s | Speed: %.1fx | %s" % [
-			generation,
-			seed_info,
-			evaluated_count,
-			population_size,
-			best_current,
-			all_time_best,
-			generations_without_improvement,
-			stagnation_limit,
-			curriculum_text,
-			nsga2_text,
-			neat_text,
-			me_text,
-			time_scale,
-			controls_hint
-		]
+	arena_pool.set_stats_text("Gen %d (%s) | Progress: %d/%d | Best: %.0f | All-time: %.0f | Stagnant: %d/%d%s%s%s%s | Speed: %.1fx | %s" % [
+		generation,
+		seed_info,
+		evaluated_count,
+		population_size,
+		best_current,
+		all_time_best,
+		generations_without_improvement,
+		stagnation_limit,
+		curriculum_text,
+		nsga2_text,
+		neat_text,
+		me_text,
+		time_scale,
+		controls_hint
+	])
 
 
 func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) -> void:
@@ -1394,6 +1207,10 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	# Auto-save every generation
 	evolution.save_best(BEST_NETWORK_PATH)
 	evolution.save_population(POPULATION_PATH)
+
+	# Island model migration (export best, import foreign genomes)
+	_export_best_to_migration_pool()
+	_import_from_migration_pool()
 
 	# Write metrics for W&B bridge
 	_write_metrics_for_wandb()
@@ -1450,6 +1267,7 @@ func _write_metrics_for_wandb() -> void:
 		"use_neat": use_neat,
 		"neat_species_count": evolution.get_stats().species_count if evolution and use_neat else 0,
 		"neat_compatibility_threshold": evolution.get_stats().compatibility_threshold if evolution and use_neat else 0.0,
+		"use_memory": use_memory,
 		"use_map_elites": use_map_elites,
 		"map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
 		"map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
@@ -1467,15 +1285,124 @@ func _write_metrics_for_wandb() -> void:
 		metrics["hof_size"] = coevolution.get_hof_size()
 		metrics["is_hof_generation"] = coevo_is_hof_generation
 
-	# Use worker-specific metrics file if worker ID is set
-	var metrics_path = "user://metrics.json"
-	if _worker_id != "":
-		metrics_path = "user://metrics_%s.json" % _worker_id
-
+	var metrics_path = config.get_metrics_path()
 	var file = FileAccess.open(metrics_path, FileAccess.WRITE)
 	if file:
 		file.store_string(JSON.stringify(metrics))
 		file.close()
+
+
+# ============================================================
+# ISLAND MODEL MIGRATION (NEAT only)
+# ============================================================
+
+func _export_best_to_migration_pool() -> void:
+	## Write best genome to migration pool so other workers can import it.
+	if not use_neat or config.worker_id == "" or not evolution:
+		return
+	if not evolution.all_time_best_genome:
+		return
+
+	# Ensure directory exists
+	DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path(MIGRATION_POOL_DIR)
+	)
+
+	var data := {
+		"worker_id": config.worker_id,
+		"generation": generation,
+		"fitness": evolution.all_time_best_fitness,
+		"genome": evolution.all_time_best_genome.serialize(),
+	}
+	var path: String = MIGRATION_POOL_DIR + config.worker_id + ".json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data))
+		file.close()
+
+
+func _import_from_migration_pool() -> void:
+	## Scan migration pool for foreign genomes and inject into population.
+	if not use_neat or config.worker_id == "" or not evolution:
+		return
+
+	_generations_since_import += 1
+
+	# Determine if we should import this generation
+	var stagnation_triggered := generations_without_improvement >= MIGRATION_STAGNATION_THRESHOLD
+	var interval_triggered := _generations_since_import >= MIGRATION_IMPORT_INTERVAL
+
+	if not stagnation_triggered and not interval_triggered:
+		return
+
+	var max_immigrants := MIGRATION_MAX_IMMIGRANTS
+	if stagnation_triggered:
+		max_immigrants = MIGRATION_STAGNATION_IMMIGRANTS
+
+	# Scan migration pool directory
+	var dir := DirAccess.open(MIGRATION_POOL_DIR)
+	if not dir:
+		return
+
+	var imported_count := 0
+	var imported_from: Array[String] = []
+	dir.list_dir_begin()
+	var filename := dir.get_next()
+	while filename != "" and imported_count < max_immigrants:
+		if filename.ends_with(".json") and not filename.begins_with(config.worker_id):
+			var path := MIGRATION_POOL_DIR + filename
+			var immigrant := _try_load_immigrant(path)
+			if immigrant:
+				evolution.inject_immigrant(immigrant)
+				imported_count += 1
+				imported_from.append(filename.get_basename())
+		filename = dir.get_next()
+	dir.list_dir_end()
+
+	if imported_count > 0:
+		_generations_since_import = 0
+		var trigger := "stagnation" if stagnation_triggered else "interval"
+		print("Migration [%s]: Imported %d immigrant(s) from workers %s" % [
+			trigger, imported_count, imported_from
+		])
+
+
+func _try_load_immigrant(path: String) -> NeatGenome:
+	## Try to load a foreign genome from a migration pool file.
+	## Returns null if the file is invalid, already imported, or not worth it.
+	var file := FileAccess.open(path, FileAccess.READ)
+	if not file:
+		return null
+	var json := JSON.new()
+	if json.parse(file.get_as_text()) != OK:
+		file.close()
+		return null
+	file.close()
+
+	var data: Dictionary = json.data
+	var foreign_worker: String = str(data.get("worker_id", ""))
+	var foreign_gen: int = int(data.get("generation", 0))
+	var foreign_fitness: float = float(data.get("fitness", 0.0))
+
+	# Skip if already imported this exact snapshot
+	var import_key := "%s:%d" % [foreign_worker, foreign_gen]
+	if _imported_migrations.has(import_key):
+		return null
+	_imported_migrations[import_key] = true
+
+	# Skip if fitness is below our worst (not worth importing)
+	var worst_fitness := INF
+	for genome in evolution.population:
+		worst_fitness = minf(worst_fitness, genome.fitness)
+	if foreign_fitness <= worst_fitness:
+		return null
+
+	var genome_data = data.get("genome")
+	if not genome_data or not genome_data is Dictionary:
+		return null
+
+	# v1: import as-is — foreign innovation numbers form their own species
+	return NeatGenome.deserialize(genome_data, evolution.config, evolution.innovation_tracker)
 
 
 # Curriculum learning functions
@@ -1739,33 +1666,10 @@ func start_comparison(strategies: Array) -> void:
 	current_mode = Mode.COMPARISON
 	Engine.time_scale = 1.0
 
-	# Hide the main game and show comparison arenas
+	# Hide the main game and show comparison arenas via arena_pool
 	hide_main_game()
-
-	# Create comparison container (similar to training container)
-	var canvas_layer = CanvasLayer.new()
-	canvas_layer.name = "ComparisonCanvasLayer"
-	canvas_layer.layer = 100
-	get_tree().root.add_child(canvas_layer)
-
-	comparison_container = Control.new()
-	comparison_container.name = "ComparisonContainer"
-	canvas_layer.add_child(comparison_container)
-
-	# Background
-	var bg = ColorRect.new()
-	bg.name = "Background"
-	bg.color = Color(0.05, 0.05, 0.08, 1)
-	comparison_container.add_child(bg)
-
-	# Stats bar
-	var stats_label = Label.new()
-	stats_label.name = "StatsLabel"
-	stats_label.position = Vector2(10, 8)
-	stats_label.add_theme_font_size_override("font_size", 18)
-	stats_label.add_theme_color_override("font_color", Color.CYAN)
-	stats_label.text = "SIDE-BY-SIDE COMPARISON | [H]=Stop"
-	comparison_container.add_child(stats_label)
+	arena_pool.setup(get_tree(), strategies.size(), "ComparisonCanvasLayer", Color.CYAN)
+	arena_pool.set_stats_text("SIDE-BY-SIDE COMPARISON | [H]=Stop")
 
 	# Generate shared seed for all arenas
 	var shared_seed: int = randi()
@@ -1773,36 +1677,11 @@ func start_comparison(strategies: Array) -> void:
 
 	# Create arenas
 	comparison_instances.clear()
-	var win_size = get_window_size()
 	var arena_count: int = strategies.size()
-	var cols: int = mini(arena_count, 2)
-	var rows: int = ceili(float(arena_count) / cols)
-	var gap: int = 4
-	var top_margin: int = 40
-	var arena_w: float = (win_size.x - gap * (cols + 1)) / cols
-	var arena_h: float = (win_size.y - top_margin - gap * (rows + 1)) / rows
-
-	# Set container to fill window
-	comparison_container.size = win_size
-	bg.size = win_size
 
 	for i in arena_count:
-		var col: int = i % cols
-		var row: int = i / cols
-		var x: float = gap + col * (arena_w + gap)
-		var y: float = top_margin + gap + row * (arena_h + gap)
-
-		var container = SubViewportContainer.new()
-		container.stretch = true
-		container.position = Vector2(x, y)
-		container.size = Vector2(arena_w, arena_h)
-		comparison_container.add_child(container)
-
-		var viewport = SubViewport.new()
-		viewport.size = Vector2(1280, 720)
-		viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-		viewport.handle_input_locally = false
-		container.add_child(viewport)
+		var slot = arena_pool.create_slot()
+		var viewport = slot.viewport
 
 		var scene: Node2D = MainScenePacked.instantiate()
 		scene.set_game_seed(shared_seed)
@@ -1842,17 +1721,13 @@ func start_comparison(strategies: Array) -> void:
 		ui.add_child(strat_label)
 
 		comparison_instances.append({
-			"container": container,
-			"viewport": viewport,
+			"slot_index": slot.index,
 			"scene": scene,
 			"player": scene_player,
 			"controller": controller,
 			"strategy": strategy,
 			"done": false,
 		})
-
-	# Connect resize
-	get_tree().root.size_changed.connect(_on_comparison_window_resized)
 
 	training_status_changed.emit("Comparison started with %d strategies" % arena_count)
 	print("Comparison started: %d arenas, seed=%d" % [arena_count, shared_seed])
@@ -1866,47 +1741,11 @@ func stop_comparison() -> void:
 	current_mode = Mode.HUMAN
 	Engine.time_scale = 1.0
 
-	if get_tree().root.size_changed.is_connected(_on_comparison_window_resized):
-		get_tree().root.size_changed.disconnect(_on_comparison_window_resized)
-
-	for inst in comparison_instances:
-		if is_instance_valid(inst.container):
-			inst.container.queue_free()
 	comparison_instances.clear()
-
-	if comparison_container:
-		var canvas = comparison_container.get_parent()
-		canvas.queue_free()
-		comparison_container = null
+	arena_pool.destroy()
 
 	show_main_game()
 	training_status_changed.emit("Comparison stopped")
-
-
-func _on_comparison_window_resized() -> void:
-	if current_mode != Mode.COMPARISON or not comparison_container:
-		return
-	var win_size = get_window_size()
-	comparison_container.size = win_size
-	var bg = comparison_container.get_node_or_null("Background")
-	if bg:
-		bg.size = win_size
-
-	var arena_count: int = comparison_instances.size()
-	var cols: int = mini(arena_count, 2)
-	var rows: int = ceili(float(arena_count) / cols)
-	var gap: int = 4
-	var top_margin: int = 40
-	var arena_w: float = (win_size.x - gap * (cols + 1)) / cols
-	var arena_h: float = (win_size.y - top_margin - gap * (rows + 1)) / rows
-
-	for i in comparison_instances.size():
-		var col: int = i % cols
-		var row: int = i / cols
-		var x: float = gap + col * (arena_w + gap)
-		var y: float = top_margin + gap + row * (arena_h + gap)
-		comparison_instances[i].container.position = Vector2(x, y)
-		comparison_instances[i].container.size = Vector2(arena_w, arena_h)
 
 
 func _process_comparison(delta: float) -> void:
@@ -1927,22 +1766,19 @@ func _process_comparison(delta: float) -> void:
 			all_done = false
 
 	# Update stats display
-	if comparison_container:
-		var stats_label = comparison_container.get_node_or_null("StatsLabel")
-		if stats_label:
-			var parts: Array = ["COMPARISON"]
-			for i in comparison_instances.size():
-				var inst = comparison_instances[i]
-				var status_str: String
-				if inst.done:
-					status_str = "Arena %d: Score %d (DONE)" % [i + 1, int(inst.scene.score)]
-				else:
-					status_str = "Arena %d: Score %d | Kills %d | Lives %d" % [
-						i + 1, int(inst.scene.score), inst.scene.kills, inst.scene.lives
-					]
-				parts.append(status_str)
-			parts.append("[H]=Stop")
-			stats_label.text = " | ".join(parts)
+	var parts: Array = ["COMPARISON"]
+	for i in comparison_instances.size():
+		var inst = comparison_instances[i]
+		var status_str: String
+		if inst.done:
+			status_str = "Arena %d: Score %d (DONE)" % [i + 1, int(inst.scene.score)]
+		else:
+			status_str = "Arena %d: Score %d | Kills %d | Lives %d" % [
+				i + 1, int(inst.scene.score), inst.scene.kills, inst.scene.lives
+			]
+		parts.append(status_str)
+	parts.append("[H]=Stop")
+	arena_pool.set_stats_text(" | ".join(parts))
 
 
 func reset_game() -> void:
@@ -2055,12 +1891,26 @@ func toggle_pause() -> void:
 
 
 func show_training_complete(reason: String) -> void:
-	## Show results screen at end of training. SPACE will exit.
+	## Training finished — auto-replay best network (visual) or freeze evals (headless).
 	print("Training complete: %s" % reason)
 	training_complete = true
-	is_paused = true
 
-	# Freeze all evals
+	# Save final results
+	if evolution:
+		evolution.save_best(BEST_NETWORK_PATH)
+		evolution.save_population(POPULATION_PATH)
+	if coevolution:
+		coevolution.player_evolution.save_best(BEST_NETWORK_PATH)
+		coevolution.save_populations(POPULATION_PATH, ENEMY_POPULATION_PATH)
+		coevolution.save_hall_of_fame(ENEMY_HOF_PATH)
+
+	# Visual mode: auto-replay best network fullscreen with topology viz
+	if DisplayServer.get_name() != "headless":
+		call_deferred("_start_best_replay")
+		return
+
+	# Headless: freeze evals so metrics bridge detects completion
+	is_paused = true
 	for eval in eval_instances:
 		if is_instance_valid(eval.viewport):
 			eval.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
@@ -2068,29 +1918,54 @@ func show_training_complete(reason: String) -> void:
 			eval.scene.set_physics_process(false)
 			eval.scene.set_process(false)
 
-	# Save final results
-	if evolution:
-		evolution.save_best(BEST_NETWORK_PATH)
-		evolution.save_population(POPULATION_PATH)
 
-	# Create pause overlay with completion message
-	create_pause_overlay()
-	# Update title to show completion
-	if pause_overlay:
-		var title = pause_overlay.get_node_or_null("Control")
-		if not title:
-			for child in pause_overlay.get_children():
-				if child is Label and "PAUSED" in child.text:
-					child.text = "TRAINING COMPLETE"
-					break
-		var stats_label = pause_overlay.get_node_or_null("StatsLabel")
-		if stats_label:
-			stats_label.text = "Reason: %s\n\nGeneration: %d\nBest Fitness: %.1f\nAll-time Best: %.1f\n\n[SPACE] to exit" % [
-				reason,
-				generation,
-				best_fitness,
-				all_time_best
-			]
+func _start_best_replay() -> void:
+	## Tear down training grid and start fullscreen playback of best network.
+
+	# Clean up pause state if any
+	if is_paused:
+		destroy_pause_overlay()
+		is_paused = false
+
+	# Tear down training grid
+	eval_instances.clear()
+	arena_pool.destroy()
+
+	# Show main game fullscreen
+	show_main_game()
+	Engine.time_scale = 1.0
+
+	# Build network from best genome/weights
+	var network = null
+	var genome = null
+	if use_neat and evolution and evolution.all_time_best_genome:
+		genome = evolution.all_time_best_genome
+		network = NeatNetworkScript.from_genome(genome)
+	else:
+		network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+
+	if not network:
+		push_error("No best network available for replay")
+		current_mode = Mode.HUMAN
+		training_status_changed.emit("Training complete (no network to replay)")
+		return
+
+	# Start playback
+	current_mode = Mode.PLAYBACK
+	ai_controller.set_network(network)
+	player.enable_ai_control(true)
+	reset_game()
+
+	# Show network topology visualizer
+	if main_scene.network_visualizer:
+		if genome and network is NeatNetwork:
+			main_scene.network_visualizer.set_neat_data(genome, network)
+		else:
+			main_scene.network_visualizer.set_fixed_network(network)
+		main_scene.network_visualizer.visible = true
+
+	training_status_changed.emit("Replaying best network (fitness: %.1f)" % all_time_best)
+	print("Auto-replaying best network (fitness: %.1f)" % all_time_best)
 
 
 func pause_training() -> void:
@@ -2215,9 +2090,8 @@ func create_pause_overlay() -> void:
 		pause_overlay.add_child(graph_panel)
 
 	# Add to training canvas layer
-	if training_container:
-		var canvas = training_container.get_parent()
-		canvas.add_child(pause_overlay)
+	if arena_pool.canvas_layer:
+		arena_pool.canvas_layer.add_child(pause_overlay)
 
 
 func _on_heatmap_cell_clicked(cell: Vector2i) -> void:
@@ -2236,24 +2110,13 @@ func _on_heatmap_cell_clicked(cell: Vector2i) -> void:
 		destroy_pause_overlay()
 		is_paused = false
 
-	# Reset fullscreen state
-	fullscreen_arena_index = -1
-
 	# Stop training mode processing
-	var was_training := current_mode == Mode.TRAINING
 	current_mode = Mode.HUMAN
 	Engine.time_scale = 1.0
 
-	# Disconnect resize signal
-	if get_tree().root.size_changed.is_connected(_on_training_window_resized):
-		get_tree().root.size_changed.disconnect(_on_training_window_resized)
-
-	# Cleanup training instances
-	cleanup_training_instances()
-	if training_container:
-		var canvas_layer = training_container.get_parent()
-		canvas_layer.queue_free()
-		training_container = null
+	# Cleanup training instances and visual layer
+	eval_instances.clear()
+	arena_pool.destroy()
 
 	# Show main game and start archive playback
 	show_main_game()

@@ -244,20 +244,71 @@ func get_stats() -> Dictionary:
 
 
 func save_best(path: String) -> void:
-	## Save best genome to file (stub — full serialization in future PR).
-	if all_time_best_genome:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file:
-			file.store_string("NEAT_GENOME_V1\n")
-			file.store_string("fitness=%f\n" % all_time_best_fitness)
-			file.store_string("nodes=%d\n" % all_time_best_genome.node_genes.size())
-			file.store_string("connections=%d\n" % all_time_best_genome.connection_genes.size())
-			file.close()
+	## Save best genome to JSON file.
+	if not all_time_best_genome:
+		return
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(all_time_best_genome.serialize()))
+		file.close()
 
 
 func save_population(path: String) -> void:
-	## Stub for population save (full serialization in future PR).
-	pass
+	## Save full population state to JSON file.
+	var genomes: Array = []
+	for genome in population:
+		genomes.append(genome.serialize())
+	var data := {
+		"generation": generation,
+		"best_fitness": best_fitness,
+		"all_time_best_fitness": all_time_best_fitness,
+		"all_time_best_genome": all_time_best_genome.serialize() if all_time_best_genome else null,
+		"genomes": genomes,
+	}
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data))
+		file.close()
+
+
+func load_population(path: String) -> bool:
+	## Load population state from JSON file. Returns true on success.
+	if not FileAccess.file_exists(path):
+		return false
+	var file := FileAccess.open(path, FileAccess.READ)
+	if not file:
+		return false
+	var json := JSON.new()
+	if json.parse(file.get_as_text()) != OK:
+		file.close()
+		return false
+	file.close()
+	var data: Dictionary = json.data
+
+	population.clear()
+	for genome_data in data.get("genomes", []):
+		population.append(NeatGenome.deserialize(genome_data, config, innovation_tracker))
+
+	generation = int(data.get("generation", 0))
+	best_fitness = float(data.get("best_fitness", 0.0))
+	all_time_best_fitness = float(data.get("all_time_best_fitness", 0.0))
+	var atb_data = data.get("all_time_best_genome")
+	if atb_data and atb_data is Dictionary:
+		all_time_best_genome = NeatGenome.deserialize(atb_data, config, innovation_tracker)
+	return true
+
+
+func inject_immigrant(genome: NeatGenome) -> void:
+	## Replace worst individual with an immigrant genome.
+	if population.is_empty():
+		return
+	var worst_idx := 0
+	var worst_fit: float = population[0].fitness
+	for i in range(1, population.size()):
+		if population[i].fitness < worst_fit:
+			worst_fit = population[i].fitness
+			worst_idx = i
+	population[worst_idx] = genome
 
 
 func restore_backup() -> void:

@@ -44,8 +44,8 @@ SWEEP_CONFIG = {
         # Crossover (0.72-0.75 in top configs)
         'crossover_rate': {'distribution': 'uniform', 'min': 0.65, 'max': 0.80},
 
-        # Network architecture (80 was sweet spot, 96 also viable)
-        'hidden_size': {'values': [64, 80, 96]},
+        # NEAT topology evolution (always on — NEAT doesn't use hidden_size)
+        'use_neat': {'value': True},
 
         # Training (top runs all reached gen 50; 2 evals won every top run)
         'max_generations': {'value': 50},
@@ -250,7 +250,7 @@ def train():
 
     print(f"\n{'='*60}")
     print(f"Starting sweep run: {run.name} (worker: {WORKER_ID})")
-    print(f"Config: pop={config.population_size}, hidden={config.hidden_size}, "
+    print(f"Config: pop={config.population_size}, neat={config.get('use_neat', False)}, "
           f"elite={config.elite_count}, mut={config.mutation_rate:.2f}")
     print(f"{'='*60}")
 

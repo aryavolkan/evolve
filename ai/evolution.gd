@@ -15,6 +15,9 @@ var generation: int = 0
 
 # NSGA-II multi-objective mode
 var use_nsga2: bool = false
+
+# Elman recurrent memory
+var use_memory: bool = false
 var objective_scores: Array = []  # Array of Vector3 per individual (survival, kills, powerups)
 var pareto_front: Array = []  # Current generation's Pareto front [{index, objectives}]
 var last_hypervolume: float = 0.0  # For stagnation detection in NSGA-II mode
@@ -81,6 +84,13 @@ func _init(
 	for i in population_size:
 		objective_scores[i] = Vector3.ZERO
 	initialize_population()
+
+
+func enable_population_memory() -> void:
+	## Enable Elman memory on all networks in the population.
+	use_memory = true
+	for net in population:
+		net.enable_memory()
 
 
 func initialize_population() -> void:
@@ -452,6 +462,8 @@ func load_population(path: String) -> bool:
 	var has_best := file.get_8()
 	if has_best:
 		all_time_best_network = NeuralNetworkScript.new(input_size, hidden_size, output_size)
+		if use_memory:
+			all_time_best_network.enable_memory()
 		var weights := PackedFloat32Array()
 		weights.resize(weight_count)
 		for j in weight_count:
