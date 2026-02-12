@@ -23,6 +23,7 @@ import os
 import argparse
 import signal
 import sys
+import uuid
 
 # Sweep configuration - hyperparameters to search
 SWEEP_CONFIG = {
@@ -59,22 +60,43 @@ if _platform.system() == "Linux":
     GODOT_USER_DATA = Path.home() / ".local/share/godot/app_userdata/Evolve"
 else:
     GODOT_USER_DATA = Path.home() / "Library/Application Support/Godot/app_userdata/Evolve"
-METRICS_PATH = GODOT_USER_DATA / "metrics.json"
-CONFIG_PATH = GODOT_USER_DATA / "sweep_config.json"
+
+# Generate unique worker ID for this process
+WORKER_ID = uuid.uuid4().hex[:8]
+
+
+def get_config_path():
+    return GODOT_USER_DATA / f"sweep_config_{WORKER_ID}.json"
+
+
+def get_metrics_path():
+    return GODOT_USER_DATA / f"metrics_{WORKER_ID}.json"
 
 
 def write_config_for_godot(config: dict):
     """Write sweep config so Godot can read it"""
     GODOT_USER_DATA.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_PATH, 'w') as f:
+    config_path = get_config_path()
+    with open(config_path, 'w') as f:
         json.dump(dict(config), f, indent=2)
-    print(f"  Config written: {CONFIG_PATH}")
+    print(f"  Config written: {config_path}")
 
 
 def clear_metrics():
     """Clear old metrics file"""
-    if METRICS_PATH.exists():
-        METRICS_PATH.unlink()
+    metrics_path = get_metrics_path()
+    if metrics_path.exists():
+        metrics_path.unlink()
+
+
+def cleanup_worker_files():
+    """Remove worker-specific config and metrics files"""
+    for path in [get_config_path(), get_metrics_path()]:
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            pass
 
 
 def run_godot_training(timeout_minutes: int = 20) -> float:
@@ -82,16 +104,17 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
 
     clear_metrics()
 
-    # Build command
+    # Build command with worker ID
     cmd = [
         GODOT_PATH,
         "--path", str(PROJECT_PATH),
         "--headless",
         "--",
         "--auto-train",
+        f"--worker-id={WORKER_ID}",
     ]
 
-    print(f"  Starting Godot (timeout: {timeout_minutes}m)...")
+    print(f"  Starting Godot (timeout: {timeout_minutes}m, worker: {WORKER_ID})...")
 
     proc = subprocess.Popen(
         cmd,
@@ -103,6 +126,7 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
     start_time = time.time()
     last_gen = -1
     best_fitness = 0
+    metrics_path = get_metrics_path()
 
     try:
         while time.time() - start_time < timeout_minutes * 60:
@@ -113,8 +137,8 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
 
             # Read metrics
             try:
-                if METRICS_PATH.exists():
-                    with open(METRICS_PATH, 'r') as f:
+                if metrics_path.exists():
+                    with open(metrics_path, 'r') as f:
                         data = json.load(f)
 
                     gen = data.get('generation', 0)
@@ -158,6 +182,7 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+        cleanup_worker_files()
 
     return best_fitness
 
@@ -169,7 +194,7 @@ def train():
     config = wandb.config
 
     print(f"\n{'='*60}")
-    print(f"Starting sweep run: {run.name}")
+    print(f"Starting sweep run: {run.name} (worker: {WORKER_ID})")
     print(f"Config: pop={config.population_size}, hidden={config.hidden_size}, "
           f"elite={config.elite_count}, mut={config.mutation_rate:.2f}")
     print(f"{'='*60}")
@@ -207,6 +232,7 @@ def main():
         sys.exit(1)
 
     print(f"Starting W&B sweep")
+    print(f"  Worker ID: {WORKER_ID}")
     print(f"  Project: {args.project}")
     print(f"  Duration: {args.hours} hours")
     print(f"  Godot: {GODOT_PATH}")
@@ -222,10 +248,12 @@ def main():
 
     # Handle Ctrl+C gracefully
     def signal_handler(sig, frame):
-        print("\n\nSweep interrupted. Results saved to W&B.")
+        print("\n\nSweep interrupted. Cleaning up...")
+        cleanup_worker_files()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     # Parse entity/project for wandb.agent
     if '/' in args.project:
