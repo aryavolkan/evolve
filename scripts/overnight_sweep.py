@@ -210,7 +210,7 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
                             'max_best_fitness': max_best,
                             'fitness_std_dev': fitness_std,
                             'improvement_rate': improvement_rate,
-                        }, step=gen)
+                        })
 
                         print(f"    Gen {gen:3d}: best={best_fitness:.1f}, avg={gen_avg:.1f}")
 
@@ -244,6 +244,8 @@ def train():
     """Single training run with W&B sweep config"""
 
     run = wandb.init()
+    wandb.define_metric("generation")
+    wandb.define_metric("*", step_metric="generation")
     config = wandb.config
 
     print(f"\n{'='*60}")
