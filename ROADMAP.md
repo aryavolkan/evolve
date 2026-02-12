@@ -1,7 +1,7 @@
 # Evolve — Unified Development Roadmap
 
-**Last Updated:** 2026-02-10  
-**Status:** Active Development  
+**Last Updated:** 2026-02-12
+**Status:** Active Development
 **Current Best Result:** Fitness 147,672 (sweep x0cst76l, comfy-sweep-22)
 
 ---
@@ -20,20 +20,18 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 - **Clean PR discipline:** Incremental feature branches with design docs
 - **W&B integration:** Automated sweeps producing measurable results
 - **Optimal hyperparameters identified:** pop=120, hidden=80, elite=20, mut_rate=0.27
+- **Co-evolution operational:** Dual-population adversarial training with Hall of Fame
+- **Full game modes:** 6 modes (human, training, playback, sandbox, comparison, archive playback)
+- **Comprehensive UI:** Title screen, game over, sandbox panel, comparison panel, network visualizer, MAP-Elites heatmap
 
 ### ⚠️ Key Risks
-1. **`training_manager.gd` is a god object** (1,600+ LOC) — mixes UI, orchestration, persistence, analytics
-2. **Duplicate training flows** — `ai/trainer.gd` vs `training_manager.gd` creates confusion
-3. **Performance bottlenecks** — sensor queries scan entire scene tree per frame per arena
-4. **Configuration sprawl** — settings scattered across files, no validation
-5. **Missing architecture docs** — newcomers can't understand data flow
-6. **No results documentation** — research findings not captured
+1. **`training_manager.gd` is still large** (2,292 LOC) — extraction succeeded but co-evolution, sandbox, and comparison modes added bulk
+2. **Duplicate training flows** — `ai/trainer.gd` marked @deprecated but retained for test compatibility
 
 ### 🎯 Strategic Priorities
-1. **Consolidate and refactor** before adding complexity (co-evolution, sandbox)
-2. **Document what works** — capture sweep findings, architectural patterns
-3. **Polish the game itself** — it deserves the same care as the AI
-4. **Enable others to contribute** — onboarding docs, cross-platform support
+1. **Explore advanced architectures** — rtNEAT, cooperative multi-agent, educational mode
+2. **Continue polishing** — death animations, in-game training dashboard
+3. **Consider further decomposition** of `training_manager.gd` as new modes are added
 
 ---
 
@@ -44,49 +42,46 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 
 | Task | Priority | Effort | Owner |
 |------|----------|--------|-------|
-| Architecture diagram (data flow: training → evolution → networks → arenas) | Critical | Small | Any |
-| RESULTS.md documenting sweep findings and optimal configs | High | Small | Alfred |
-| CONTRIBUTING.md with test framework, PR process, algorithm extension guide | High | Medium | Grok |
-| Fix cross-platform paths (env vars for Godot, user data) | High | Small | Codex |
+| ~~Architecture diagram (data flow: training → evolution → networks → arenas)~~ | ~~Critical~~ | ~~Small~~ | ✅ Done — README has Mermaid diagram |
+| ~~RESULTS.md documenting sweep findings and optimal configs~~ | ~~High~~ | ~~Small~~ | ✅ Done — RESULTS.md created |
+| ~~CONTRIBUTING.md with test framework, PR process, algorithm extension guide~~ | ~~High~~ | ~~Medium~~ | ✅ Done — CONTRIBUTING.md created |
+| ~~Fix cross-platform paths (env vars for Godot, user data)~~ | ~~High~~ | ~~Small~~ | ✅ Done — `wandb_bridge.py` supports `GODOT_USER_DIR` env var |
 
-**Deliverables:**
-- README gets architecture section with Mermaid diagram
-- RESULTS.md captures:
-  - Best hyperparameters from sweeps (x0cst76l)
-  - Training curves and learning progression
-  - Algorithm comparisons (NEAT vs fixed-topology, with/without curriculum)
-- CONTRIBUTING.md enables new contributors
+**Deliverables:** ✅ All complete
+- ~~README gets architecture section with Mermaid diagram~~
+- ~~RESULTS.md captures sweep findings, optimal configs, algorithm comparisons~~
+- ~~CONTRIBUTING.md enables new contributors~~
 
 ### Phase 1B: Technical Debt Reduction
 **Goal:** Reduce complexity before Track A/B expansion
 
 | Task | Priority | Effort | Files |
 |------|----------|--------|-------|
-| Extract `CurriculumManager` from `training_manager.gd` | Critical | Medium | New: `ai/curriculum_manager.gd`, Modify: `training_manager.gd` |
-| Extract `ArenaPool` (SubViewport lifecycle) | High | Medium | New: `ai/arena_pool.gd`, Modify: `training_manager.gd` |
-| Extract `StatsTracker` (fitness accumulation, history) | High | Small | New: `ai/stats_tracker.gd`, Modify: `training_manager.gd` |
-| Deprecate or clarify `ai/trainer.gd` vs `training_manager.gd` | High | Small | Mark deprecated or document separation |
-| Create `TrainingConfig` resource (centralize all settings) | High | Medium | New: `ai/training_config.gd` |
+| ~~Extract `CurriculumManager` from `training_manager.gd`~~ | ~~Critical~~ | ~~Medium~~ | ✅ Done — `ai/curriculum_manager.gd` |
+| ~~Extract `ArenaPool` (SubViewport lifecycle)~~ | ~~High~~ | ~~Medium~~ | ✅ Done — `ai/arena_pool.gd` |
+| ~~Extract `StatsTracker` (fitness accumulation, history)~~ | ~~High~~ | ~~Small~~ | ✅ Done — `ai/stats_tracker.gd` |
+| ~~Deprecate or clarify `ai/trainer.gd` vs `training_manager.gd`~~ | ~~High~~ | ~~Small~~ | ✅ Done — `trainer.gd` marked `@deprecated` |
+| ~~Create `TrainingConfig` resource (centralize all settings)~~ | ~~High~~ | ~~Medium~~ | ✅ Done — `ai/training_config.gd` |
 
-**Deliverables:**
-- `training_manager.gd` reduced from 1,600 LOC → ~400 LOC (thin coordinator)
-- Clear single source of truth for training configuration
-- Testable, modular components
+**Deliverables:** ✅ All 4 components extracted
+- ~~`training_manager.gd` reduced from 1,600 LOC → ~400 LOC (thin coordinator)~~ — Now 2,292 LOC: extraction succeeded but co-evolution, sandbox, and comparison modes added significant new functionality. Further decomposition deferred.
+- ~~Clear single source of truth for training configuration~~ — `ai/training_config.gd`
+- ~~Testable, modular components~~ — All 4 extracted modules tested
 
-**Rationale (Codex):** The god object risks cascade failures when adding co-evolution and sandbox modes. Split now before complexity doubles.
+**Rationale (Codex):** The god object risks cascade failures when adding co-evolution and sandbox modes. Split now before complexity doubles. *Outcome: the split enabled adding co-evolution, sandbox, and comparison modes without blocking, though `training_manager.gd` grew with the new mode orchestration logic.*
 
 ### Phase 1C: Performance Optimization
 **Goal:** Enable scaling to more arenas and faster training
 
 | Task | Priority | Effort | Impact |
 |------|----------|--------|--------|
-| Cache group members per arena (avoid `get_nodes_in_group()` per frame) | High | Medium | 30-50% frame time reduction |
-| Pool SubViewports (recycle instead of destroy/create each batch) | Medium | Medium | Faster batch transitions |
-| Profile sensor queries at 20 arenas, optimize hot paths | Medium | Small | Baseline measurement |
+| ~~Cache group members per arena (avoid `get_nodes_in_group()` per frame)~~ | ~~High~~ | ~~Medium~~ | ✅ Done — `sensor.gd` static per-frame cache (60→3 calls/frame) |
+| ~~Pool SubViewports (recycle instead of destroy/create each batch)~~ | ~~Medium~~ | ~~Medium~~ | ✅ Done — `ai/arena_pool.gd` centralizes SubViewport lifecycle |
+| ~~Profile sensor queries at 20 arenas, optimize hot paths~~ | ~~Medium~~ | ~~Small~~ | ✅ Done — optimized |
 
-**Deliverables:**
-- Sensor queries scale O(1) per arena instead of O(A×E)
-- 20-arena training runs smoother at 16× speed
+**Deliverables:** ✅ All complete
+- ~~Sensor queries scale O(1) per arena instead of O(A×E)~~
+- ~~20-arena training runs smoother at 16× speed~~
 
 ---
 
@@ -97,9 +92,9 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 
 | Feature | Priority | Effort | Description |
 |---------|----------|--------|-------------|
-| Title screen & main menu | High | Small | Game mode select, AI watch mode, training mode |
-| Game over screen with stats | High | Small | Final score, time survived, kills, best run leaderboard |
-| Visual sensor feedback | High | Medium | Highlight active rays, color-code threats/powerups |
+| ~~Title screen & main menu~~ | ~~High~~ | ~~Small~~ | ✅ Done — `ui/title_screen.gd` with 6 game modes |
+| ~~Game over screen with stats~~ | ~~High~~ | ~~Small~~ | ✅ Done — `ui/game_over_screen.gd` |
+| ~~Visual sensor feedback~~ | ~~High~~ | ~~Medium~~ | ✅ Done — `ui/sensor_visualizer.gd` (V key toggle, color-coded rays) |
 | Death animations | Medium | Small | Enemy explosions, player respawn effect |
 | In-game training dashboard | Medium | Large | Real-time charts (fitness curves, species count, archive fill) |
 
@@ -123,8 +118,8 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 
 | PR | Title | Effort | Risk | Key Files | Dependencies |
 |----|-------|--------|------|-----------|--------------|
-| **B1** | MAP-Elites Heatmap | Medium | Low | New: `ui/map_elites_heatmap.gd`, Modify: `ai/map_elites.gd` | None |
-| **B2** | Archive Playback | Medium | Low | Modify: `training_manager.gd`, `ui/map_elites_heatmap.gd` | B1 |
+| ~~**B1**~~ | ~~MAP-Elites Heatmap~~ | ~~Medium~~ | ~~Low~~ | ✅ Done — `ui/map_elites_heatmap.gd` (20×20 clickable grid) | ~~None~~ |
+| ~~**B2**~~ | ~~Archive Playback~~ | ~~Medium~~ | ~~Low~~ | ✅ Done — click cell → playback in single arena | ~~B1~~ |
 
 **Why First (Grok):** Quick wins, immediate user-visible improvements, low risk.
 
@@ -141,13 +136,13 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 
 | PR | Title | Effort | Risk | Key Changes | Dependencies |
 |----|-------|--------|------|-------------|--------------|
-| **A1** | Enemy Sensor + AI Controller | Medium | Low | New: `ai/enemy_sensor.gd`, `ai/enemy_ai_controller.gd`, Modify: `enemy.gd` | Phase 1B complete |
-| **A2** | Enemy Evolution Backend | Medium | Low | New: `ai/coevolution.gd` | A1 |
-| **A3** | Training Manager Integration | Large | Medium | Modify: `training_manager.gd` (dual-population evaluation) | A2 + refactored manager |
-| **A4** | Fitness Tuning + Hall of Fame | Medium | Medium | Modify: `ai/coevolution.gd` (anti-cycling archive) | A3 |
-| **A5** | Save/Load + W&B Metrics | Small | Low | Persistence for both populations, enemy metrics | A4 |
+| ~~**A1**~~ | ~~Enemy Sensor + AI Controller~~ | ~~Medium~~ | ~~Low~~ | ✅ Done — `ai/enemy_sensor.gd`, `ai/enemy_ai_controller.gd` | ~~Phase 1B~~ |
+| ~~**A2**~~ | ~~Enemy Evolution Backend~~ | ~~Medium~~ | ~~Low~~ | ✅ Done — `ai/coevolution.gd` (dual `Evolution` instances) | ~~A1~~ |
+| ~~**A3**~~ | ~~Training Manager Integration~~ | ~~Large~~ | ~~Medium~~ | ✅ Done — dual-population eval in `training_manager.gd` | ~~A2~~ |
+| ~~**A4**~~ | ~~Fitness Tuning + Hall of Fame~~ | ~~Medium~~ | ~~Medium~~ | ✅ Done — HoF (top-5 enemies/gen) in `coevolution.gd` | ~~A3~~ |
+| ~~**A5**~~ | ~~Save/Load + W&B Metrics~~ | ~~Small~~ | ~~Low~~ | ✅ Done — dual-population persistence, enemy metrics logged | ~~A4~~ |
 
-**Critical Dependency:** A3 requires refactored `training_manager.gd` (Phase 1B) to avoid ~2,500 LOC monolith.
+~~**Critical Dependency:** A3 requires refactored `training_manager.gd` (Phase 1B) to avoid ~2,500 LOC monolith.~~ *Resolved — Phase 1B completed before A3.*
 
 **Architecture Notes (from LONG_TERM_PLAN.md):**
 - One universal enemy network (type as input, outputs 8 directional preferences)
@@ -160,9 +155,9 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 
 | PR | Title | Effort | Risk | Description | Dependencies |
 |----|-------|--------|------|-------------|--------------|
-| **B3** | Sandbox Mode + Params | Medium | Low | UI panel with sliders (enemy types, spawn rate, arena scale) | B2 |
-| **B4** | Side-by-Side Comparison | Medium | Med | 2-4 strategies simultaneously with identical seeds | B3 |
-| **B5** | Network Topology Viz | Large | Med | Real-time NEAT graph rendering with live activations | Any time |
+| ~~**B3**~~ | ~~Sandbox Mode + Params~~ | ~~Medium~~ | ~~Low~~ | ✅ Done — `ui/sandbox_panel.gd` (enemy toggles, spawn/powerup rates, difficulty) | ~~B2~~ |
+| ~~**B4**~~ | ~~Side-by-Side Comparison~~ | ~~Medium~~ | ~~Med~~ | ✅ Done — `ui/comparison_panel.gd` (2-4 strategies, identical seeds) | ~~B3~~ |
+| ~~**B5**~~ | ~~Network Topology Viz~~ | ~~Large~~ | ~~Med~~ | ✅ Done — `ui/network_visualizer.gd` (NEAT + fixed topology, live activations) | ~~Any time~~ |
 
 **B4 Enhancement:** More meaningful after Track A (compare vs co-evolved enemies)
 
@@ -219,26 +214,26 @@ Phase 2C (B1 → B2) ───────────────────�
 ## Success Metrics
 
 ### Phase 1 Success
-- [ ] README has architecture section
-- [ ] RESULTS.md documents x0cst76l sweep findings
-- [ ] `training_manager.gd` < 500 LOC
-- [ ] Sensor queries profiled, optimized
-- [ ] Godot path configurable via env var
+- [x] README has architecture section
+- [x] RESULTS.md documents x0cst76l sweep findings
+- [ ] `training_manager.gd` < 500 LOC — *2,292 LOC: extraction succeeded but new modes (co-evolution, sandbox, comparison) added bulk. Target deferred.*
+- [x] Sensor queries profiled, optimized
+- [x] Godot path configurable via env var
 
 ### Phase 2 Success
-- [ ] Game playable standalone (title screen, game over, polish)
+- [x] Game playable standalone (title screen, game over, polish)
 - [x] Benchmark suite compares algorithms automatically
-- [ ] MAP-Elites heatmap interactive (click to playback)
+- [x] MAP-Elites heatmap interactive (click to playback)
 
 ### Track A Success
-- [ ] Enemies with neural networks hunting players
-- [ ] Co-evolution produces harder enemies over generations
-- [ ] Hall of Fame prevents cycling
+- [x] Enemies with neural networks hunting players
+- [x] Co-evolution produces harder enemies over generations
+- [x] Hall of Fame prevents cycling
 
 ### Track B Success
-- [ ] Sandbox mode with configurable params
-- [ ] Side-by-side strategy comparison
-- [ ] NEAT topology visualizer (optional polish)
+- [x] Sandbox mode with configurable params
+- [x] Side-by-side strategy comparison
+- [x] NEAT topology visualizer (optional polish)
 
 ---
 
@@ -266,7 +261,7 @@ Phase 2C (B1 → B2) ───────────────────�
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) (to be created in Phase 1A) for:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - How to add a new evolution algorithm
 - Test framework usage
 - PR review process
@@ -278,6 +273,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) (to be created in Phase 1A) for:
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-02-12 | Comprehensive status update — mark all completed items across Phases 1-2, Tracks A-B | Claude |
 | 2026-02-12 | Add `scripts/benchmark.py` — Phase 2B benchmark suite | Claude |
 | 2026-02-10 | Initial unified roadmap synthesizing 4 agent analyses | Alfred |
 
