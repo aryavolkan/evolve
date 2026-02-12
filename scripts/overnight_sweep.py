@@ -167,6 +167,8 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
                             'curriculum_stage': data.get('curriculum_stage', 0),
                             'curriculum_label': data.get('curriculum_label', ''),
                             'time_scale': data.get('time_scale', 0),
+                            'parallel_count': int(wandb.config.get('parallel_count', 5)),
+                            'evals_per_individual': data.get('evals_per_individual', 0),
                             'map_elites_best': data.get('map_elites_best', 0),
                             'map_elites_coverage': data.get('map_elites_coverage', 0),
                             'map_elites_occupied': data.get('map_elites_occupied', 0),
