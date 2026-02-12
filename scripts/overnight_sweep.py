@@ -27,7 +27,7 @@ import sys
 # Sweep configuration - hyperparameters to search
 SWEEP_CONFIG = {
     'method': 'bayes',
-    'metric': {'name': 'all_time_best', 'goal': 'maximize'},
+    'metric': {'name': 'avg_fitness', 'goal': 'maximize'},
     'parameters': {
         # Population
         'population_size': {'values': [50, 100, 150]},
@@ -51,10 +51,14 @@ SWEEP_CONFIG = {
     }
 }
 
-# Paths - adjust for your system
-GODOT_PATH = "/Applications/Godot.app/Contents/MacOS/Godot"
+# Paths - auto-detect OS
+import platform as _platform
+GODOT_PATH = "/usr/local/bin/godot" if _platform.system() == "Linux" else "/Applications/Godot.app/Contents/MacOS/Godot"
 PROJECT_PATH = Path.home() / "Projects/evolve"
-GODOT_USER_DATA = Path.home() / "Library/Application Support/Godot/app_userdata/Evolve"
+if _platform.system() == "Linux":
+    GODOT_USER_DATA = Path.home() / ".local/share/godot/app_userdata/Evolve"
+else:
+    GODOT_USER_DATA = Path.home() / "Library/Application Support/Godot/app_userdata/Evolve"
 METRICS_PATH = GODOT_USER_DATA / "metrics.json"
 CONFIG_PATH = GODOT_USER_DATA / "sweep_config.json"
 
@@ -188,6 +192,7 @@ def main():
     parser.add_argument('--hours', type=float, default=8, help='Hours to run sweep')
     parser.add_argument('--project', default='evolve-neuroevolution', help='W&B project name')
     parser.add_argument('--count', type=int, default=None, help='Max number of runs (default: unlimited)')
+    parser.add_argument('--join', type=str, default=None, help='Join an existing sweep by ID instead of creating a new one')
     args = parser.parse_args()
 
     # Check Godot exists
@@ -207,9 +212,13 @@ def main():
     print(f"  Godot: {GODOT_PATH}")
     print(f"  Project: {PROJECT_PATH}")
 
-    # Create sweep
-    sweep_id = wandb.sweep(SWEEP_CONFIG, project=args.project)
-    print(f"\nSweep URL: https://wandb.ai/{args.project}/sweeps/{sweep_id}")
+    # Create or join sweep
+    if args.join:
+        sweep_id = args.join
+        print(f"\nJoining existing sweep: {sweep_id}")
+    else:
+        sweep_id = wandb.sweep(SWEEP_CONFIG, project=args.project)
+    print(f"Sweep URL: https://wandb.ai/{args.project}/sweeps/{sweep_id}")
 
     # Handle Ctrl+C gracefully
     def signal_handler(sig, frame):
@@ -218,8 +227,14 @@ def main():
 
     signal.signal(signal.SIGINT, signal_handler)
 
+    # Parse entity/project for wandb.agent
+    if '/' in args.project:
+        entity, project = args.project.split('/', 1)
+    else:
+        entity, project = None, args.project
+
     # Run sweep agent
-    wandb.agent(sweep_id, function=train, count=args.count)
+    wandb.agent(sweep_id, function=train, count=args.count, entity=entity, project=project)
 
 
 if __name__ == '__main__':
