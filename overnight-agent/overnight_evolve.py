@@ -170,18 +170,50 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
                 avg_fitness_history.append(avg_fitness)
 
                 # Log all available metrics with explicit step
-                wandb.log({
+                log_data = {
                     'generation': gen,
                     'best_fitness': current_best,
                     'avg_fitness': avg_fitness,
                     'min_fitness': data.get('min_fitness', 0),
                     'all_time_best': best_fitness,
                     'stagnation': data.get('generations_without_improvement', 0),
-                    # Score breakdown (if available)
+                    # Score breakdown
                     'avg_kill_score': data.get('avg_kill_score', 0),
                     'avg_powerup_score': data.get('avg_powerup_score', 0),
                     'avg_survival_score': data.get('avg_survival_score', 0),
-                }, step=gen)
+                    # Config (should be constant but useful for verification)
+                    'population_size': data.get('population_size', 0),
+                    'evals_per_individual': data.get('evals_per_individual', 1),
+                    'time_scale': data.get('time_scale', 1.0),
+                    # Curriculum learning
+                    'curriculum_stage': data.get('curriculum_stage', 0),
+                    'curriculum_label': data.get('curriculum_label', ''),
+                    # NSGA-II (multi-objective)
+                    'use_nsga2': data.get('use_nsga2', False),
+                    'pareto_front_size': data.get('pareto_front_size', 0),
+                    'hypervolume': data.get('hypervolume', 0.0),
+                    # NEAT (topology evolution)
+                    'use_neat': data.get('use_neat', False),
+                    'neat_species_count': data.get('neat_species_count', 0),
+                    'neat_compatibility_threshold': data.get('neat_compatibility_threshold', 0.0),
+                    # MAP-Elites (quality-diversity)
+                    'use_map_elites': data.get('use_map_elites', False),
+                    'map_elites_occupied': data.get('map_elites_occupied', 0),
+                    'map_elites_coverage': data.get('map_elites_coverage', 0.0),
+                    'map_elites_best': data.get('map_elites_best', 0.0),
+                }
+                
+                # Add co-evolution metrics if present
+                if data.get('coevolution', False):
+                    log_data['coevolution'] = True
+                    log_data['enemy_best_fitness'] = data.get('enemy_best_fitness', 0)
+                    log_data['enemy_all_time_best'] = data.get('enemy_all_time_best', 0)
+                    log_data['enemy_avg_fitness'] = data.get('enemy_avg_fitness', 0)
+                    log_data['enemy_min_fitness'] = data.get('enemy_min_fitness', 0)
+                    log_data['hof_size'] = data.get('hof_size', 0)
+                    log_data['is_hof_generation'] = data.get('is_hof_generation', False)
+                
+                wandb.log(log_data, step=gen)
 
                 print(f"  Gen {gen}: best={best_fitness:.1f}, avg={avg_fitness:.1f}")
 
