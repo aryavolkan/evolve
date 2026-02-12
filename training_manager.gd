@@ -38,6 +38,9 @@ var use_nsga2: bool = false
 # NEAT topology evolution
 var use_neat: bool = false
 
+# Elman recurrent memory
+var use_memory: bool = false
+
 # MAP-Elites quality-diversity archive
 var use_map_elites: bool = true
 var map_elites_archive: MapElites = null
@@ -293,6 +296,7 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 
 	# Initialize evolution system
 	use_neat = bool(_sweep_config.get("use_neat", use_neat))
+	use_memory = bool(_sweep_config.get("use_memory", false))
 	if use_neat:
 		var neat_config := NeatConfig.new()
 		neat_config.input_count = input_size
@@ -314,6 +318,8 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 			crossover_rate
 		)
 		evolution.use_nsga2 = use_nsga2
+		if use_memory:
+			evolution.enable_population_memory()
 
 	evolution.generation_complete.connect(_on_generation_complete)
 
@@ -349,7 +355,8 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	start_next_batch()
 
 	training_status_changed.emit("Training started")
-	var evo_type = "NEAT" if use_neat else ("NSGA-II" if use_nsga2 else "Standard")
+	var mem_label = "+memory" if use_memory else ""
+	var evo_type = ("NEAT" if use_neat else ("NSGA-II" if use_nsga2 else "Standard")) + mem_label
 	print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d, evo=%s" % [
 		population_size, max_generations, parallel_count, evals_per_individual, stagnation_limit, evo_type
 	])
@@ -742,6 +749,7 @@ func create_eval_instance(individual_index: int, grid_x: int, grid_y: int) -> Di
 		controller.set_network(evolution.get_network(individual_index))
 	else:
 		controller.set_network(evolution.get_individual(individual_index))
+		controller.network.reset_memory()
 
 	# Hide UI elements we don't need
 	var ui = scene.get_node("CanvasLayer/UI")
@@ -912,6 +920,7 @@ func _coevo_create_eval_instance(player_index: int, enemy_index: int, grid_x: in
 	var controller = AIControllerScript.new()
 	controller.set_player(scene_player)
 	controller.set_network(coevolution.get_player_network(player_index))
+	controller.network.reset_memory()
 
 	# Enemy AI: get the network to use (current population or HoF)
 	var enemy_network
@@ -1463,6 +1472,7 @@ func _write_metrics_for_wandb() -> void:
 		"use_neat": use_neat,
 		"neat_species_count": evolution.get_stats().species_count if evolution and use_neat else 0,
 		"neat_compatibility_threshold": evolution.get_stats().compatibility_threshold if evolution and use_neat else 0.0,
+		"use_memory": use_memory,
 		"use_map_elites": use_map_elites,
 		"map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
 		"map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
