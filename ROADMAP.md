@@ -110,12 +110,12 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 
 | Task | Priority | Effort | Output |
 |------|----------|--------|--------|
-| Benchmark suite (fixed vs NEAT, single vs multi-objective, ±curriculum) | High | Medium | Automated overnight comparison script |
+| ~~Benchmark suite (fixed vs NEAT, single vs multi-objective, ±curriculum)~~ | ~~High~~ | ~~Medium~~ | ✅ `scripts/benchmark.py` — controlled A/B comparison with presets, multi-seed, reports |
 | Results auto-publish to `docs/results/` with charts | Medium | Small | Jekyll/Hugo site or simple markdown |
 | Export trained models as standalone demos | Medium | Medium | `.pck` files users can run without Godot |
 
 **Deliverables:**
-- `scripts/benchmark.py` runs controlled experiments, outputs report
+- ✅ `scripts/benchmark.py` runs controlled experiments, outputs report
 - Evidence-based algorithm selection for future projects
 
 ### Phase 2C: Quick Wins from Track B
@@ -227,7 +227,7 @@ Phase 2C (B1 → B2) ───────────────────�
 
 ### Phase 2 Success
 - [ ] Game playable standalone (title screen, game over, polish)
-- [ ] Benchmark suite compares algorithms automatically
+- [x] Benchmark suite compares algorithms automatically
 - [ ] MAP-Elites heatmap interactive (click to playback)
 
 ### Track A Success
@@ -278,6 +278,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) (to be created in Phase 1A) for:
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-02-12 | Add `scripts/benchmark.py` — Phase 2B benchmark suite | Claude |
 | 2026-02-10 | Initial unified roadmap synthesizing 4 agent analyses | Alfred |
 
 ---
