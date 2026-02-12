@@ -3,9 +3,14 @@ import wandb
 import subprocess
 import json
 import time
+import sys
 from pathlib import Path
 import os
 import uuid
+
+# Enable line buffering for real-time logging (critical for nohup!)
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 sweep_config = {
     'method': 'bayes',
