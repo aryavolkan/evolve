@@ -39,7 +39,8 @@ sweep_config = {
 # macOS:   GODOT_PATH=/Applications/Godot.app/Contents/MacOS/Godot
 # Linux:   GODOT_PATH=/usr/bin/godot
 # Windows: GODOT_PATH=C:/Godot/Godot.exe
-GODOT_PATH = os.environ.get("GODOT_PATH", "/Applications/Godot.app/Contents/MacOS/Godot")
+# Default to Linux path for this worker machine
+GODOT_PATH = os.environ.get("GODOT_PATH", "/usr/bin/godot")
 PROJECT_PATH = os.environ.get("EVOLVE_PROJECT_PATH", os.path.expanduser("~/Projects/evolve"))
 
 
@@ -52,7 +53,7 @@ def _default_godot_user_dir() -> str:
     elif system == "Windows":
         return os.path.join(os.environ.get("APPDATA", ""), "Godot/app_userdata/evolve")
     else:  # Linux and others
-        return os.path.expanduser("~/.local/share/godot/app_userdata/evolve")
+        return os.path.expanduser("~/.local/share/godot/app_userdata/Evolve")
 
 
 GODOT_USER_DIR = os.environ.get("GODOT_USER_DIR", _default_godot_user_dir())
@@ -133,11 +134,15 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
             # If it died early (< 80% of expected time) and we have retries left, restart
             if exit_code != 0 and retries < max_retries and elapsed < timeout_minutes * 60 * 0.8:
                 retries += 1
-                stderr_out = proc.stderr.read().decode('utf-8', errors='replace')[-500:]
+                stderr_out = proc.stderr.read().decode('utf-8', errors='replace')[-1000:]
                 print(f"Godot crashed (exit {exit_code}, {elapsed:.0f}s in). Retry {retries}/{max_retries}...")
                 if stderr_out.strip():
-                    print(f"  stderr: {stderr_out.strip()[:200]}")
-                wandb.log({"crash_retry": retries}, step=last_gen if last_gen >= 0 else 0)
+                    print(f"  stderr tail: {stderr_out.strip()[-500:]}")
+                wandb.log({
+                    "crash_retry": retries,
+                    "crash_exit_code": exit_code,
+                    "crash_elapsed_seconds": elapsed
+                }, step=last_gen if last_gen >= 0 else 0)
                 time.sleep(3)  # Brief cooldown before retry
                 # Clear stale metrics
                 if os.path.exists(metrics_path):
@@ -195,9 +200,26 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
 
         time.sleep(2)
 
-    # Clean up
-    proc.terminate()
-    proc.wait(timeout=5)
+    # Check why loop ended
+    elapsed = time.time() - start_time
+    if elapsed >= timeout_minutes * 60:
+        print(f"Training timeout reached ({timeout_minutes}m). Terminating...")
+        wandb.log({"timeout_reached": True}, step=last_gen if last_gen >= 0 else 0)
+    
+    # Clean up - terminate gracefully, then force kill if needed
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        print(f"Godot didn't terminate gracefully, force killing...")
+        proc.kill()
+        proc.wait(timeout=3)
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+        try:
+            proc.kill()
+        except:
+            pass
 
     # Clean up worker-specific files
     if worker_id:
@@ -208,12 +230,17 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
                 except:
                     pass
 
+    # Log summary
+    print(f"Training complete. Generations: {last_gen}, Best fitness: {best_fitness:.1f}, Elapsed: {elapsed/60:.1f}m")
+    
     # Return metrics for summary
     return {
         'best_fitness': best_fitness,
         'generations': last_gen,
         'fitness_history': fitness_history,
         'avg_fitness_history': avg_fitness_history,
+        'elapsed_minutes': elapsed / 60,
+        'timeout_reached': elapsed >= timeout_minutes * 60,
     }
 
 
@@ -241,6 +268,8 @@ def train():
     # Log comprehensive summary statistics
     wandb.summary['final_best_fitness'] = results['best_fitness']
     wandb.summary['total_generations'] = results['generations']
+    wandb.summary['elapsed_minutes'] = results.get('elapsed_minutes', 0)
+    wandb.summary['timeout_reached'] = results.get('timeout_reached', False)
 
     if results['fitness_history']:
         wandb.summary['mean_best_fitness'] = sum(results['fitness_history']) / len(results['fitness_history'])
