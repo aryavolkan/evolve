@@ -220,7 +220,11 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
                 
                 wandb.log(log_data, step=gen)
 
-                print(f"  Gen {gen}: best={best_fitness:.1f}, avg={avg_fitness:.1f}")
+                # Print progress with curriculum info if available
+                curriculum_info = ""
+                if log_data.get('curriculum_label'):
+                    curriculum_info = f" [{log_data['curriculum_label']}]"
+                print(f"  Gen {gen}: best={best_fitness:.1f}, avg={avg_fitness:.1f}{curriculum_info}")
 
                 # Check if training complete (hit max generations or stagnation)
                 if gen >= wandb.config.max_generations:
