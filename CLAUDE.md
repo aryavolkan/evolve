@@ -188,7 +188,7 @@ training_manager.gd     # Main scene integration
     - Wall distance (arena boundary)
   - 6 player state inputs (velocity, power-up flags, can_shoot)
 
-- **Hidden Layer:** 32 neurons with tanh activation
+- **Hidden Layer:** 80 neurons with tanh activation
 - **Outputs (6):** move_x, move_y, shoot_up, shoot_down, shoot_left, shoot_right
 
 ### Controls
@@ -216,14 +216,15 @@ Kills and powerups dominate scoring (survival is secondary):
 
 | Parameter | Value |
 |-----------|-------|
-| Population size | 100 |
+| Population size | 150 |
 | Parallel arenas | 20 (5x4 grid) |
 | Evals per individual | 2 (multi-seed for robustness) |
-| Elite count | 10 (preserve good solutions) |
+| Elite count | 20 (preserve good solutions) |
 | Selection | Tournament (best of 3 random) |
-| Crossover | Two-point (70% rate) |
-| Mutation rate | 20% per weight |
-| Mutation strength | σ = 0.3 (adaptive: increases when stagnating) |
+| Crossover | Two-point (73% rate) |
+| Mutation rate | 30% per weight |
+| Mutation strength | σ = 0.09 (adaptive: increases when stagnating) |
+| Hidden layer size | 80 neurons |
 | Max eval time | 60 seconds per individual |
 | Early stopping | 10 generations without improvement |
 

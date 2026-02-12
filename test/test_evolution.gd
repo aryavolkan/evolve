@@ -31,7 +31,7 @@ func _run_tests() -> void:
 # ============================================================
 
 func _test_initialization_creates_population() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)  # 10 individuals
+	var evo = Evolution.new(10, 5, 3, 2, 3)  # 10 individuals
 	assert_eq(evo.population.size(), 10, "Should create 10 networks")
 
 
@@ -52,7 +52,7 @@ func _test_initialization_sets_parameters() -> void:
 # ============================================================
 
 func _test_set_fitness_stores_value() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.set_fitness(0, 100.0)
 	evo.set_fitness(5, 50.0)
 	assert_approx(evo.fitness_scores[0], 100.0)
@@ -60,7 +60,7 @@ func _test_set_fitness_stores_value() -> void:
 
 
 func _test_get_individual_returns_network() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	var net = evo.get_individual(0)
 	assert_not_null(net)
 	assert_eq(net.input_size, 5)
@@ -73,7 +73,7 @@ func _test_get_individual_returns_network() -> void:
 # ============================================================
 
 func _test_evolve_increments_generation() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	assert_eq(evo.generation, 0)
 
 	# Set some fitness values
@@ -118,7 +118,7 @@ func _test_evolve_preserves_elites() -> void:
 
 
 func _test_evolve_tracks_best_fitness() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 
 	for i in 10:
 		evo.set_fitness(i, float(i) * 10.0)
@@ -130,7 +130,7 @@ func _test_evolve_tracks_best_fitness() -> void:
 
 
 func _test_evolve_tracks_all_time_best() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 
 	# First generation: max fitness 90
 	for i in 10:
@@ -178,7 +178,7 @@ func _test_tournament_selection_prefers_higher_fitness() -> void:
 
 
 func _test_evolve_resets_fitness_scores() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 
 	for i in 10:
 		evo.set_fitness(i, float(i) * 10.0)
@@ -195,7 +195,7 @@ func _test_evolve_resets_fitness_scores() -> void:
 # ============================================================
 
 func _test_backup_and_restore_works() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 
 	# Get initial weights
 	var original_weights: PackedFloat32Array = evo.get_individual(0).get_weights()
@@ -222,7 +222,7 @@ func _test_backup_and_restore_works() -> void:
 # ============================================================
 
 func _test_save_load_population_roundtrip() -> void:
-	var evo1 = Evolution.new(10, 5, 3, 2)
+	var evo1 = Evolution.new(10, 5, 3, 2, 3)
 	var test_path := "user://test_population.evo"
 
 	# Set some fitness and evolve to create state
@@ -234,7 +234,7 @@ func _test_save_load_population_roundtrip() -> void:
 	evo1.save_population(test_path)
 
 	# Create new evolution with same params and load
-	var evo2 = Evolution.new(10, 5, 3, 2)
+	var evo2 = Evolution.new(10, 5, 3, 2, 3)
 	var loaded := evo2.load_population(test_path)
 
 	assert_true(loaded, "Should load successfully")
@@ -257,7 +257,7 @@ func _test_save_load_population_roundtrip() -> void:
 # ============================================================
 
 func _test_get_stats_returns_valid_data() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 
 	for i in 10:
 		evo.set_fitness(i, float(i + 1) * 10.0)  # 10, 20, ..., 100
@@ -276,7 +276,7 @@ func _test_get_stats_returns_valid_data() -> void:
 # ============================================================
 
 func _test_save_best_and_load_best() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	var test_path := "user://test_best_network.nn"
 
 	# Run evolution to establish a best network
@@ -288,7 +288,7 @@ func _test_save_best_and_load_best() -> void:
 	evo.save_best(test_path)
 
 	# Create new evolution and load
-	var evo2 = Evolution.new(10, 5, 3, 2)
+	var evo2 = Evolution.new(10, 5, 3, 2, 3)
 	evo2.load_best(test_path)
 
 	assert_not_null(evo2.all_time_best_network, "Should load best network")
@@ -305,7 +305,7 @@ func _test_save_best_and_load_best() -> void:
 
 
 func _test_load_population_rejects_size_mismatch() -> void:
-	var evo1 = Evolution.new(10, 5, 3, 2)
+	var evo1 = Evolution.new(10, 5, 3, 2, 3)
 	var test_path := "user://test_pop_mismatch.evo"
 
 	for i in 10:
@@ -314,7 +314,7 @@ func _test_load_population_rejects_size_mismatch() -> void:
 	evo1.save_population(test_path)
 
 	# Try to load into evolution with different population size
-	var evo2 = Evolution.new(20, 5, 3, 2)  # Different size!
+	var evo2 = Evolution.new(20, 5, 3, 2, 3)  # Different size!
 	var loaded := evo2.load_population(test_path)
 
 	assert_false(loaded, "Should reject population size mismatch")
@@ -328,7 +328,7 @@ func _test_load_population_rejects_size_mismatch() -> void:
 # ============================================================
 
 func _test_evolve_handles_zero_fitness() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 
 	# All individuals have zero fitness
 	for i in 10:
@@ -342,7 +342,7 @@ func _test_evolve_handles_zero_fitness() -> void:
 
 
 func _test_evolve_handles_equal_fitness() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 
 	# All individuals have equal fitness
 	for i in 10:

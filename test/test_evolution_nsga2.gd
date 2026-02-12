@@ -39,20 +39,20 @@ func _run_tests() -> void:
 # ============================================================
 
 func _test_nsga2_mode_toggle() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	assert_false(evo.use_nsga2, "NSGA-II should be off by default")
 	evo.use_nsga2 = true
 	assert_true(evo.use_nsga2, "Should be able to enable NSGA-II")
 
 
 func _test_set_objectives_also_sets_fitness() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.set_objectives(0, Vector3(100, 200, 50))
 	assert_approx(evo.fitness_scores[0], 350.0, 0.001, "Fitness should be sum of objectives")
 
 
 func _test_get_objectives_returns_stored() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.set_objectives(3, Vector3(10, 20, 30))
 	var obj := evo.get_objectives(3)
 	assert_approx(obj.x, 10.0, 0.001)
@@ -61,7 +61,7 @@ func _test_get_objectives_returns_stored() -> void:
 
 
 func _test_evolve_nsga2_increments_generation() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	for i in 10:
@@ -72,7 +72,7 @@ func _test_evolve_nsga2_increments_generation() -> void:
 
 
 func _test_evolve_nsga2_preserves_population_size() -> void:
-	var evo = Evolution.new(20, 5, 3, 2)
+	var evo = Evolution.new(20, 5, 3, 2, 5)
 	evo.use_nsga2 = true
 
 	for i in 20:
@@ -83,7 +83,7 @@ func _test_evolve_nsga2_preserves_population_size() -> void:
 
 
 func _test_evolve_nsga2_tracks_best_network() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	for i in 10:
@@ -96,7 +96,7 @@ func _test_evolve_nsga2_tracks_best_network() -> void:
 
 
 func _test_evolve_nsga2_tracks_all_time_best() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	# Gen 1: high scores
@@ -114,7 +114,7 @@ func _test_evolve_nsga2_tracks_all_time_best() -> void:
 
 
 func _test_evolve_nsga2_resets_scores() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	for i in 10:
@@ -131,7 +131,7 @@ func _test_evolve_nsga2_resets_scores() -> void:
 
 
 func _test_evolve_nsga2_builds_pareto_front() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	# Create clear trade-offs: some on front 0, some dominated
@@ -146,7 +146,7 @@ func _test_evolve_nsga2_builds_pareto_front() -> void:
 
 
 func _test_evolve_nsga2_computes_hypervolume() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	for i in 10:
@@ -161,7 +161,7 @@ func _test_evolve_nsga2_computes_hypervolume() -> void:
 # ============================================================
 
 func _test_single_objective_still_works() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	# use_nsga2 is false by default
 
 	for i in 10:
@@ -173,7 +173,7 @@ func _test_single_objective_still_works() -> void:
 
 
 func _test_nsga2_off_by_default() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	assert_false(evo.use_nsga2, "NSGA-II should be off by default")
 
 
@@ -182,7 +182,7 @@ func _test_nsga2_off_by_default() -> void:
 # ============================================================
 
 func _test_all_equal_objectives() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	for i in 10:
@@ -195,7 +195,7 @@ func _test_all_equal_objectives() -> void:
 
 
 func _test_all_zero_objectives() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	for i in 10:
@@ -207,7 +207,7 @@ func _test_all_zero_objectives() -> void:
 
 
 func _test_diverse_tradeoffs() -> void:
-	var evo = Evolution.new(20, 5, 3, 2)
+	var evo = Evolution.new(20, 5, 3, 2, 5)
 	evo.use_nsga2 = true
 
 	# Create a population with diverse trade-offs
@@ -251,7 +251,7 @@ func _test_multiple_generations() -> void:
 
 
 func _test_adaptive_mutation() -> void:
-	var evo = Evolution.new(10, 5, 3, 2)
+	var evo = Evolution.new(10, 5, 3, 2, 3)
 	evo.use_nsga2 = true
 
 	# Run several generations with identical objectives to trigger stagnation

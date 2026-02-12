@@ -18,7 +18,7 @@ var main_scene: Node2D
 var player: CharacterBody2D
 
 # Configuration
-var population_size: int = 100
+var population_size: int = 150
 var max_generations: int = 100
 var time_scale: float = 1.0
 var parallel_count: int = 20  # Number of parallel arenas (5x4 grid)
@@ -272,11 +272,11 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 	time_scale = float(_sweep_config.get("time_scale", 16.0))  # Default to 16x speed for training
 	parallel_count = int(_sweep_config.get("parallel_count", parallel_count))  # Configurable parallel arenas
 
-	var hidden_size = int(_sweep_config.get("hidden_size", 32))
-	var elite_count = int(_sweep_config.get("elite_count", 10))
-	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.20))
-	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.3))
-	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.7))
+	var hidden_size = int(_sweep_config.get("hidden_size", 80))
+	var elite_count = int(_sweep_config.get("elite_count", 20))
+	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.30))
+	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.09))
+	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.73))
 
 	# Get input size from sensor
 	var sensor_instance = AISensorScript.new()
@@ -361,11 +361,11 @@ func start_coevolution_training(pop_size: int = 100, generations: int = 100) -> 
 	time_scale = float(_sweep_config.get("time_scale", 16.0))
 	parallel_count = int(_sweep_config.get("parallel_count", parallel_count))
 
-	var hidden_size = int(_sweep_config.get("hidden_size", 32))
-	var elite_count = int(_sweep_config.get("elite_count", 10))
-	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.20))
-	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.3))
-	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.7))
+	var hidden_size = int(_sweep_config.get("hidden_size", 80))
+	var elite_count = int(_sweep_config.get("elite_count", 20))
+	var mutation_rate = float(_sweep_config.get("mutation_rate", 0.30))
+	var mutation_strength = float(_sweep_config.get("mutation_strength", 0.09))
+	var crossover_rate = float(_sweep_config.get("crossover_rate", 0.73))
 
 	# Get input size from player sensor
 	var sensor_instance = AISensorScript.new()

@@ -54,14 +54,14 @@ var backup_generation: int = 0
 
 
 func _init(
-	p_population_size: int = 100,
+	p_population_size: int = 150,
 	p_input_size: int = 70,
-	p_hidden_size: int = 32,
+	p_hidden_size: int = 80,
 	p_output_size: int = 6,
-	p_elite_count: int = 5,
-	p_mutation_rate: float = 0.15,
-	p_mutation_strength: float = 0.3,
-	p_crossover_rate: float = 0.7
+	p_elite_count: int = 20,
+	p_mutation_rate: float = 0.30,
+	p_mutation_strength: float = 0.09,
+	p_crossover_rate: float = 0.73
 ) -> void:
 	population_size = p_population_size
 	input_size = p_input_size
