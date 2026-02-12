@@ -2181,12 +2181,26 @@ func toggle_pause() -> void:
 
 
 func show_training_complete(reason: String) -> void:
-	## Show results screen at end of training. SPACE will exit.
+	## Training finished — auto-replay best network (visual) or freeze evals (headless).
 	print("Training complete: %s" % reason)
 	training_complete = true
-	is_paused = true
 
-	# Freeze all evals
+	# Save final results
+	if evolution:
+		evolution.save_best(BEST_NETWORK_PATH)
+		evolution.save_population(POPULATION_PATH)
+	if coevolution:
+		coevolution.player_evolution.save_best(BEST_NETWORK_PATH)
+		coevolution.save_populations(POPULATION_PATH, ENEMY_POPULATION_PATH)
+		coevolution.save_hall_of_fame(ENEMY_HOF_PATH)
+
+	# Visual mode: auto-replay best network fullscreen with topology viz
+	if DisplayServer.get_name() != "headless":
+		call_deferred("_start_best_replay")
+		return
+
+	# Headless: freeze evals so metrics bridge detects completion
+	is_paused = true
 	for eval in eval_instances:
 		if is_instance_valid(eval.viewport):
 			eval.viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
@@ -2194,29 +2208,64 @@ func show_training_complete(reason: String) -> void:
 			eval.scene.set_physics_process(false)
 			eval.scene.set_process(false)
 
-	# Save final results
-	if evolution:
-		evolution.save_best(BEST_NETWORK_PATH)
-		evolution.save_population(POPULATION_PATH)
 
-	# Create pause overlay with completion message
-	create_pause_overlay()
-	# Update title to show completion
-	if pause_overlay:
-		var title = pause_overlay.get_node_or_null("Control")
-		if not title:
-			for child in pause_overlay.get_children():
-				if child is Label and "PAUSED" in child.text:
-					child.text = "TRAINING COMPLETE"
-					break
-		var stats_label = pause_overlay.get_node_or_null("StatsLabel")
-		if stats_label:
-			stats_label.text = "Reason: %s\n\nGeneration: %d\nBest Fitness: %.1f\nAll-time Best: %.1f\n\n[SPACE] to exit" % [
-				reason,
-				generation,
-				best_fitness,
-				all_time_best
-			]
+func _start_best_replay() -> void:
+	## Tear down training grid and start fullscreen playback of best network.
+
+	# Clean up pause state if any
+	if is_paused:
+		destroy_pause_overlay()
+		is_paused = false
+
+	# Reset fullscreen arena state
+	fullscreen_arena_index = -1
+
+	# Disconnect resize signal
+	if get_tree().root.size_changed.is_connected(_on_training_window_resized):
+		get_tree().root.size_changed.disconnect(_on_training_window_resized)
+
+	# Tear down training grid
+	cleanup_training_instances()
+	if training_container:
+		var canvas_layer = training_container.get_parent()
+		canvas_layer.queue_free()
+		training_container = null
+
+	# Show main game fullscreen
+	show_main_game()
+	Engine.time_scale = 1.0
+
+	# Build network from best genome/weights
+	var network = null
+	var genome = null
+	if use_neat and evolution and evolution.all_time_best_genome:
+		genome = evolution.all_time_best_genome
+		network = NeatNetworkScript.from_genome(genome)
+	else:
+		network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+
+	if not network:
+		push_error("No best network available for replay")
+		current_mode = Mode.HUMAN
+		training_status_changed.emit("Training complete (no network to replay)")
+		return
+
+	# Start playback
+	current_mode = Mode.PLAYBACK
+	ai_controller.set_network(network)
+	player.enable_ai_control(true)
+	reset_game()
+
+	# Show network topology visualizer
+	if main_scene.network_visualizer:
+		if genome and network is NeatNetwork:
+			main_scene.network_visualizer.set_neat_data(genome, network)
+		else:
+			main_scene.network_visualizer.set_fixed_network(network)
+		main_scene.network_visualizer.visible = true
+
+	training_status_changed.emit("Replaying best network (fitness: %.1f)" % all_time_best)
+	print("Auto-replaying best network (fitness: %.1f)" % all_time_best)
 
 
 func pause_training() -> void:
