@@ -1070,6 +1070,7 @@ func _process_parallel_training(delta: float) -> void:
 
 			if evolution.get_generation() >= max_generations:
 				show_training_complete("Reached max generations (%d)" % max_generations)
+				_write_metrics_for_wandb()
 				return
 
 			# Generate new events for next generation
@@ -1218,10 +1219,12 @@ func _process_coevolution_training(delta: float) -> void:
 			if generations_without_improvement >= stagnation_limit:
 				print("Early stopping: No improvement for %d generations" % stagnation_limit)
 				show_training_complete("Early stopping: No improvement for %d generations" % stagnation_limit)
+				_write_metrics_for_wandb()
 				return
 
 			if generation >= max_generations:
 				show_training_complete("Reached max generations (%d)" % max_generations)
+				_write_metrics_for_wandb()
 				return
 
 			# Reset for next generation
@@ -1399,6 +1402,7 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	if generations_without_improvement >= stagnation_limit:
 		print("Early stopping: No improvement for %d generations" % stagnation_limit)
 		show_training_complete("Early stopping: No improvement for %d generations" % stagnation_limit)
+		_write_metrics_for_wandb()
 
 
 func _update_map_elites_archive() -> void:
