@@ -24,6 +24,7 @@ import argparse
 import signal
 import sys
 import uuid
+import math
 
 # Sweep configuration - hyperparameters to search
 SWEEP_CONFIG = {
@@ -209,7 +210,7 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
                             'max_best_fitness': max_best,
                             'fitness_std_dev': fitness_std,
                             'improvement_rate': improvement_rate,
-                        })
+                        }, step=gen)
 
                         print(f"    Gen {gen:3d}: best={best_fitness:.1f}, avg={gen_avg:.1f}")
 
@@ -255,7 +256,12 @@ def train():
     write_config_for_godot(config)
 
     # Run training
-    best, final_avg, total_gens = run_godot_training(timeout_minutes=15)
+    # 5 min/gen when pop*evals/parallel = 60 (e.g. pop=150, evals=2, parallel=5)
+    parallel = config.get('parallel_count', SWEEP_CONFIG['parameters'].get('parallel_count', {}).get('value', 5))
+    evals_per_gen = config.population_size * config.evals_per_individual / parallel
+    min_per_gen = 5 * evals_per_gen / 60
+    timeout = int(math.ceil(config.max_generations * min_per_gen))
+    best, final_avg, total_gens = run_godot_training(timeout_minutes=timeout)
 
     # Log final summaries
     wandb.summary['final_best_fitness'] = best
