@@ -7,8 +7,9 @@
 # Import cache (already in .godot, but just in case)
 *.import
 
-# Claude Code
-.claude/
+# Claude Code (keep skills tracked)
+.claude/*
+!.claude/skills/
 
 # W&B local data
 wandb/
