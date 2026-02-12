@@ -49,6 +49,9 @@ SWEEP_CONFIG = {
         # Training (top runs all reached gen 50; 2 evals won every top run)
         'max_generations': {'value': 50},
         'evals_per_individual': {'value': 2},
+
+        # Parallel arenas per Godot instance (lower to allow multiple workers)
+        'parallel_count': {'value': 5},
     }
 }
 
@@ -77,8 +80,12 @@ def write_config_for_godot(config: dict):
     """Write sweep config so Godot can read it"""
     GODOT_USER_DATA.mkdir(parents=True, exist_ok=True)
     config_path = get_config_path()
+    cfg = dict(config)
+    # Ensure parallel_count is always set (sweep may not include it)
+    if 'parallel_count' not in cfg:
+        cfg['parallel_count'] = SWEEP_CONFIG['parameters'].get('parallel_count', {}).get('value', 5)
     with open(config_path, 'w') as f:
-        json.dump(dict(config), f, indent=2)
+        json.dump(cfg, f, indent=2)
     print(f"  Config written: {config_path}")
 
 
