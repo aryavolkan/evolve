@@ -66,6 +66,15 @@ const SWEEP_CONFIG_PATH := "user://sweep_config.json"
 var _sweep_config: Dictionary = {}
 var _worker_id: String = ""  # Worker ID for parallel sweep runs
 
+# Island model migration (NEAT only)
+const MIGRATION_POOL_DIR := "user://migration_pool/"
+const MIGRATION_IMPORT_INTERVAL: int = 5  # Import every N generations
+const MIGRATION_MAX_IMMIGRANTS: int = 2   # Per normal import cycle
+const MIGRATION_STAGNATION_THRESHOLD: int = 3  # Trigger early import
+const MIGRATION_STAGNATION_IMMIGRANTS: int = 3  # More aggressive when stuck
+var _imported_migrations: Dictionary = {}  # {"worker_id:generation": true} — tracks what we've already imported
+var _generations_since_import: int = 0
+
 # Stats
 var generation: int = 0
 var best_fitness: float = 0.0
@@ -1395,6 +1404,10 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	evolution.save_best(BEST_NETWORK_PATH)
 	evolution.save_population(POPULATION_PATH)
 
+	# Island model migration (export best, import foreign genomes)
+	_export_best_to_migration_pool()
+	_import_from_migration_pool()
+
 	# Write metrics for W&B bridge
 	_write_metrics_for_wandb()
 
@@ -1476,6 +1489,119 @@ func _write_metrics_for_wandb() -> void:
 	if file:
 		file.store_string(JSON.stringify(metrics))
 		file.close()
+
+
+# ============================================================
+# ISLAND MODEL MIGRATION (NEAT only)
+# ============================================================
+
+func _export_best_to_migration_pool() -> void:
+	## Write best genome to migration pool so other workers can import it.
+	if not use_neat or _worker_id == "" or not evolution:
+		return
+	if not evolution.all_time_best_genome:
+		return
+
+	# Ensure directory exists
+	DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path(MIGRATION_POOL_DIR)
+	)
+
+	var data := {
+		"worker_id": _worker_id,
+		"generation": generation,
+		"fitness": evolution.all_time_best_fitness,
+		"genome": evolution.all_time_best_genome.serialize(),
+	}
+	var path := MIGRATION_POOL_DIR + _worker_id + ".json"
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data))
+		file.close()
+
+
+func _import_from_migration_pool() -> void:
+	## Scan migration pool for foreign genomes and inject into population.
+	if not use_neat or _worker_id == "" or not evolution:
+		return
+
+	_generations_since_import += 1
+
+	# Determine if we should import this generation
+	var stagnation_triggered := generations_without_improvement >= MIGRATION_STAGNATION_THRESHOLD
+	var interval_triggered := _generations_since_import >= MIGRATION_IMPORT_INTERVAL
+
+	if not stagnation_triggered and not interval_triggered:
+		return
+
+	var max_immigrants := MIGRATION_MAX_IMMIGRANTS
+	if stagnation_triggered:
+		max_immigrants = MIGRATION_STAGNATION_IMMIGRANTS
+
+	# Scan migration pool directory
+	var dir := DirAccess.open(MIGRATION_POOL_DIR)
+	if not dir:
+		return
+
+	var imported_count := 0
+	var imported_from: Array[String] = []
+	dir.list_dir_begin()
+	var filename := dir.get_next()
+	while filename != "" and imported_count < max_immigrants:
+		if filename.ends_with(".json") and not filename.begins_with(_worker_id):
+			var path := MIGRATION_POOL_DIR + filename
+			var immigrant := _try_load_immigrant(path)
+			if immigrant:
+				evolution.inject_immigrant(immigrant)
+				imported_count += 1
+				imported_from.append(filename.get_basename())
+		filename = dir.get_next()
+	dir.list_dir_end()
+
+	if imported_count > 0:
+		_generations_since_import = 0
+		var trigger := "stagnation" if stagnation_triggered else "interval"
+		print("Migration [%s]: Imported %d immigrant(s) from workers %s" % [
+			trigger, imported_count, imported_from
+		])
+
+
+func _try_load_immigrant(path: String) -> NeatGenome:
+	## Try to load a foreign genome from a migration pool file.
+	## Returns null if the file is invalid, already imported, or not worth it.
+	var file := FileAccess.open(path, FileAccess.READ)
+	if not file:
+		return null
+	var json := JSON.new()
+	if json.parse(file.get_as_text()) != OK:
+		file.close()
+		return null
+	file.close()
+
+	var data: Dictionary = json.data
+	var foreign_worker: String = str(data.get("worker_id", ""))
+	var foreign_gen: int = int(data.get("generation", 0))
+	var foreign_fitness: float = float(data.get("fitness", 0.0))
+
+	# Skip if already imported this exact snapshot
+	var import_key := "%s:%d" % [foreign_worker, foreign_gen]
+	if _imported_migrations.has(import_key):
+		return null
+	_imported_migrations[import_key] = true
+
+	# Skip if fitness is below our worst (not worth importing)
+	var worst_fitness := INF
+	for genome in evolution.population:
+		worst_fitness = minf(worst_fitness, genome.fitness)
+	if foreign_fitness <= worst_fitness:
+		return null
+
+	var genome_data = data.get("genome")
+	if not genome_data or not genome_data is Dictionary:
+		return null
+
+	# v1: import as-is — foreign innovation numbers form their own species
+	return NeatGenome.deserialize(genome_data, evolution.config, evolution.innovation_tracker)
 
 
 # Curriculum learning functions

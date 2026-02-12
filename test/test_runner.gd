@@ -74,6 +74,7 @@ func _run_all_tests() -> void:
 		preload("res://test/test_comparison_panel.gd"),
 		preload("res://test/test_network_visualizer.gd"),
 		preload("res://test/test_pr_gatekeeper.gd"),
+		preload("res://test/test_neat_migration.gd"),
 	]
 
 	for suite_script in test_suites:

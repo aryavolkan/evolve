@@ -415,6 +415,52 @@ func get_enabled_connection_count() -> int:
 	return count
 
 
+# ============================================================
+# SERIALIZATION
+# ============================================================
+
+func serialize() -> Dictionary:
+	## Serialize genome to a JSON-compatible dictionary.
+	var nodes: Array = []
+	for node in node_genes:
+		nodes.append({"id": node.id, "type": node.type, "bias": node.bias})
+	var connections: Array = []
+	for conn in connection_genes:
+		connections.append({
+			"in": conn.in_id,
+			"out": conn.out_id,
+			"weight": conn.weight,
+			"enabled": conn.enabled,
+			"innovation": conn.innovation,
+		})
+	return {"nodes": nodes, "connections": connections, "fitness": fitness}
+
+
+static func deserialize(data: Dictionary, p_config: NeatConfig, p_tracker: NeatInnovation) -> NeatGenome:
+	## Reconstruct a genome from a serialized dictionary.
+	var genome := NeatGenome.new()
+	genome.config = p_config
+	genome.innovation_tracker = p_tracker
+
+	for node_data in data.get("nodes", []):
+		var node := NodeGene.new(int(node_data.id), int(node_data.type))
+		node.bias = float(node_data.bias)
+		genome.node_genes.append(node)
+
+	for conn_data in data.get("connections", []):
+		var conn := ConnectionGene.new(
+			int(conn_data["in"]),
+			int(conn_data.out),
+			float(conn_data.weight),
+			int(conn_data.innovation),
+		)
+		conn.enabled = bool(conn_data.enabled)
+		genome.connection_genes.append(conn)
+
+	genome.fitness = float(data.get("fitness", 0.0))
+	return genome
+
+
 static func _randn() -> float:
 	## Approximate standard normal using Box-Muller.
 	var u1 := randf()
