@@ -133,7 +133,12 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
     start_time = time.time()
     last_gen = -1
     best_fitness = 0
+    last_avg_fitness = 0
     metrics_path = get_metrics_path()
+
+    # Running aggregates for derived metrics
+    best_fitness_history = []
+    avg_fitness_history = []
 
     try:
         while time.time() - start_time < timeout_minutes * 60:
@@ -152,32 +157,61 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
                     if gen > last_gen:
                         last_gen = gen
                         best_fitness = data.get('all_time_best', 0)
+                        gen_best = data.get('best_fitness', 0)
+                        gen_avg = data.get('avg_fitness', 0)
+                        last_avg_fitness = gen_avg
+
+                        # Track history for aggregates
+                        best_fitness_history.append(gen_best)
+                        avg_fitness_history.append(gen_avg)
+
+                        # Compute derived metrics
+                        mean_best = sum(best_fitness_history) / len(best_fitness_history)
+                        mean_avg = sum(avg_fitness_history) / len(avg_fitness_history)
+                        max_best = max(best_fitness_history)
+                        improvement_rate = (best_fitness_history[-1] - best_fitness_history[0]) / max(len(best_fitness_history), 1) if len(best_fitness_history) > 1 else 0
+                        fitness_std = (sum((x - gen_avg) ** 2 for x in avg_fitness_history) / len(avg_fitness_history)) ** 0.5 if avg_fitness_history else 0
 
                         # Log to W&B
                         wandb.log({
+                            # Core fitness
                             'generation': gen,
-                            'best_fitness': data.get('best_fitness', 0),
-                            'avg_fitness': data.get('avg_fitness', 0),
+                            'best_fitness': gen_best,
+                            'avg_fitness': gen_avg,
                             'min_fitness': data.get('min_fitness', 0),
+                            'all_time_best': best_fitness,
+                            # Score breakdown
                             'avg_kill_score': data.get('avg_kill_score', 0),
                             'avg_powerup_score': data.get('avg_powerup_score', 0),
                             'avg_survival_score': data.get('avg_survival_score', 0),
-                            'all_time_best': best_fitness,
+                            # Evolution state
                             'stagnation': data.get('generations_without_improvement', 0),
+                            'population_size': data.get('population_size', 0),
+                            'evals_per_individual': data.get('evals_per_individual', 0),
+                            # Curriculum
                             'curriculum_stage': data.get('curriculum_stage', 0),
                             'curriculum_label': data.get('curriculum_label', ''),
+                            # Training config
                             'time_scale': data.get('time_scale', 0),
                             'parallel_count': int(wandb.config.get('parallel_count', 5)),
-                            'evals_per_individual': data.get('evals_per_individual', 0),
+                            # MAP-Elites
                             'map_elites_best': data.get('map_elites_best', 0),
                             'map_elites_coverage': data.get('map_elites_coverage', 0),
                             'map_elites_occupied': data.get('map_elites_occupied', 0),
+                            # NSGA-II / NEAT
                             'pareto_front_size': data.get('pareto_front_size', 0),
                             'neat_species_count': data.get('neat_species_count', 0),
+                            'neat_compatibility_threshold': data.get('neat_compatibility_threshold', 0),
                             'hypervolume': data.get('hypervolume', 0),
+                            # Derived aggregates
+                            'mean_best_fitness': mean_best,
+                            'mean_avg_fitness': mean_avg,
+                            'max_best_fitness': max_best,
+                            'fitness_std_dev': fitness_std,
+                            'improvement_rate': improvement_rate,
                         })
 
-                        print(f"    Gen {gen:3d}: best={best_fitness:.1f}, avg={data.get('avg_fitness', 0):.1f}")
+                        print(f"    Gen {gen:3d}: best={best_fitness:.1f}, avg={gen_avg:.1f}")
 
                         # Check if done
                         if data.get('training_complete', False):
@@ -202,7 +236,7 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
             proc.kill()
         cleanup_worker_files()
 
-    return best_fitness
+    return best_fitness, last_avg_fitness, last_gen
 
 
 def train():
@@ -221,10 +255,12 @@ def train():
     write_config_for_godot(config)
 
     # Run training
-    best = run_godot_training(timeout_minutes=15)
+    best, final_avg, total_gens = run_godot_training(timeout_minutes=15)
 
-    # Log final result
+    # Log final summaries
     wandb.summary['final_best_fitness'] = best
+    wandb.summary['final_avg_fitness'] = final_avg
+    wandb.summary['total_generations'] = total_gens
     wandb.summary['parallel_count'] = config.get('parallel_count', 5)
     print(f"  Final best fitness: {best:.1f}")
 
