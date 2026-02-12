@@ -29,25 +29,25 @@ SWEEP_CONFIG = {
     'method': 'bayes',
     'metric': {'name': 'avg_fitness', 'goal': 'maximize'},
     'parameters': {
-        # Population
-        'population_size': {'values': [50, 100, 150]},
+        # Population (120-150 dominated top runs)
+        'population_size': {'values': [120, 150]},
 
-        # Selection
-        'elite_count': {'values': [5, 10, 15, 20]},
+        # Selection (20-25 in top configs)
+        'elite_count': {'values': [15, 20, 25]},
 
-        # Mutation
-        'mutation_rate': {'distribution': 'uniform', 'min': 0.10, 'max': 0.35},
-        'mutation_strength': {'distribution': 'uniform', 'min': 0.15, 'max': 0.5},
+        # Mutation (rate 0.26-0.31, strength 0.08-0.11 in top configs)
+        'mutation_rate': {'distribution': 'uniform', 'min': 0.22, 'max': 0.35},
+        'mutation_strength': {'distribution': 'uniform', 'min': 0.06, 'max': 0.15},
 
-        # Crossover
-        'crossover_rate': {'distribution': 'uniform', 'min': 0.5, 'max': 0.85},
+        # Crossover (0.72-0.75 in top configs)
+        'crossover_rate': {'distribution': 'uniform', 'min': 0.65, 'max': 0.80},
 
-        # Network architecture
-        'hidden_size': {'values': [24, 32, 48, 64]},
+        # Network architecture (80 was sweet spot, 96 also viable)
+        'hidden_size': {'values': [64, 80, 96]},
 
-        # Training
-        'max_generations': {'value': 30},  # Keep short for sweep
-        'evals_per_individual': {'values': [1, 2]},
+        # Training (top runs all reached gen 50; 2 evals won every top run)
+        'max_generations': {'value': 50},
+        'evals_per_individual': {'value': 2},
     }
 }
 
