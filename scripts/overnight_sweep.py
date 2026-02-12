@@ -164,6 +164,13 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
                             'avg_survival_score': data.get('avg_survival_score', 0),
                             'all_time_best': best_fitness,
                             'stagnation': data.get('generations_without_improvement', 0),
+                            'curriculum_stage': data.get('curriculum_stage', 0),
+                            'map_elites_best': data.get('map_elites_best', 0),
+                            'map_elites_coverage': data.get('map_elites_coverage', 0),
+                            'map_elites_occupied': data.get('map_elites_occupied', 0),
+                            'pareto_front_size': data.get('pareto_front_size', 0),
+                            'neat_species_count': data.get('neat_species_count', 0),
+                            'hypervolume': data.get('hypervolume', 0),
                         })
 
                         print(f"    Gen {gen:3d}: best={best_fitness:.1f}, avg={data.get('avg_fitness', 0):.1f}")
