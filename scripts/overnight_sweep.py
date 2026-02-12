@@ -165,6 +165,8 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
                             'all_time_best': best_fitness,
                             'stagnation': data.get('generations_without_improvement', 0),
                             'curriculum_stage': data.get('curriculum_stage', 0),
+                            'curriculum_label': data.get('curriculum_label', ''),
+                            'time_scale': data.get('time_scale', 0),
                             'map_elites_best': data.get('map_elites_best', 0),
                             'map_elites_coverage': data.get('map_elites_coverage', 0),
                             'map_elites_occupied': data.get('map_elites_occupied', 0),
@@ -221,6 +223,7 @@ def train():
 
     # Log final result
     wandb.summary['final_best_fitness'] = best
+    wandb.summary['parallel_count'] = config.get('parallel_count', 5)
     print(f"  Final best fitness: {best:.1f}")
 
     wandb.finish()
