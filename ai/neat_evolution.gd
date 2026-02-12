@@ -303,7 +303,7 @@ func inject_immigrant(genome: NeatGenome) -> void:
 	if population.is_empty():
 		return
 	var worst_idx := 0
-	var worst_fit := population[0].fitness
+	var worst_fit: float = population[0].fitness
 	for i in range(1, population.size()):
 		if population[i].fitness < worst_fit:
 			worst_fit = population[i].fitness
