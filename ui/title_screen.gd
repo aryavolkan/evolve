@@ -36,6 +36,7 @@ func _ready() -> void:
 func show_menu() -> void:
 	_visible = true
 	visible = true
+	z_index = 100  # Ensure title screen is above everything
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
 

@@ -187,11 +187,17 @@ func show_title_screen() -> void:
 	if not title_screen:
 		return
 	game_started = false
+	game_over = false
 	get_tree().paused = true
-	# Hide gameplay UI
+	# Hide all gameplay/game-over UI
 	score_label.visible = false
 	lives_label.visible = false
 	scoreboard_label.visible = false
+	game_over_label.visible = false
+	name_entry.visible = false
+	name_prompt.visible = false
+	if game_over_screen:
+		game_over_screen.hide_screen()
 	if ai_status_label:
 		ai_status_label.visible = false
 	title_screen.show_menu()
