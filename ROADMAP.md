@@ -64,7 +64,7 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 | ~~Create `TrainingConfig` resource (centralize all settings)~~ | ~~High~~ | ~~Medium~~ | ✅ Done — `ai/training_config.gd` |
 
 **Deliverables:** ✅ All 4 components extracted
-- ~~`training_manager.gd` reduced from 1,600 LOC → ~400 LOC (thin coordinator)~~ — Now 2,292 LOC: extraction succeeded but co-evolution, sandbox, and comparison modes added significant new functionality. Further decomposition deferred.
+- ~~`training_manager.gd` reduced from 1,600 LOC → ~400 LOC (thin coordinator)~~ — Currently ~725 LOC: extraction succeeded but co-evolution, sandbox, and comparison modes added new orchestration logic. Further decomposition deferred.
 - ~~Clear single source of truth for training configuration~~ — `ai/training_config.gd`
 - ~~Testable, modular components~~ — All 4 extracted modules tested
 

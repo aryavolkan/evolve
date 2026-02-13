@@ -120,7 +120,7 @@ python overnight_evolve.py --project evolve-neuroevolution-new
 
 ## Testing
 
-137 tests covering neural networks, evolution, sensors, AI controller, difficulty scaling, enemies, power-ups, and integration.
+Run the headless test suite:
 
 ```bash
 godot --headless --script test/test_runner.gd
