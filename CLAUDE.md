@@ -20,8 +20,9 @@ A 2D arcade survival game built with Godot 4.5+. Player avoids enemy entities to
 ├── obstacle.tscn      # Static obstacles
 ├── training_manager.gd # AI training orchestration
 ├── ai/                # Neural network and evolution
-├── scripts/           # Python W&B integration scripts
-└── test/              # Test suite (558 tests)
+├── scripts/           # Python W&B integration + demo export scripts
+├── models/            # Temp dir for .pck export (gitignored)
+└── test/              # Test suite (562 tests)
 ```
 
 ## Running the Project
@@ -300,7 +301,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (558 tests)
+### Test Coverage (562 tests)
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -320,6 +321,7 @@ godot --headless --script test/test_runner.gd
 | `test_lineage.gd` | 10 | Lineage tracker: birth recording, ancestry tracing, pruning, fitness |
 | `test_teams.gd` | 15 | Team battle: TeamManager, PvP hits, team sensors, team colors, signals |
 | `test_death_effects.gd` | 8 | Death effect: instantiation, setup, enemy die(), player/agent effects |
+| `test_demo_export.gd` | 4 | Demo export: model fallback path, --demo flag, basename extraction |
 
 ### Visible Training Mode
 
@@ -341,6 +343,29 @@ Press **T** to enter training mode. The screen displays 20 parallel arenas in a 
 - Early stopping after 10 generations without improvement
 - Auto-saves best network every generation
 - Press **T** again or **H** to stop and return to human mode
+
+## Demo Export
+
+Export a trained AI model as a standalone `.pck` file anyone with a Godot runtime can play.
+
+**Export:**
+```bash
+python scripts/export_demo.py                          # Default output: evolve_demo.pck
+python scripts/export_demo.py --output my_demo.pck     # Custom output name
+python scripts/export_demo.py --network /path/to/nn    # Custom network file
+```
+
+**Play:**
+```bash
+godot --main-pack evolve_demo.pck -- --demo
+```
+
+**How it works:**
+- The script copies `best_network.nn` into `res://models/` temporarily
+- Runs `godot --export-pack` to create the `.pck` with the model embedded
+- Cleans up `models/` after export (not committed to repo)
+- The `--demo` flag skips the title screen and starts AI playback directly
+- `neural_network.gd` has a `res://models/` fallback when `user://` path is missing
 
 ---------------------------------
 SENIOR SOFTWARE ENGINEER

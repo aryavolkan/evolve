@@ -15,3 +15,8 @@
 wandb/
 overnight-agent/wandb_logs/
 .venv/
+
+# Demo export artifacts
+models/
+*.pck
+export_presets.cfg

@@ -264,10 +264,13 @@ func _ready() -> void:
 	setup_training_manager()
 	setup_ui_screens()
 
-	# Check for auto-train flag (for headless W&B sweeps)
+	# Check for command-line flags
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--auto-train":
 			call_deferred("_start_auto_training")
+			return
+		if arg == "--demo":
+			call_deferred("_start_demo_playback")
 			return
 
 	# Show title screen on startup (only for root viewport / human play)
@@ -553,6 +556,19 @@ func _start_auto_training() -> void:
 	if training_manager:
 		print("Auto-training started via command line")
 		training_manager.start_training()
+
+
+func _start_demo_playback() -> void:
+	## Start AI playback directly, skipping the title screen (for .pck demos).
+	game_started = true
+	get_tree().paused = false
+	score_label.visible = true
+	lives_label.visible = true
+	scoreboard_label.visible = true
+	if ai_status_label:
+		ai_status_label.visible = true
+	if training_manager:
+		training_manager.start_playback()
 
 
 func _unhandled_input(event: InputEvent) -> void:

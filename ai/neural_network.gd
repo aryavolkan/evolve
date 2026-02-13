@@ -253,9 +253,13 @@ func save_to_file(path: String) -> void:
 
 static func load_from_file(path: String):
 	## Load network from a file. Supports legacy (no memory flag) and new format.
+	## Falls back to res://models/<basename> for packaged .pck demos.
 	var file := FileAccess.open(path, FileAccess.READ)
 	if not file:
-		return null
+		var fallback := "res://models/" + path.get_file()
+		file = FileAccess.open(fallback, FileAccess.READ)
+		if not file:
+			return null
 
 	var in_size := file.get_32()
 	var hid_size := file.get_32()
