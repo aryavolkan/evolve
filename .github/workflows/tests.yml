@@ -22,5 +22,11 @@ jobs:
           mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" godot
           chmod +x godot
 
-      - name: Run tests
+      - name: Run unit + component tests
         run: ./godot --headless --script test/test_runner.gd
+
+      - name: Run gameplay integration scenarios
+        run: ./godot --headless --script test/integration/gameplay_test_runner.gd -- --scenario=all
+
+      - name: Run training smoke test
+        run: ./godot --headless --script test/integration/training_smoke_test.gd
