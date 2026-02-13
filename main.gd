@@ -530,6 +530,10 @@ func _process(delta: float) -> void:
 				phylogenetic_tree.set_lineage_data(training_manager.lineage_tracker, best_id)
 
 	if game_over:
+		if Input.is_action_just_pressed("ui_cancel"):
+			show_title_screen()
+			get_tree().reload_current_scene()
+			return
 		if entering_name:
 			if Input.is_action_just_pressed("ui_accept") and name_entry.text.strip_edges() != "":
 				_submit_high_score(name_entry.text.strip_edges())

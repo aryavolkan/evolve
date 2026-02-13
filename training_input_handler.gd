@@ -21,6 +21,30 @@ func handle_training_input() -> void:
 	if not training_manager:
 		return
 
+	# ESC = stop current mode and return to title screen
+	if Input.is_physical_key_pressed(KEY_ESCAPE):
+		if not _key_just_pressed("escape"):
+			return
+		var mode = training_manager.get_mode()
+		if mode == training_manager.Mode.TRAINING:
+			training_manager.stop_training()
+		elif mode == training_manager.Mode.COEVOLUTION:
+			training_manager.stop_coevolution_training()
+		elif mode == training_manager.Mode.PLAYBACK:
+			training_manager.stop_playback()
+		elif mode == training_manager.Mode.GENERATION_PLAYBACK:
+			training_manager.stop_playback()
+		elif mode == training_manager.Mode.SANDBOX:
+			training_manager.stop_sandbox()
+		elif mode == training_manager.Mode.COMPARISON:
+			training_manager.stop_comparison()
+		elif mode == training_manager.Mode.RTNEAT:
+			training_manager.stop_rtneat()
+		elif mode == training_manager.Mode.TEAMS:
+			training_manager.stop_rtneat_teams()
+		main_game.show_title_screen()
+		return
+
 	# T = Start/Stop Training
 	if Input.is_action_just_pressed("ui_text_submit"):  # We'll use a different key
 		pass
