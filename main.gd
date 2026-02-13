@@ -566,97 +566,85 @@ func _start_demo_playback() -> void:
 		training_manager.start_playback()
 
 
+func _get_speed_target():
+	## Return the object that owns adjust_speed() for the current mode, or null.
+	if not training_manager:
+		return null
+	var mode = training_manager.get_mode()
+	if (mode == training_manager.Mode.TRAINING or mode == training_manager.Mode.COEVOLUTION) and not training_manager.is_paused:
+		return training_manager
+	if mode == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
+		return training_manager.rtneat_mgr
+	if mode == training_manager.Mode.TEAMS and training_manager.team_mgr:
+		return training_manager.team_mgr
+	return null
+
+
+func _get_interactive_manager():
+	## Return the active interactive manager (rtNEAT or Teams), or null.
+	if not training_manager:
+		return null
+	var mode = training_manager.get_mode()
+	if mode == training_manager.Mode.TEAMS and training_manager.team_mgr:
+		return training_manager.team_mgr
+	if mode == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
+		return training_manager.rtneat_mgr
+	return null
+
+
+func _screen_to_world(screen_pos: Vector2) -> Vector2:
+	## Convert screen position to world position using arena camera.
+	if arena_camera:
+		return arena_camera.get_screen_center_position() + (screen_pos - get_viewport().get_visible_rect().size / 2.0) / arena_camera.zoom
+	return screen_pos
+
+
+func _handle_interactive_input(event: InputEvent, mgr) -> void:
+	## Handle tool selection and click interactions for an interactive manager.
+	# Tool selection keys (0-5)
+	if event is InputEventKey and event.pressed:
+		var ToolEnum = mgr.Tool
+		match event.keycode:
+			KEY_0: mgr.set_tool(ToolEnum.INSPECT)
+			KEY_1: mgr.set_tool(ToolEnum.PLACE_OBSTACLE)
+			KEY_2: mgr.set_tool(ToolEnum.REMOVE_OBSTACLE)
+			KEY_3: mgr.set_tool(ToolEnum.SPAWN_WAVE)
+			KEY_4: mgr.set_tool(ToolEnum.BLESS)
+			KEY_5: mgr.set_tool(ToolEnum.CURSE)
+			KEY_ESCAPE:
+				mgr.set_tool(ToolEnum.INSPECT)
+				mgr.clear_inspection()
+				if mgr.overlay:
+					mgr.overlay.hide_inspect()
+				if network_visualizer:
+					network_visualizer.visible = false
+
+	# Click handling
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var world_pos := _screen_to_world(event.position)
+
+		if not mgr.handle_click(world_pos):
+			var idx: int = mgr.get_agent_at_position(world_pos)
+			if idx >= 0:
+				var data: Dictionary = mgr.inspect_agent(idx)
+				if mgr.overlay:
+					mgr.overlay.show_inspect(data)
+				if network_visualizer and data.has("genome") and data.has("network"):
+					network_visualizer.set_neat_data(data.genome, data.network)
+					network_visualizer.visible = true
+			else:
+				mgr.clear_inspection()
+				if mgr.overlay:
+					mgr.overlay.hide_inspect()
+				if network_visualizer:
+					network_visualizer.visible = false
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	# Team battle interactions
-	if training_manager and training_manager.get_mode() == training_manager.Mode.TEAMS and training_manager.team_mgr:
-		var mgr = training_manager.team_mgr
-
-		# Tool selection keys (0-5)
-		if event is InputEventKey and event.pressed:
-			var TmTool = mgr.Tool
-			match event.keycode:
-				KEY_0: mgr.set_tool(TmTool.INSPECT)
-				KEY_1: mgr.set_tool(TmTool.PLACE_OBSTACLE)
-				KEY_2: mgr.set_tool(TmTool.REMOVE_OBSTACLE)
-				KEY_3: mgr.set_tool(TmTool.SPAWN_WAVE)
-				KEY_4: mgr.set_tool(TmTool.BLESS)
-				KEY_5: mgr.set_tool(TmTool.CURSE)
-				KEY_ESCAPE:
-					mgr.set_tool(TmTool.INSPECT)
-					mgr.clear_inspection()
-					if mgr.overlay:
-						mgr.overlay.hide_inspect()
-					if network_visualizer:
-						network_visualizer.visible = false
-
-		# Click handling
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			var world_pos: Vector2 = event.position
-			if arena_camera:
-				world_pos = arena_camera.get_screen_center_position() + (event.position - get_viewport().get_visible_rect().size / 2.0) / arena_camera.zoom
-
-			if not mgr.handle_click(world_pos):
-				var idx: int = mgr.get_agent_at_position(world_pos)
-				if idx >= 0:
-					var data: Dictionary = mgr.inspect_agent(idx)
-					if mgr.overlay:
-						mgr.overlay.show_inspect(data)
-					if network_visualizer and data.has("genome") and data.has("network"):
-						network_visualizer.set_neat_data(data.genome, data.network)
-						network_visualizer.visible = true
-				else:
-					mgr.clear_inspection()
-					if mgr.overlay:
-						mgr.overlay.hide_inspect()
-					if network_visualizer:
-						network_visualizer.visible = false
-
-	# rtNEAT interactions
-	if training_manager and training_manager.get_mode() == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
-		var mgr = training_manager.rtneat_mgr
-
-		# Tool selection keys (0-5)
-		if event is InputEventKey and event.pressed:
-			var RtTool = mgr.Tool
-			match event.keycode:
-				KEY_0: mgr.set_tool(RtTool.INSPECT)
-				KEY_1: mgr.set_tool(RtTool.PLACE_OBSTACLE)
-				KEY_2: mgr.set_tool(RtTool.REMOVE_OBSTACLE)
-				KEY_3: mgr.set_tool(RtTool.SPAWN_WAVE)
-				KEY_4: mgr.set_tool(RtTool.BLESS)
-				KEY_5: mgr.set_tool(RtTool.CURSE)
-				KEY_ESCAPE:
-					mgr.set_tool(RtTool.INSPECT)
-					mgr.clear_inspection()
-					if mgr.overlay:
-						mgr.overlay.hide_inspect()
-					if network_visualizer:
-						network_visualizer.visible = false
-
-		# Click handling
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			# Convert screen position to world position
-			var world_pos: Vector2 = event.position
-			if arena_camera:
-				world_pos = arena_camera.get_screen_center_position() + (event.position - get_viewport().get_visible_rect().size / 2.0) / arena_camera.zoom
-
-			# Try tool action first; if not handled, fall through to inspect
-			if not mgr.handle_click(world_pos):
-				# Inspect mode: find agent at position
-				var idx: int = mgr.get_agent_at_position(world_pos)
-				if idx >= 0:
-					var data: Dictionary = mgr.inspect_agent(idx)
-					if mgr.overlay:
-						mgr.overlay.show_inspect(data)
-					if network_visualizer and data.has("genome") and data.has("network"):
-						network_visualizer.set_neat_data(data.genome, data.network)
-						network_visualizer.visible = true
-				else:
-					mgr.clear_inspection()
-					if mgr.overlay:
-						mgr.overlay.hide_inspect()
-					if network_visualizer:
-						network_visualizer.visible = false
+	# Interactive mode input (shared by rtNEAT and Teams)
+	var interactive_mgr = _get_interactive_manager()
+	if interactive_mgr:
+		_handle_interactive_input(event, interactive_mgr)
 
 
 func _process(delta: float) -> void:
