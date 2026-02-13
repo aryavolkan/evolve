@@ -385,6 +385,9 @@ func _on_title_mode_selected(mode: String) -> void:
 			if training_manager:
 				# Start training with co-evolution mode flag
 				training_manager.start_training(100, 100)
+		"rtneat":
+			if training_manager:
+				training_manager.start_rtneat({"agent_count": 30})
 
 
 func _show_game_over_stats() -> void:
@@ -504,6 +507,38 @@ func _start_auto_training() -> void:
 	if training_manager:
 		print("Auto-training started via command line")
 		training_manager.start_training()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# rtNEAT click-to-inspect
+	if training_manager and training_manager.get_mode() == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
+		var mgr = training_manager.rtneat_mgr
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			# Convert screen position to world position
+			var world_pos: Vector2 = event.position
+			if arena_camera:
+				world_pos = arena_camera.get_screen_center_position() + (event.position - get_viewport().get_visible_rect().size / 2.0) / arena_camera.zoom
+			var idx: int = mgr.get_agent_at_position(world_pos)
+			if idx >= 0:
+				var data: Dictionary = mgr.inspect_agent(idx)
+				if mgr.overlay:
+					mgr.overlay.show_inspect(data)
+				# Show network visualizer for this agent
+				if network_visualizer and data.has("genome") and data.has("network"):
+					network_visualizer.set_neat_data(data.genome, data.network)
+					network_visualizer.visible = true
+			else:
+				mgr.clear_inspection()
+				if mgr.overlay:
+					mgr.overlay.hide_inspect()
+				if network_visualizer:
+					network_visualizer.visible = false
+		elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+			mgr.clear_inspection()
+			if mgr.overlay:
+				mgr.overlay.hide_inspect()
+			if network_visualizer:
+				network_visualizer.visible = false
 
 
 func _process(delta: float) -> void:
@@ -763,7 +798,9 @@ func find_valid_powerup_position() -> Vector2:
 
 	return Vector2.ZERO  # Failed to find valid position
 
-func _on_powerup_collected(type: String) -> void:
+func _on_powerup_collected(type: String, collector: Node2D = null) -> void:
+	# Route to the collector; fallback to main player for backward compat
+	var target = collector if collector else player
 	powerups_collected += 1
 	show_powerup_message(type)
 
@@ -773,29 +810,33 @@ func _on_powerup_collected(type: String) -> void:
 	score += bonus
 	score_from_powerups += bonus
 	var bonus_text = "+%d" % bonus
-	spawn_floating_text(bonus_text, Color(0, 1, 0.5, 1), player.position)
+	spawn_floating_text(bonus_text, Color(0, 1, 0.5, 1), target.position)
+
+	# Notify agent of powerup collection (for rtNEAT fitness tracking)
+	if collector and collector != player and collector.has_signal("powerup_collected_by_agent"):
+		collector.powerup_collected_by_agent.emit(collector, type)
 
 	match type:
 		"SPEED BOOST":
-			player.activate_speed_boost(POWERUP_DURATION)
+			target.activate_speed_boost(POWERUP_DURATION)
 		"INVINCIBILITY":
-			player.activate_invincibility(POWERUP_DURATION)
+			target.activate_invincibility(POWERUP_DURATION)
 		"SLOW ENEMIES":
 			activate_slow_enemies()
 		"SCREEN CLEAR":
 			clear_all_enemies()
 		"RAPID FIRE":
-			player.activate_rapid_fire(POWERUP_DURATION)
+			target.activate_rapid_fire(POWERUP_DURATION)
 		"PIERCING":
-			player.activate_piercing(POWERUP_DURATION)
+			target.activate_piercing(POWERUP_DURATION)
 		"SHIELD":
-			player.activate_shield()
+			target.activate_shield()
 		"FREEZE":
 			activate_freeze_enemies()
 		"DOUBLE POINTS":
 			activate_double_points()
 		"BOMB":
-			explode_nearby_enemies()
+			explode_nearby_enemies(target.position)
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	kills += 1
@@ -856,7 +897,11 @@ func activate_slow_enemies() -> void:
 		for enemy in get_local_enemies():
 			enemy.apply_slow(SLOW_MULTIPLIER)
 	slow_active = true
-	player.activate_slow_effect(POWERUP_DURATION)
+	if player.is_physics_processing():
+		player.activate_slow_effect(POWERUP_DURATION)
+	else:
+		# rtNEAT mode: player physics disabled, use standalone timer
+		get_tree().create_timer(POWERUP_DURATION).timeout.connect(end_slow_enemies)
 
 func get_local_enemies() -> Array:
 	## Get enemies that belong to this scene (not other parallel training scenes).
@@ -880,7 +925,11 @@ func activate_freeze_enemies() -> void:
 		for enemy in get_local_enemies():
 			enemy.apply_freeze()
 	freeze_active = true
-	player.activate_freeze_effect(POWERUP_DURATION)
+	if player.is_physics_processing():
+		player.activate_freeze_effect(POWERUP_DURATION)
+	else:
+		# rtNEAT mode: player physics disabled, use standalone timer
+		get_tree().create_timer(POWERUP_DURATION).timeout.connect(end_freeze_enemies)
 
 
 func end_freeze_enemies() -> void:
@@ -892,7 +941,11 @@ func end_freeze_enemies() -> void:
 
 func activate_double_points() -> void:
 	double_points_active = true
-	player.activate_double_points(POWERUP_DURATION)
+	if player.is_physics_processing():
+		player.activate_double_points(POWERUP_DURATION)
+	else:
+		# rtNEAT mode: player physics disabled, use standalone timer
+		get_tree().create_timer(POWERUP_DURATION).timeout.connect(end_double_points)
 
 
 func end_double_points() -> void:
@@ -900,7 +953,8 @@ func end_double_points() -> void:
 
 
 func clear_all_enemies() -> void:
-	player.trigger_screen_clear_effect()
+	if player.is_physics_processing():
+		player.trigger_screen_clear_effect()
 	var local_enemies = get_local_enemies()
 	var total_points = 0
 	for enemy in local_enemies:
@@ -924,15 +978,17 @@ func clear_all_enemies() -> void:
 
 const BOMB_RADIUS: float = 600.0  # Radius of bomb explosion
 
-func explode_nearby_enemies() -> void:
-	## Kill all enemies within BOMB_RADIUS of the player
+func explode_nearby_enemies(center_pos: Vector2 = Vector2.ZERO) -> void:
+	## Kill all enemies within BOMB_RADIUS of center_pos (defaults to player).
+	if center_pos == Vector2.ZERO:
+		center_pos = player.position
 	var local_enemies = get_local_enemies()
 	var total_points = 0
 	var killed_count = 0
 
 	for enemy in local_enemies:
 		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
-			var distance = player.position.distance_to(enemy.position)
+			var distance = center_pos.distance_to(enemy.position)
 			if distance <= BOMB_RADIUS:
 				if enemy.has_method("get_point_value"):
 					total_points += enemy.get_point_value() * KILL_MULTIPLIER
@@ -947,7 +1003,7 @@ func explode_nearby_enemies() -> void:
 		total_points *= multiplier
 		score += total_points
 		score_from_kills += total_points
-		spawn_floating_text("+%d BOMB!" % total_points, Color(1, 0.5, 0, 1), player.position + Vector2(0, -50))
+		spawn_floating_text("+%d BOMB!" % total_points, Color(1, 0.5, 0, 1), center_pos + Vector2(0, -50))
 
 
 func update_lives_display() -> void:
@@ -1319,6 +1375,8 @@ func handle_training_input() -> void:
 			training_manager.stop_sandbox()
 		elif training_manager.get_mode() == training_manager.Mode.COMPARISON:
 			training_manager.stop_comparison()
+		elif training_manager.get_mode() == training_manager.Mode.RTNEAT:
+			training_manager.stop_rtneat()
 
 	elif Input.is_physical_key_pressed(KEY_G):
 		if not _key_just_pressed("gen_playback"):
@@ -1347,6 +1405,19 @@ func handle_training_input() -> void:
 
 			_speed_down_held = speed_down
 			_speed_up_held = speed_up
+
+	# rtNEAT speed controls
+	if training_manager.get_mode() == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
+		var speed_down = Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS)
+		var speed_up = Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL)
+
+		if speed_down and not _speed_down_held:
+			training_manager.rtneat_mgr.adjust_speed(-1.0)
+		if speed_up and not _speed_up_held:
+			training_manager.rtneat_mgr.adjust_speed(1.0)
+
+		_speed_down_held = speed_down
+		_speed_up_held = speed_up
 
 
 var _pressed_keys: Dictionary = {}
@@ -1394,6 +1465,16 @@ func update_ai_status_display() -> void:
 			stats.get("max_playback_generation", 1)
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.GREEN)
+	elif mode_str == "RTNEAT":
+		var rtneat_stats = {}
+		if training_manager.rtneat_mgr:
+			rtneat_stats = training_manager.rtneat_mgr.population.get_stats() if training_manager.rtneat_mgr.population else {}
+		ai_status_label.text = "LIVE EVOLUTION | Agents: %d | Species: %d | Best: %.0f\n[H]=Stop [-/+]=Speed" % [
+			rtneat_stats.get("alive_count", 0),
+			rtneat_stats.get("species_count", 0),
+			rtneat_stats.get("best_fitness", 0),
+		]
+		ai_status_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
 	else:
 		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net"
 		ai_status_label.add_theme_color_override("font_color", Color.WHITE)

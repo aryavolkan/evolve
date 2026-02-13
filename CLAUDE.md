@@ -274,47 +274,41 @@ godot --path . --headless -- --auto-train
 
 ## Research Roadmap
 
-### Phase 1: Quick Wins (1-2 weeks each)
+### Completed
 
-**1. Curriculum Learning — Automated Difficulty Staging**
-Progressive difficulty instead of full game from gen 0. 5 stages auto-advance when median fitness crosses threshold:
-- Stage 1: 960² arena, pawns only, health only (median survival > 30s)
-- Stage 2: 1920², + knights, + speed/shield (> 45s)
-- Stage 3: 3840², + bishops/rooks, all powerups (> 60s)
-- Stage 4: 3840², + queens, all (> 45s)
-- Stage 5: 3840² + obstacles, all enemies faster, rarer powerups (> 30s)
+All phases through co-evolution and sandbox are implemented. See `ROADMAP.md` for full history.
 
-Implementation: Parameterize arena setup in `training_manager.gd` + `main.gd`, gate on population stats. ~80 new lines. **Recommended first milestone** — low risk, cuts training time ~50%.
+- **Curriculum Learning** — 5-stage automated difficulty (`ai/curriculum_manager.gd`)
+- **NSGA-II** — Multi-objective Pareto optimization in `evolution.gd`
+- **MAP-Elites** — 20×20 behavioral archive (`ai/map_elites.gd`, `ui/map_elites_heatmap.gd`)
+- **Elman Recurrent Memory** — Previous hidden state fed back as input in `neural_network.gd`
+- **NEAT** — Topology evolution (`ai/neat_genome.gd`, `ai/neat_evolution.gd`, `ai/neat_network.gd`)
+- **Competitive Co-Evolution** — Dual populations, enemy neural networks, Hall of Fame (`ai/coevolution.gd`, `ai/enemy_sensor.gd`, `ai/enemy_ai_controller.gd`)
+- **Live Sandbox** — Configurable arena (`ui/sandbox_panel.gd`), side-by-side comparison (`ui/comparison_panel.gd`), network topology viz (`ui/network_visualizer.gd`), archive playback
 
-**2. NSGA-II Multi-Objective Fitness**
-Replace single fitness with 3-objective Pareto optimization (survival, kills, collection). Eliminates fitness weight tuning, produces diverse strategies. Replace tournament selection with non-dominated sorting + crowding distance in `evolution.gd` (~150 lines).
+### Phase 4: The Vision (Not Started)
 
-### Phase 2: Diversity + Memory (2-3 weeks)
+**1. Real-Time NEAT (rtNEAT)**
+Continuous evolution without discrete generations. 20-50 visible agents evolve live — weakest replaced by offspring of fittest in real-time. No existing code.
 
-**3. MAP-Elites Quality-Diversity Archive**
-20×20 behavioral grid (aggression × collection focus). Each cell holds fittest agent with that behavioral profile → browsable strategy zoo. ~200 lines. New files: `ai/map_elites.gd`, `ai/map_elites_config.gd`.
+**2. Live Player Interactions**
+During sandbox/rtNEAT, player can place/remove obstacles, spawn enemy waves, bless agents (boost fitness) or curse them (reduce fitness). Currently sandbox is static config only.
 
-**4. Elman Recurrent Memory**
-Feed previous hidden state (32 values) back as input (86→118 inputs). Enables temporal strategies. Minimal change to `neural_network.gd`: store `prev_hidden`, concatenate to input on forward pass.
+**3. Phylogenetic Tree Visualization**
+Track parent-child lineage across generations. Visualize ancestry of successful strategies as an interactive tree. No tracking infrastructure exists.
 
-### Phase 3: NEAT (3-4 weeks)
+**4. Educational Mode**
+Annotated playback explaining AI decisions: highlight active sensor rays, show network activations, narrate chosen actions. Could extend `ui/network_visualizer.gd`.
 
-**5. NEAT — Topology Evolution**
-Evolve both structure and weights. Start minimal (direct input→output), complexify via structural mutations. New files: `ai/neat_genome.gd`, `ai/neat_species.gd`, `ai/neat_population.gd`, `ai/neat_network.gd`. Biggest architectural change — do after validating pipeline with simpler improvements.
-
-### Phase 4: The Vision (4-6 weeks)
-
-**6. Competitive Co-Evolution**
-Give enemies neural networks. Two populations co-evolve. Hall of Fame archives top-5 enemies per gen to prevent cycling.
-
-**7. Live Evolution Sandbox (Endgame)**
-Real-time NEAT (rtNEAT), 20-50 visible agents, player interactions (place obstacles, spawn waves, bless/curse agents), live network visualization, phylogenetic tree, educational mode. Zero games on market combine this.
+**5. Multi-Agent Cooperation**
+Team-based scenarios where multiple AI agents coordinate. Not scoped.
 
 ### Implementation Priority
-1. **Immediate:** Curriculum learning → better W&B metrics → code cleanup
-2. **Short term:** NSGA-II → MAP-Elites planning
-3. **Medium term:** MAP-Elites + Elman memory → NEAT planning
-4. **Long term:** NEAT → co-evolution → live sandbox
+1. **rtNEAT** — Biggest architectural feature, enables live sandbox interactions
+2. **Live Player Interactions** — Requires rtNEAT or can work with sandbox mode
+3. **Educational Mode** — Builds on existing network visualizer
+4. **Phylogenetic Trees** — Needs lineage tracking added to evolution pipeline
+5. **Multi-Agent Cooperation** — Exploratory, lowest priority
 
 ## Testing
 

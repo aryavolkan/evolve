@@ -23,6 +23,7 @@ const MENU_ITEMS: Array = [
 	{"mode": "sandbox", "label": "SANDBOX", "desc": "Custom arena — configure enemies, speed, difficulty", "key": "4"},
 	{"mode": "compare", "label": "COMPARE", "desc": "Run 2-4 strategies side-by-side with identical seeds", "key": "5"},
 	{"mode": "coevolution", "label": "CO-EVOLUTION", "desc": "Enemies and players co-evolve adversarially", "key": "6"},
+	{"mode": "rtneat", "label": "LIVE EVOLUTION", "desc": "Watch 30 agents evolve in real-time — weakest replaced continuously", "key": "7"},
 ]
 
 
@@ -73,6 +74,8 @@ func _gui_input(event: InputEvent) -> void:
 				_select_mode("compare")
 			KEY_6:
 				_select_mode("coevolution")
+			KEY_7:
+				_select_mode("rtneat")
 
 
 func _select_mode(mode: String) -> void:
@@ -130,7 +133,7 @@ func _draw() -> void:
 		_buttons.append({"rect": rect, "mode": item.mode})
 
 	# Footer
-	draw_string(font, Vector2(cx - 100, size.y - 30), "Press 1-4 or click to select", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.4, 0.45, 0.5, 0.7))
+	draw_string(font, Vector2(cx - 110, size.y - 30), "Press 1-7 or click to select", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.4, 0.45, 0.5, 0.7))
 
 
 func _get_button_at(pos: Vector2) -> int:

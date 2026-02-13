@@ -48,8 +48,8 @@ const TYPE_CONFIG = {
 const TILE_SIZE: float = 50.0  # Virtual grid size for chess-like movement
 
 func _ready() -> void:
-	# Find player in our local scene (handles SubViewport isolation)
-	player = find_local_player()
+	# Find nearest target in our local scene (handles multi-agent + SubViewport)
+	player = find_nearest_target()
 	apply_type_config()
 	if rng:
 		move_timer = rng.randf() * move_cooldown  # Stagger initial moves
@@ -57,16 +57,34 @@ func _ready() -> void:
 		move_timer = randf() * move_cooldown  # Fallback for tests/standalone
 
 
-func find_local_player() -> CharacterBody2D:
-	## Find the player node within our own scene hierarchy.
-	## This handles SubViewport isolation where get_first_node_in_group finds wrong player.
+func find_nearest_target() -> CharacterBody2D:
+	## Find the nearest "player" group member within our scene hierarchy.
+	## Works with single player, multi-agent rtNEAT, and SubViewport isolation.
 
 	# Walk up to find the Main scene (our root)
+	var main_node: Node = null
 	var current = get_parent()
 	while current:
-		if current.name == "Main" and current.has_node("Player"):
-			return current.get_node("Player")
+		if current.name == "Main":
+			main_node = current
+			break
 		current = current.get_parent()
+
+	if main_node:
+		# Find nearest player-group member that is a child of this Main scene
+		var nearest: CharacterBody2D = null
+		var nearest_dist: float = INF
+		for child in main_node.get_children():
+			if child is CharacterBody2D and child.is_in_group("player"):
+				# Skip dead agents
+				if child.get("is_dead") and child.is_dead:
+					continue
+				var dist = global_position.distance_to(child.global_position)
+				if dist < nearest_dist:
+					nearest_dist = dist
+					nearest = child
+		if nearest:
+			return nearest
 
 	# Fallback to global search if not in a Main scene
 	return get_tree().get_first_node_in_group("player")
@@ -127,21 +145,23 @@ func _physics_process(delta: float) -> void:
 		velocity = (move_target - position).normalized() * speed * 3
 	move_and_slide()
 
-	# Check if we hit the player via slide collision
+	# Check if we hit a player via slide collision (use collider, not stored ref)
 	for i in get_slide_collision_count():
 		var collision = get_slide_collision(i)
 		var collider = collision.get_collider()
-		if collider.is_in_group("player"):
-			player.on_enemy_collision(self)
+		if collider and collider.is_in_group("player") and collider.has_method("on_enemy_collision"):
+			collider.on_enemy_collision(self)
 			return
 
 	# Backup: distance-based collision check (handles high time scales and tunneling)
-	if player and is_instance_valid(player):
+	# Retarget to nearest player each check
+	var nearest = find_nearest_target()
+	if nearest and is_instance_valid(nearest):
 		var my_size: float = TYPE_CONFIG[type]["size"] * 0.5
 		var player_size: float = 20.0  # Player half-size
 		var collision_dist: float = my_size + player_size
-		if global_position.distance_to(player.global_position) < collision_dist:
-			player.on_enemy_collision(self)
+		if global_position.distance_to(nearest.global_position) < collision_dist:
+			nearest.on_enemy_collision(self)
 			return
 
 func setup_ai(network) -> void:
@@ -162,6 +182,11 @@ func calculate_next_move() -> void:
 			move_start = position
 			move_target = position + move_offset
 			is_moving = true
+		return
+
+	# Retarget to nearest player each move cycle (supports multi-agent)
+	player = find_nearest_target()
+	if not player:
 		return
 
 	# Original hardcoded logic

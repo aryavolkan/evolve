@@ -5,7 +5,7 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION, SANDBOX, COMPARISON }
+enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION, SANDBOX, COMPARISON, RTNEAT }
 
 var current_mode: Mode = Mode.HUMAN
 
@@ -60,6 +60,9 @@ var EnemyAIControllerScript = preload("res://ai/enemy_ai_controller.gd")
 var coevo_enemy_fitness: Dictionary = {}  # {enemy_index: [fitness_values_from_evals]}
 var coevo_enemy_stats: Dictionary = {}    # {enemy_index: {damage, proximity, survival, dir_changes}}
 var coevo_is_hof_generation: bool = false  # True when evaluating against Hall of Fame
+
+# rtNEAT continuous evolution
+var rtneat_mgr = null  # RtNeatManager instance
 
 # Co-evolution paths (aliases from config)
 var ENEMY_POPULATION_PATH: String:
@@ -458,6 +461,60 @@ func stop_coevolution_training() -> void:
 	training_status_changed.emit("Co-evolution stopped")
 
 
+func start_rtneat(rtneat_config: Dictionary = {}) -> void:
+	## Begin rtNEAT mode: continuous real-time evolution in a single shared arena.
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	current_mode = Mode.RTNEAT
+	Engine.time_scale = 1.0
+
+	var RtNeatManagerScript = load("res://ai/rtneat_manager.gd")
+	rtneat_mgr = RtNeatManagerScript.new()
+	rtneat_mgr.setup(main_scene, rtneat_config)
+
+	# Hide the main player (agents replace it)
+	player.visible = false
+	player.set_physics_process(false)
+
+	# Create overlay
+	var RtNeatOverlayScript = load("res://ui/rtneat_overlay.gd")
+	var overlay_node = RtNeatOverlayScript.new()
+	overlay_node.name = "RtNeatOverlay"
+	main_scene.get_node("CanvasLayer/UI").add_child(overlay_node)
+	overlay_node.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rtneat_mgr.overlay = overlay_node
+
+	rtneat_mgr.start()
+
+	training_status_changed.emit("rtNEAT started")
+	print("rtNEAT started: %d agents" % rtneat_config.get("agent_count", 30))
+
+
+func stop_rtneat() -> void:
+	## Stop rtNEAT mode.
+	if current_mode != Mode.RTNEAT:
+		return
+
+	if rtneat_mgr:
+		# Save best before stopping
+		rtneat_mgr.population.save_best(BEST_NETWORK_PATH)
+		rtneat_mgr.stop()
+		rtneat_mgr = null
+
+	current_mode = Mode.HUMAN
+	Engine.time_scale = 1.0
+
+	# Restore main player
+	player.visible = true
+	player.set_physics_process(true)
+	player.enable_ai_control(false)
+	main_scene.training_mode = false
+
+	training_status_changed.emit("rtNEAT stopped")
+
+
 func generate_all_seed_events() -> void:
 	## Pre-generate events for all evaluation seeds this generation.
 	generation_events_by_seed.clear()
@@ -854,6 +911,9 @@ func _physics_process(delta: float) -> void:
 		playback_mgr.process_sandbox()
 	elif current_mode == Mode.COMPARISON:
 		playback_mgr.process_comparison(delta)
+	elif current_mode == Mode.RTNEAT:
+		if rtneat_mgr:
+			rtneat_mgr.process(delta)
 
 
 func _process_parallel_training(delta: float) -> void:

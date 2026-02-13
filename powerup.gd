@@ -1,6 +1,6 @@
 extends Area2D
 
-signal collected(type: String)
+signal collected(type: String, collector: Node2D)
 
 enum Type { SPEED_BOOST, INVINCIBILITY, SLOW_ENEMIES, SCREEN_CLEAR, RAPID_FIRE, PIERCING, SHIELD, FREEZE, DOUBLE_POINTS, BOMB }
 
@@ -44,5 +44,5 @@ func get_type_name() -> String:
 func _on_body_entered(body: Node2D) -> void:
 	# Check if it's a player AND in the same scene (for parallel training)
 	if body.is_in_group("player") and body.get_parent() == get_parent():
-		collected.emit(get_type_name())
+		collected.emit(get_type_name(), body)
 		queue_free()
