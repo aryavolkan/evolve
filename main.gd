@@ -16,6 +16,7 @@ var spawned_obstacle_positions: Array = []
 # Extracted module managers
 var spawn_mgr  # SpawnManager
 var score_mgr  # ScoreManager
+var ui_mgr  # UIManager
 
 # AI Training
 var training_manager: Node
@@ -254,7 +255,9 @@ func _ready() -> void:
 	spawn_arena_obstacles()
 	spawn_initial_enemies()
 	setup_training_manager()
-	setup_ui_screens()
+	ui_mgr = load("res://ui_manager.gd").new()
+	ui_mgr.setup(self, training_manager, ai_status_label)
+	ui_mgr.setup_ui_screens()
 
 	# Check for command-line flags
 	for arg in OS.get_cmdline_user_args():
@@ -270,82 +273,7 @@ func _ready() -> void:
 		show_title_screen()
 
 
-func setup_ui_screens() -> void:
-	## Create UI overlay screens (title, game over, sensor viz).
-	## Only set up for root viewport (not training sub-arenas).
-	if get_viewport() != get_tree().root:
-		return
-
-	# Title screen
-	var TitleScreenScript = preload("res://ui/title_screen.gd")
-	title_screen = TitleScreenScript.new()
-	title_screen.name = "TitleScreen"
-	$CanvasLayer/UI.add_child(title_screen)
-	title_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title_screen.mode_selected.connect(_on_title_mode_selected)
-	title_screen.hide_menu()
-
-	# Game over screen
-	var GameOverScript = preload("res://ui/game_over_screen.gd")
-	game_over_screen = GameOverScript.new()
-	game_over_screen.name = "GameOverScreen"
-	$CanvasLayer/UI.add_child(game_over_screen)
-	game_over_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	game_over_screen.hide_screen()
-	game_over_screen.restart_requested.connect(_on_game_over_restart)
-	game_over_screen.menu_requested.connect(_on_game_over_menu)
-
-	# Sensor visualizer (child of main scene, draws in world space)
-	var SensorVizScript = preload("res://ui/sensor_visualizer.gd")
-	sensor_visualizer = SensorVizScript.new()
-	sensor_visualizer.name = "SensorVisualizer"
-	add_child(sensor_visualizer)
-	sensor_visualizer.setup(player)
-	sensor_visualizer.visible = false
-
-	# Sandbox panel
-	var SandboxPanelScript = preload("res://ui/sandbox_panel.gd")
-	sandbox_panel = SandboxPanelScript.new()
-	sandbox_panel.name = "SandboxPanel"
-	$CanvasLayer/UI.add_child(sandbox_panel)
-	sandbox_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	sandbox_panel.visible = false
-	sandbox_panel.start_requested.connect(_on_sandbox_start)
-	sandbox_panel.back_requested.connect(_on_sandbox_back)
-
-	# Comparison panel
-	var ComparisonPanelScript = preload("res://ui/comparison_panel.gd")
-	comparison_panel = ComparisonPanelScript.new()
-	comparison_panel.name = "ComparisonPanel"
-	$CanvasLayer/UI.add_child(comparison_panel)
-	comparison_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	comparison_panel.visible = false
-	comparison_panel.start_requested.connect(_on_comparison_start)
-	comparison_panel.back_requested.connect(_on_comparison_back)
-
-	# Network visualizer
-	var NetworkVizScript = preload("res://ui/network_visualizer.gd")
-	network_visualizer = NetworkVizScript.new()
-	network_visualizer.name = "NetworkVisualizer"
-	$CanvasLayer/UI.add_child(network_visualizer)
-	network_visualizer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	network_visualizer.visible = false
-
-	# Educational overlay
-	var EduOverlayScript = preload("res://ui/educational_overlay.gd")
-	educational_overlay = EduOverlayScript.new()
-	educational_overlay.name = "EducationalOverlay"
-	$CanvasLayer/UI.add_child(educational_overlay)
-	educational_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	educational_overlay.visible = false
-
-	# Phylogenetic tree overlay
-	var PhyloTreeScript = preload("res://ui/phylogenetic_tree.gd")
-	phylogenetic_tree = PhyloTreeScript.new()
-	phylogenetic_tree.name = "PhylogeneticTree"
-	$CanvasLayer/UI.add_child(phylogenetic_tree)
-	phylogenetic_tree.set_anchors_preset(Control.PRESET_FULL_RECT)
-	phylogenetic_tree.visible = false
+# UI screen setup now handled by UIManager
 
 
 func show_title_screen() -> void:
@@ -733,7 +661,8 @@ func _process(delta: float) -> void:
 	var score_multiplier = 2.0 if double_points_active else 1.0
 	score += delta * 5 * score_multiplier  # Reduced base survival (5 pts/sec)
 	score_label.text = "Score: %d" % int(score)
-	update_ai_status_display()
+	if ui_mgr:
+		ui_mgr.update_ai_status_display()
 
 	# Track survival time and award milestone bonuses
 	survival_time += delta
@@ -1275,58 +1204,4 @@ func _key_just_pressed(key_name: String) -> bool:
 	return true
 
 
-func update_ai_status_display() -> void:
-	if not training_manager or not ai_status_label:
-		return
-
-	var stats: Dictionary = training_manager.get_stats()
-	var mode_str: String = stats.get("mode", "HUMAN")
-
-	if mode_str == "TRAINING":
-		ai_status_label.text = "TRAINING | Gen: %d | Individual: %d/%d\nBest: %.0f | All-time: %.0f\n[T]=Stop [H]=Human" % [
-			stats.get("generation", 0),
-			stats.get("individual", 0) + 1,
-			stats.get("population_size", 0),
-			stats.get("best_fitness", 0),
-			stats.get("all_time_best", 0)
-		]
-		ai_status_label.add_theme_color_override("font_color", Color.YELLOW)
-	elif mode_str == "COEVOLUTION":
-		ai_status_label.text = "CO-EVOLUTION | Gen: %d | P.Best: %.0f | E.Best: %.0f\n[C]=Stop [H]=Human" % [
-			stats.get("generation", 0),
-			stats.get("best_fitness", 0),
-			stats.get("enemy_best_fitness", 0),
-		]
-		ai_status_label.add_theme_color_override("font_color", Color.ORANGE)
-	elif mode_str == "PLAYBACK":
-		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network [E]=Educate [Y]=Lineage"
-		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
-	elif mode_str == "GENERATION_PLAYBACK":
-		ai_status_label.text = "GENERATION %d/%d\n[SPACE]=Next [G]=Restart [H]=Human" % [
-			stats.get("playback_generation", 1),
-			stats.get("max_playback_generation", 1)
-		]
-		ai_status_label.add_theme_color_override("font_color", Color.GREEN)
-	elif mode_str == "RTNEAT":
-		var rtneat_stats = {}
-		if training_manager.rtneat_mgr:
-			rtneat_stats = training_manager.rtneat_mgr.population.get_stats() if training_manager.rtneat_mgr.population else {}
-		ai_status_label.text = "LIVE EVOLUTION | Agents: %d | Species: %d | Best: %.0f\n[H]=Stop [-/+]=Speed" % [
-			rtneat_stats.get("alive_count", 0),
-			rtneat_stats.get("species_count", 0),
-			rtneat_stats.get("best_fitness", 0),
-		]
-		ai_status_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
-	elif mode_str == "TEAMS":
-		var team_stats = {}
-		if training_manager.team_mgr:
-			team_stats = training_manager.team_mgr.get_stats()
-		ai_status_label.text = "TEAM BATTLE | Agents: %d | PvP: A=%d B=%d\n[H]=Stop [-/+]=Speed" % [
-			team_stats.get("total_agents", 0),
-			team_stats.get("team_a_pvp_kills", 0),
-			team_stats.get("team_b_pvp_kills", 0),
-		]
-		ai_status_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
-	else:
-		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net [Y]=Lineage"
-		ai_status_label.add_theme_color_override("font_color", Color.WHITE)
+# AI status display now handled by UIManager
