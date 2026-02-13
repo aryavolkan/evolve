@@ -201,6 +201,7 @@ training_manager.gd     # Main scene integration
 | [ or - | Slow down training (min 0.25x) |
 | ] or + | Speed up training (max 16x) |
 | Y | Toggle phylogenetic lineage tree |
+| 8 | Team Battle (from title screen) |
 
 ### Fitness Function
 
@@ -290,11 +291,7 @@ All phases through co-evolution and sandbox are implemented. See `ROADMAP.md` fo
 - **Live Player Interactions** — 6 interaction tools during rtNEAT mode (keys 0-5): inspect, place/remove obstacles, spawn enemy waves, bless/curse agents
 - **Educational Mode** — Annotated AI decision narration (`ui/educational_overlay.gd`), auto-shows sensor rays + network viz, highlights most significant ray, E key toggle
 - **Phylogenetic Tree** — Lineage tracking across all 3 evolution pipelines (`ai/lineage_tracker.gd`), champion ancestry DAG visualization (`ui/phylogenetic_tree.gd`), Y key toggle
-
-### Phase 4: The Vision (Remaining)
-
-**1. Multi-Agent Cooperation**
-Team-based scenarios where multiple AI agents coordinate. Not scoped.
+- **Multi-Agent Team Battle** — Two AI teams evolve via rtNEAT and fight with projectiles (`ai/team_manager.gd`), extended 119-input sensors with teammate/opponent detection, PvP projectile damage, team fitness bonus, team-colored agents, key 8 from title screen
 
 ## Testing
 
@@ -303,7 +300,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (535 tests)
+### Test Coverage (550 tests)
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -321,6 +318,7 @@ godot --headless --script test/test_runner.gd
 | `test_rtneat.gd` | 26 | Population, agents, targeting, interaction tools (bless/curse/log) |
 | `test_educational.gd` | 9 | Educational overlay analysis: threats, shooting, state, narration |
 | `test_lineage.gd` | 10 | Lineage tracker: birth recording, ancestry tracing, pruning, fitness |
+| `test_teams.gd` | 15 | Team battle: TeamManager, PvP hits, team sensors, team colors, signals |
 
 ### Visible Training Mode
 

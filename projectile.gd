@@ -6,6 +6,7 @@ var direction: Vector2 = Vector2.RIGHT
 var start_position: Vector2
 var is_piercing: bool = false
 var owner_player: Node = null  # The player who fired this projectile
+var owner_team_id: int = -1  # -1 = no team, 0+ = team index
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
@@ -34,3 +35,11 @@ func _on_body_entered(body: Node2D) -> void:
 		# Notify owner player of kill for bonus points
 		if owner_player:
 			owner_player.enemy_killed.emit(enemy_pos, points)
+		return
+
+	# Agent PvP detection (team mode)
+	if body.is_in_group("agent") and owner_team_id >= 0:
+		if body != owner_player and body.get("team_id") != owner_team_id:
+			body.take_pvp_hit(owner_player)
+			if not is_piercing:
+				queue_free()

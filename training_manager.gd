@@ -5,7 +5,7 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION, SANDBOX, COMPARISON, RTNEAT }
+enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION, SANDBOX, COMPARISON, RTNEAT, TEAMS }
 
 var current_mode: Mode = Mode.HUMAN
 
@@ -63,6 +63,10 @@ var coevo_is_hof_generation: bool = false  # True when evaluating against Hall o
 
 # rtNEAT continuous evolution
 var rtneat_mgr = null  # RtNeatManager instance
+
+# Team battle mode
+var TeamManagerScript = preload("res://ai/team_manager.gd")
+var team_mgr = null  # TeamManager instance
 
 # Lineage tracking
 var lineage_tracker: RefCounted = null
@@ -534,6 +538,71 @@ func stop_rtneat() -> void:
 	training_status_changed.emit("rtNEAT stopped")
 
 
+func start_rtneat_teams(rtneat_config: Dictionary = {}) -> void:
+	## Begin team battle mode: two rtNEAT populations compete in a shared arena.
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+
+	current_mode = Mode.TEAMS
+	Engine.time_scale = 1.0
+
+	# Initialize lineage tracker
+	lineage_tracker = LineageTrackerScript.new()
+
+	team_mgr = TeamManagerScript.new()
+	team_mgr.setup(main_scene, rtneat_config)
+
+	# Wire lineage to both populations
+	if team_mgr.pop_a:
+		team_mgr.pop_a.lineage = lineage_tracker
+	if team_mgr.pop_b:
+		team_mgr.pop_b.lineage = lineage_tracker
+
+	# Hide the main player
+	player.visible = false
+	player.set_physics_process(false)
+
+	# Create overlay
+	var RtNeatOverlayScript = load("res://ui/rtneat_overlay.gd")
+	var overlay_node = RtNeatOverlayScript.new()
+	overlay_node.name = "RtNeatOverlay"
+	main_scene.get_node("CanvasLayer/UI").add_child(overlay_node)
+	overlay_node.set_anchors_preset(Control.PRESET_FULL_RECT)
+	team_mgr.overlay = overlay_node
+
+	team_mgr.start()
+
+	training_status_changed.emit("Team battle started")
+	print("Team battle started: %d agents per team" % rtneat_config.get("team_size", 15))
+
+
+func stop_rtneat_teams() -> void:
+	## Stop team battle mode.
+	if current_mode != Mode.TEAMS:
+		return
+
+	if team_mgr:
+		# Save best from both populations
+		if team_mgr.pop_a:
+			team_mgr.pop_a.save_best(BEST_NETWORK_PATH.replace(".nn", "_team_a.nn"))
+		if team_mgr.pop_b:
+			team_mgr.pop_b.save_best(BEST_NETWORK_PATH.replace(".nn", "_team_b.nn"))
+		team_mgr.stop()
+		team_mgr = null
+
+	current_mode = Mode.HUMAN
+	Engine.time_scale = 1.0
+
+	# Restore main player
+	player.visible = true
+	player.set_physics_process(true)
+	player.enable_ai_control(false)
+	main_scene.training_mode = false
+
+	training_status_changed.emit("Team battle stopped")
+
+
 func generate_all_seed_events() -> void:
 	## Pre-generate events for all evaluation seeds this generation.
 	generation_events_by_seed.clear()
@@ -933,6 +1002,9 @@ func _physics_process(delta: float) -> void:
 	elif current_mode == Mode.RTNEAT:
 		if rtneat_mgr:
 			rtneat_mgr.process(delta)
+	elif current_mode == Mode.TEAMS:
+		if team_mgr:
+			team_mgr.process(delta)
 
 
 func _process_parallel_training(delta: float) -> void:

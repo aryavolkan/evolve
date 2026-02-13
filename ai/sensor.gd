@@ -18,6 +18,11 @@ const INPUTS_PER_RAY: int = 5  # (enemy_dist, enemy_type, obstacle_dist, powerup
 const PLAYER_STATE_INPUTS: int = 6
 const TOTAL_INPUTS: int = NUM_RAYS * INPUTS_PER_RAY + PLAYER_STATE_INPUTS
 
+# Team mode: extended inputs with teammate/opponent detection
+const TEAM_INPUTS_PER_RAY: int = 7  # Standard 5 + teammate_dist + opponent_dist
+const TEAM_STATE_INPUTS: int = 7  # Standard 6 + team_id
+const TEAM_TOTAL_INPUTS: int = NUM_RAYS * TEAM_INPUTS_PER_RAY + TEAM_STATE_INPUTS  # 119
+
 # Arena bounds
 const ARENA_WIDTH: float = 3840.0
 const ARENA_HEIGHT: float = 3840.0
@@ -25,6 +30,10 @@ var arena_bounds: Rect2 = Rect2(40, 40, ARENA_WIDTH - 80, ARENA_HEIGHT - 80)
 
 var player: CharacterBody2D
 var ray_angles: PackedFloat32Array
+
+# Team mode settings
+var team_mode: bool = false
+var owner_team_id: int = -1
 
 # ============================================================
 # Per-frame entity cache (static — shared across all sensors)
@@ -36,6 +45,7 @@ static var _cache_frame: int = -1
 static var _arena_enemies: Dictionary = {}   # Node → Array[Node]
 static var _arena_obstacles: Dictionary = {}  # Node → Array[Node]
 static var _arena_powerups: Dictionary = {}   # Node → Array[Node]
+static var _arena_agents: Dictionary = {}    # Node → Array[Node]
 
 
 static func _build_cache(tree: SceneTree) -> void:
@@ -48,6 +58,7 @@ static func _build_cache(tree: SceneTree) -> void:
 	_arena_enemies.clear()
 	_arena_obstacles.clear()
 	_arena_powerups.clear()
+	_arena_agents.clear()
 
 	for e in tree.get_nodes_in_group("enemy"):
 		var parent := e.get_parent()
@@ -67,6 +78,12 @@ static func _build_cache(tree: SceneTree) -> void:
 			_arena_powerups[parent] = []
 		_arena_powerups[parent].append(p)
 
+	for a in tree.get_nodes_in_group("agent"):
+		var parent := a.get_parent()
+		if not _arena_agents.has(parent):
+			_arena_agents[parent] = []
+		_arena_agents[parent].append(a)
+
 
 static func invalidate_cache() -> void:
 	## Force cache rebuild on next query (e.g. after bulk entity changes).
@@ -84,11 +101,16 @@ func set_player(p: CharacterBody2D) -> void:
 	player = p
 
 
+func get_total_inputs() -> int:
+	return TEAM_TOTAL_INPUTS if team_mode else TOTAL_INPUTS
+
+
 func get_inputs() -> PackedFloat32Array:
 	## Gather all sensor inputs for the neural network.
 
+	var total := get_total_inputs()
 	var inputs := PackedFloat32Array()
-	inputs.resize(TOTAL_INPUTS)
+	inputs.resize(total)
 	inputs.fill(0.0)
 
 	if not player or not is_instance_valid(player):
@@ -102,6 +124,20 @@ func get_inputs() -> PackedFloat32Array:
 	var enemies: Array = _arena_enemies.get(player_scene, [])
 	var obstacles: Array = _arena_obstacles.get(player_scene, [])
 	var powerups: Array = _arena_powerups.get(player_scene, [])
+
+	# In team mode, split agents into teammates and opponents
+	var teammates: Array = []
+	var opponents: Array = []
+	if team_mode:
+		var all_agents: Array = _arena_agents.get(player_scene, [])
+		for a in all_agents:
+			if not is_instance_valid(a) or a == player:
+				continue
+			var a_team: int = a.get("team_id") if a.get("team_id") != null else -1
+			if a_team == owner_team_id:
+				teammates.append(a)
+			else:
+				opponents.append(a)
 
 	# Cast rays
 	var input_idx := 0
@@ -135,6 +171,15 @@ func get_inputs() -> PackedFloat32Array:
 		inputs[input_idx] = 1.0 - (wall_dist / RAY_LENGTH) if wall_dist < RAY_LENGTH else 0.0
 		input_idx += 1
 
+		# Team mode: teammate and opponent distances
+		if team_mode:
+			var teammate_result := cast_ray_to_entities(player_pos, ray_dir, teammates, 40.0)
+			var opponent_result := cast_ray_to_entities(player_pos, ray_dir, opponents, 40.0)
+			inputs[input_idx] = 1.0 - (teammate_result.distance / RAY_LENGTH) if teammate_result.hit else 0.0
+			input_idx += 1
+			inputs[input_idx] = 1.0 - (opponent_result.distance / RAY_LENGTH) if opponent_result.hit else 0.0
+			input_idx += 1
+
 	# Player state inputs
 	var max_speed := 500.0
 	inputs[input_idx] = clampf(player.velocity.x / max_speed, -1.0, 1.0)
@@ -143,6 +188,10 @@ func get_inputs() -> PackedFloat32Array:
 	inputs[input_idx + 3] = 1.0 if player.is_speed_boosted else 0.0
 	inputs[input_idx + 4] = 1.0 if player.is_slow_active else 0.0
 	inputs[input_idx + 5] = 1.0 if player.can_shoot else 0.0
+
+	# Team mode: append team_id
+	if team_mode:
+		inputs[input_idx + 6] = float(owner_team_id)
 
 	return inputs
 

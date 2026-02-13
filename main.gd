@@ -406,6 +406,9 @@ func _on_title_mode_selected(mode: String) -> void:
 		"rtneat":
 			if training_manager:
 				training_manager.start_rtneat({"agent_count": 30})
+		"teams":
+			if training_manager:
+				training_manager.start_rtneat_teams({"team_size": 15})
 
 
 func _show_game_over_stats() -> void:
@@ -553,6 +556,50 @@ func _start_auto_training() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Team battle interactions
+	if training_manager and training_manager.get_mode() == training_manager.Mode.TEAMS and training_manager.team_mgr:
+		var mgr = training_manager.team_mgr
+
+		# Tool selection keys (0-5)
+		if event is InputEventKey and event.pressed:
+			var TmTool = mgr.Tool
+			match event.keycode:
+				KEY_0: mgr.set_tool(TmTool.INSPECT)
+				KEY_1: mgr.set_tool(TmTool.PLACE_OBSTACLE)
+				KEY_2: mgr.set_tool(TmTool.REMOVE_OBSTACLE)
+				KEY_3: mgr.set_tool(TmTool.SPAWN_WAVE)
+				KEY_4: mgr.set_tool(TmTool.BLESS)
+				KEY_5: mgr.set_tool(TmTool.CURSE)
+				KEY_ESCAPE:
+					mgr.set_tool(TmTool.INSPECT)
+					mgr.clear_inspection()
+					if mgr.overlay:
+						mgr.overlay.hide_inspect()
+					if network_visualizer:
+						network_visualizer.visible = false
+
+		# Click handling
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			var world_pos: Vector2 = event.position
+			if arena_camera:
+				world_pos = arena_camera.get_screen_center_position() + (event.position - get_viewport().get_visible_rect().size / 2.0) / arena_camera.zoom
+
+			if not mgr.handle_click(world_pos):
+				var idx: int = mgr.get_agent_at_position(world_pos)
+				if idx >= 0:
+					var data: Dictionary = mgr.inspect_agent(idx)
+					if mgr.overlay:
+						mgr.overlay.show_inspect(data)
+					if network_visualizer and data.has("genome") and data.has("network"):
+						network_visualizer.set_neat_data(data.genome, data.network)
+						network_visualizer.visible = true
+				else:
+					mgr.clear_inspection()
+					if mgr.overlay:
+						mgr.overlay.hide_inspect()
+					if network_visualizer:
+						network_visualizer.visible = false
+
 	# rtNEAT interactions
 	if training_manager and training_manager.get_mode() == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
 		var mgr = training_manager.rtneat_mgr
@@ -1488,6 +1535,8 @@ func handle_training_input() -> void:
 			training_manager.stop_comparison()
 		elif training_manager.get_mode() == training_manager.Mode.RTNEAT:
 			training_manager.stop_rtneat()
+		elif training_manager.get_mode() == training_manager.Mode.TEAMS:
+			training_manager.stop_rtneat_teams()
 
 	elif Input.is_physical_key_pressed(KEY_G):
 		if not _key_just_pressed("gen_playback"):
@@ -1526,6 +1575,19 @@ func handle_training_input() -> void:
 			training_manager.rtneat_mgr.adjust_speed(-1.0)
 		if speed_up and not _speed_up_held:
 			training_manager.rtneat_mgr.adjust_speed(1.0)
+
+		_speed_down_held = speed_down
+		_speed_up_held = speed_up
+
+	# Teams speed controls
+	if training_manager.get_mode() == training_manager.Mode.TEAMS and training_manager.team_mgr:
+		var speed_down = Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS)
+		var speed_up = Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL)
+
+		if speed_down and not _speed_down_held:
+			training_manager.team_mgr.adjust_speed(-1.0)
+		if speed_up and not _speed_up_held:
+			training_manager.team_mgr.adjust_speed(1.0)
 
 		_speed_down_held = speed_down
 		_speed_up_held = speed_up
@@ -1586,6 +1648,16 @@ func update_ai_status_display() -> void:
 			rtneat_stats.get("best_fitness", 0),
 		]
 		ai_status_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
+	elif mode_str == "TEAMS":
+		var team_stats = {}
+		if training_manager.team_mgr:
+			team_stats = training_manager.team_mgr.get_stats()
+		ai_status_label.text = "TEAM BATTLE | Agents: %d | PvP: A=%d B=%d\n[H]=Stop [-/+]=Speed" % [
+			team_stats.get("total_agents", 0),
+			team_stats.get("team_a_pvp_kills", 0),
+			team_stats.get("team_b_pvp_kills", 0),
+		]
+		ai_status_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
 	else:
 		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net [Y]=Lineage"
 		ai_status_label.add_theme_color_override("font_color", Color.WHITE)

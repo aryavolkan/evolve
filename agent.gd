@@ -7,6 +7,7 @@ signal died(agent: CharacterBody2D)
 signal enemy_killed(pos: Vector2, points: int)
 signal powerup_collected_by_agent(agent: CharacterBody2D, type: String)
 signal shot_fired(direction: Vector2)
+signal pvp_hit_by(attacker: Node)
 
 @export var speed: float = 300.0
 @export var boosted_speed: float = 500.0
@@ -17,6 +18,7 @@ var agent_id: int = 0
 var species_color: Color = Color.WHITE
 var fitness: float = 0.0
 var age: float = 0.0
+var team_id: int = -1  # -1 = no team, 0 = team A, 1 = team B
 
 # State
 var lives: int = 3
@@ -27,6 +29,7 @@ var is_rapid_fire: bool = false
 var is_piercing: bool = false
 var has_shield: bool = false
 var is_double_points: bool = false
+var is_slow_active: bool = false
 var can_shoot: bool = true
 var is_dead: bool = false
 
@@ -46,6 +49,8 @@ var projectile_scene: PackedScene = preload("res://projectile.tscn")
 
 
 func _ready() -> void:
+	if team_id >= 0:
+		add_to_group("agent")
 	sprite.modulate = species_color
 
 
@@ -114,6 +119,9 @@ func shoot(direction: Vector2) -> void:
 	projectile.direction = direction
 	projectile.is_piercing = is_piercing
 	projectile.owner_player = self
+	if team_id >= 0:
+		projectile.owner_team_id = team_id
+		projectile.set_collision_mask_value(1, true)
 	get_parent().add_child(projectile)
 	shot_fired.emit(direction)
 
@@ -134,6 +142,18 @@ func on_enemy_collision(enemy: Node) -> void:
 		has_shield = false
 		update_sprite_color()
 		return
+	_trigger_hit()
+
+
+func take_pvp_hit(attacker: Node) -> void:
+	## Handle being hit by an opposing team's projectile.
+	if is_invincible:
+		return
+	if has_shield:
+		has_shield = false
+		update_sprite_color()
+		return
+	pvp_hit_by.emit(attacker)
 	_trigger_hit()
 
 
@@ -220,6 +240,11 @@ func activate_double_points(duration: float) -> void:
 	is_double_points = false
 
 
+const TEAM_COLORS: Array = [
+	Color(0.3, 0.5, 1.0),  # Team A: Blue
+	Color(1.0, 0.3, 0.3),  # Team B: Red
+]
+
 func update_sprite_color() -> void:
 	## Tint sprite based on active effects, blend with species color.
 	if is_invincible:
@@ -229,7 +254,10 @@ func update_sprite_color() -> void:
 	elif has_shield:
 		sprite.modulate = Color(0.7, 0.7, 1, 1)
 	else:
-		sprite.modulate = species_color
+		if team_id >= 0 and team_id < TEAM_COLORS.size():
+			sprite.modulate = species_color.lerp(TEAM_COLORS[team_id], 0.4)
+		else:
+			sprite.modulate = species_color
 
 
 func reset_for_new_life() -> void:
@@ -245,6 +273,7 @@ func reset_for_new_life() -> void:
 	is_piercing = false
 	has_shield = false
 	is_double_points = false
+	is_slow_active = false
 	can_shoot = true
 	speed_boost_time = 0.0
 	invincibility_time = 0.0
@@ -252,6 +281,8 @@ func reset_for_new_life() -> void:
 	piercing_time = 0.0
 	visible = true
 	set_physics_process(true)
+	if team_id >= 0 and not is_in_group("agent"):
+		add_to_group("agent")
 	update_sprite_color()
 
 

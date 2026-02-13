@@ -15,7 +15,7 @@ func _run_tests() -> void:
 
 	_test("has_menu_items", func():
 		var screen = TitleScreenScript.new()
-		assert_eq(screen.MENU_ITEMS.size(), 7, "Should have 7 menu items")
+		assert_eq(screen.MENU_ITEMS.size(), 8, "Should have 8 menu items")
 	)
 
 	_test("menu_modes_correct", func():
