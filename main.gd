@@ -143,6 +143,11 @@ func _ready() -> void:
 	powerup_mgr = load("res://powerup_manager.gd").new()
 	powerup_mgr.setup(self, player, score_mgr, spawn_mgr)
 
+	# Set up projectile pool for player
+	var _ObjectPool = load("res://scripts/object_pool.gd")
+	var proj_pool = _ObjectPool.new(preload("res://projectile.tscn"), self)
+	player.projectile_pool = proj_pool
+
 	player.hit.connect(_on_player_hit)
 	player.enemy_killed.connect(_on_enemy_killed)
 	player.powerup_timer_updated.connect(powerup_mgr.handle_powerup_timer_updated)

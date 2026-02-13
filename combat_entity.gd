@@ -22,6 +22,7 @@ var rapid_fire_time: float = 0.0
 var piercing_time: float = 0.0
 
 var projectile_scene: PackedScene = preload("res://projectile.tscn")
+var projectile_pool: RefCounted = null  ## ObjectPool for projectile recycling
 var ai_move_direction: Vector2 = Vector2.ZERO
 var ai_shoot_direction: Vector2 = Vector2.ZERO
 
@@ -126,13 +127,19 @@ func check_enemy_collisions() -> void:
 
 
 func shoot(direction: Vector2) -> void:
-	var projectile = projectile_scene.instantiate()
-	projectile.position = global_position
-	projectile.direction = direction
-	projectile.is_piercing = is_piercing
-	projectile.owner_player = self
+	var projectile: Node
+	if projectile_pool:
+		projectile = projectile_pool.acquire()
+		projectile.reset(global_position, direction, self, -1, is_piercing)
+	else:
+		projectile = projectile_scene.instantiate()
+		projectile.position = global_position
+		projectile.direction = direction
+		projectile.is_piercing = is_piercing
+		projectile.owner_player = self
+		get_parent().add_child(projectile)
+	projectile.pool = projectile_pool
 	configure_projectile(projectile)
-	get_parent().add_child(projectile)
 	shot_fired.emit(direction)
 
 	can_shoot = false

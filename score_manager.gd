@@ -58,10 +58,17 @@ func get_scoreboard_text() -> String:
 	return text
 
 
+var _cached_powerups: Array = []
+var _cached_powerups_frame: int = -1
+
 func calculate_proximity_bonus(delta: float, player: CharacterBody2D, scene: Node2D) -> float:
 	## Reward AI for being close to powerups (continuous shaping signal).
 	var bonus := 0.0
-	var powerups = scene.get_tree().get_nodes_in_group("powerup")
+	var frame := Engine.get_physics_frames()
+	if frame != _cached_powerups_frame:
+		_cached_powerups = scene.get_tree().get_nodes_in_group("powerup")
+		_cached_powerups_frame = frame
+	var powerups := _cached_powerups
 	var nearest_dist := 99999.0
 	for powerup in powerups:
 		if not is_instance_valid(powerup) or powerup.get_parent() != scene:
