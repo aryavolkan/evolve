@@ -26,7 +26,7 @@ func setup_ui_screens() -> void:
 	main_game.title_screen = TitleScreenScript.new()
 	main_game.title_screen.name = "TitleScreen"
 	main_game.get_node("CanvasLayer/UI").add_child(main_game.title_screen)
-	main_game.title_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main_game.title_screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	main_game.title_screen.mode_selected.connect(main_game._on_title_mode_selected)
 	main_game.title_screen.hide_menu()
 

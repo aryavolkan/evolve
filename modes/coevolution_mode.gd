@@ -332,7 +332,7 @@ func _process_coevolution_training(delta: float) -> void:
 			var survival_time: float = eval.scene.survival_time
 			var dir_changes: float = eval.direction_changes
 
-			var enemy_fitness := ctx.CoevolutionScript.compute_enemy_fitness(
+			var enemy_fitness: float = ctx.CoevolutionScript.compute_enemy_fitness(
 				damage_dealt, avg_proximity, survival_time, dir_changes
 			)
 

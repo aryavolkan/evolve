@@ -187,11 +187,17 @@ func show_title_screen() -> void:
 	if not title_screen:
 		return
 	game_started = false
+	game_over = false
 	get_tree().paused = true
-	# Hide gameplay UI
+	# Hide all gameplay/game-over UI
 	score_label.visible = false
 	lives_label.visible = false
 	scoreboard_label.visible = false
+	game_over_label.visible = false
+	name_entry.visible = false
+	name_prompt.visible = false
+	if game_over_screen:
+		game_over_screen.hide_screen()
 	if ai_status_label:
 		ai_status_label.visible = false
 	title_screen.show_menu()
@@ -523,10 +529,17 @@ func _process(delta: float) -> void:
 			if best_id >= 0:
 				phylogenetic_tree.set_lineage_data(training_manager.lineage_tracker, best_id)
 
+	if not game_started:
+		return
+
 	if game_over:
+		if Input.is_action_just_pressed("ui_cancel"):
+			get_tree().paused = false
+			get_tree().reload_current_scene()
+			return
 		if entering_name:
 			if Input.is_action_just_pressed("ui_accept") and name_entry.text.strip_edges() != "":
-				_submit_high_score(name_entry.text.strip_edges())
+				submit_high_score(name_entry.text.strip_edges())
 		else:
 			if Input.is_action_just_pressed("ui_accept"):
 				get_tree().reload_current_scene()
@@ -663,6 +676,8 @@ func update_lives_display() -> void:
 	lives_label.text = "Lives: %d" % lives
 
 func _on_player_hit() -> void:
+	if not game_started or game_over:
+		return
 	lives -= 1
 	update_lives_display()
 

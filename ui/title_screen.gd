@@ -30,12 +30,13 @@ const MENU_ITEMS: Array = [
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
 func show_menu() -> void:
 	_visible = true
 	visible = true
+	z_index = 100  # Ensure title screen is above everything
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
 
@@ -108,10 +109,13 @@ func _draw() -> void:
 	# Divider line
 	draw_line(Vector2(cx - 200, cy - 115), Vector2(cx + 200, cy - 115), Color(0.3, 0.35, 0.45, 0.6), 1.0)
 
-	# Menu buttons
+	# Menu buttons — scale to fit viewport
 	var btn_width: float = 420.0
-	var btn_height: float = 60.0
-	var btn_gap: float = 12.0
+	var total_items: int = MENU_ITEMS.size()
+	var available_h: float = size.y - (cy - 90) - 50  # space from start to footer
+	var max_btn_h: float = available_h / total_items
+	var btn_height: float = minf(60.0, max_btn_h - 4.0)
+	var btn_gap: float = minf(12.0, max_btn_h - btn_height)
 	var start_y: float = cy - 90
 
 	for i in MENU_ITEMS.size():
