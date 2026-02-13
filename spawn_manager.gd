@@ -15,6 +15,10 @@ var obstacle_scene: PackedScene = preload("res://obstacle.tscn")
 var effective_arena_width: float = 3840.0
 var effective_arena_height: float = 3840.0
 
+# Per-frame cache to avoid repeated group lookups
+var _cached_enemies: Array = []
+var _cached_enemies_frame: int = -1
+
 
 func setup(p_scene: Node2D, p_player: CharacterBody2D, p_rng: RandomNumberGenerator) -> void:
 	scene = p_scene
@@ -202,8 +206,13 @@ func count_local_powerups() -> int:
 
 
 func get_local_enemies() -> Array:
-	var local_enemies = []
+	## Returns enemies local to this scene, cached per frame.
+	var frame = Engine.get_process_frames()
+	if frame == _cached_enemies_frame:
+		return _cached_enemies
+	_cached_enemies.clear()
 	for child in scene.get_children():
 		if child.is_in_group("enemy"):
-			local_enemies.append(child)
-	return local_enemies
+			_cached_enemies.append(child)
+	_cached_enemies_frame = frame
+	return _cached_enemies
