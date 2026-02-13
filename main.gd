@@ -529,6 +529,9 @@ func _process(delta: float) -> void:
 			if best_id >= 0:
 				phylogenetic_tree.set_lineage_data(training_manager.lineage_tracker, best_id)
 
+	if not game_started:
+		return
+
 	if game_over:
 		if Input.is_action_just_pressed("ui_cancel"):
 			get_tree().paused = false
@@ -673,6 +676,8 @@ func update_lives_display() -> void:
 	lives_label.text = "Lives: %d" % lives
 
 func _on_player_hit() -> void:
+	if not game_started or game_over:
+		return
 	lives -= 1
 	update_lives_display()
 
