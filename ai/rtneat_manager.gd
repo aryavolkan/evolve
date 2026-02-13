@@ -4,6 +4,16 @@ class_name RtNeatManager
 ## Orchestrates rtNEAT mode: spawns agents into a single shared arena,
 ## drives AI each frame, and replaces worst agents with new offspring.
 
+const InteractionToolsScript = preload("res://ai/agent_interaction_tools.gd")
+const Tool = InteractionToolsScript.Tool
+const BLESS_FITNESS: float = InteractionToolsScript.BLESS_FITNESS
+const CURSE_FITNESS: float = InteractionToolsScript.CURSE_FITNESS
+const MAX_LOG_ENTRIES: int = InteractionToolsScript.MAX_LOG_ENTRIES
+const SPEED_STEPS: Array[float] = InteractionToolsScript.SPEED_STEPS
+const WAVE_SIZE: int = InteractionToolsScript.WAVE_SIZE
+const WAVE_SPREAD: float = InteractionToolsScript.WAVE_SPREAD
+const OBSTACLE_REMOVE_RADIUS: float = InteractionToolsScript.OBSTACLE_REMOVE_RADIUS
+
 var AISensorScript = preload("res://ai/sensor.gd")
 var AIControllerScript = preload("res://ai/ai_controller.gd")
 var AgentScenePacked: PackedScene = null  # Loaded lazily in start()
@@ -22,32 +32,34 @@ var controllers: Array = []  # Array[AIController]
 
 # Configuration
 var agent_count: int = 30
-var time_scale: float = 1.0
 
-# Replacement log (last N events)
-var replacement_log: Array = []  # [{text: String, time: float}]
-const MAX_LOG_ENTRIES: int = 5
+# Interaction tools (delegated)
+var interaction_tools = InteractionToolsScript.new()
 
-# Speed control
-const SPEED_STEPS: Array[float] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0]
+# Replacement log and player obstacles (shared with interaction_tools)
+var replacement_log: Array = []
+var player_obstacles: Array = []
+
+# Backward-compatible accessors delegating to interaction_tools
+var current_tool: int:
+	get: return interaction_tools.current_tool
+	set(v): interaction_tools.current_tool = v
+
+var time_scale: float:
+	get: return interaction_tools.time_scale
+	set(v): interaction_tools.time_scale = v
 
 # Inspected agent
 var inspected_agent_index: int = -1
 
-# Interaction tools
-enum Tool { INSPECT, PLACE_OBSTACLE, REMOVE_OBSTACLE, SPAWN_WAVE, BLESS, CURSE }
-var current_tool: int = Tool.INSPECT
-var player_obstacles: Array = []  # Track player-placed obstacles for cleanup
-
-const BLESS_FITNESS: float = 2000.0
-const CURSE_FITNESS: float = 2000.0
-const WAVE_SIZE: int = 5
-const WAVE_SPREAD: float = 200.0
-const OBSTACLE_REMOVE_RADIUS: float = 80.0
-
 # State
 var _running: bool = false
 var _total_time: float = 0.0
+
+
+func _init() -> void:
+	interaction_tools.replacement_log = replacement_log
+	interaction_tools.player_obstacles = player_obstacles
 
 
 func setup(scene: Node2D, config: Dictionary = {}) -> void:
@@ -68,6 +80,23 @@ func setup(scene: Node2D, config: Dictionary = {}) -> void:
 	population.replacement_interval = replacement_interval
 	population.min_lifetime = min_lifetime
 	population.initialize(agent_count, neat_config)
+	_configure_interaction_tools()
+
+
+func _configure_interaction_tools() -> void:
+	interaction_tools.setup(main_scene, {
+		"bless_fn": Callable(self, "_bless_agent"),
+		"curse_fn": Callable(self, "_curse_agent"),
+		"on_tool_changed": Callable(self, "_handle_tool_changed"),
+		"player_obstacles": player_obstacles,
+		"replacement_log": replacement_log,
+	})
+	interaction_tools.reset_time()
+
+
+func _handle_tool_changed(tool: int) -> void:
+	if tool != Tool.INSPECT:
+		clear_inspection()
 
 
 func start() -> void:
@@ -78,6 +107,7 @@ func start() -> void:
 
 	_running = true
 	_total_time = 0.0
+	interaction_tools.reset_time()
 	replacement_log.clear()
 
 	# Lazy-load agent scene
@@ -138,7 +168,7 @@ func stop() -> void:
 		if is_instance_valid(obs):
 			obs.queue_free()
 	player_obstacles.clear()
-	current_tool = Tool.INSPECT
+	interaction_tools.current_tool = Tool.INSPECT
 
 	agents.clear()
 	sensors.clear()
@@ -156,6 +186,7 @@ func process(delta: float) -> void:
 		return
 
 	_total_time += delta
+	interaction_tools.update_time(delta)
 
 	# 1. Drive each alive agent
 	for i in agent_count:
@@ -192,9 +223,7 @@ func _do_agent_replacement(index: int) -> void:
 	var log_entry := "Replaced #%d (fit: %.0f) → offspring of #%d × #%d" % [
 		index, old_fitness, result.parent_a, result.parent_b
 	]
-	replacement_log.push_front({"text": log_entry, "time": _total_time})
-	if replacement_log.size() > MAX_LOG_ENTRIES:
-		replacement_log.pop_back()
+	_log_event(log_entry)
 
 	# Remove old agent
 	if is_instance_valid(agents[index]):
@@ -267,19 +296,30 @@ func _on_agent_shot_fired(direction: Vector2, agent_index: int) -> void:
 				return
 
 
-# Speed controls
+# ============================================================
+# Interaction tools — delegated to AgentInteractionTools
+# ============================================================
+
 func adjust_speed(direction: float) -> void:
-	var current_idx: int = SPEED_STEPS.find(time_scale)
-	if current_idx == -1:
-		current_idx = 2  # Default to 1.0x
+	interaction_tools.adjust_speed(direction)
 
-	if direction > 0 and current_idx < SPEED_STEPS.size() - 1:
-		current_idx += 1
-	elif direction < 0 and current_idx > 0:
-		current_idx -= 1
 
-	time_scale = SPEED_STEPS[current_idx]
-	Engine.time_scale = time_scale
+func set_tool(tool: int) -> void:
+	interaction_tools.set_tool(tool)
+	if tool != Tool.INSPECT:
+		clear_inspection()
+
+
+func get_tool_name() -> String:
+	return interaction_tools.get_tool_name()
+
+
+func handle_click(world_pos: Vector2) -> bool:
+	return interaction_tools.handle_click(world_pos)
+
+
+func _log_event(text: String) -> void:
+	interaction_tools.log_event(text)
 
 
 # Click-to-inspect
@@ -322,85 +362,8 @@ func clear_inspection() -> void:
 
 
 # ============================================================
-# Interaction Tools
+# Bless / Curse — manager-specific (use population directly)
 # ============================================================
-
-func set_tool(tool: int) -> void:
-	current_tool = tool
-	if tool != Tool.INSPECT:
-		clear_inspection()
-
-
-func get_tool_name() -> String:
-	match current_tool:
-		Tool.INSPECT: return "INSPECT"
-		Tool.PLACE_OBSTACLE: return "PLACE"
-		Tool.REMOVE_OBSTACLE: return "REMOVE"
-		Tool.SPAWN_WAVE: return "SPAWN"
-		Tool.BLESS: return "BLESS"
-		Tool.CURSE: return "CURSE"
-	return "INSPECT"
-
-
-func handle_click(world_pos: Vector2) -> bool:
-	## Dispatch click to the active tool. Returns true if handled (non-inspect).
-	match current_tool:
-		Tool.INSPECT:
-			return false  # Fall through to existing inspect logic
-		Tool.PLACE_OBSTACLE:
-			_place_obstacle(world_pos)
-		Tool.REMOVE_OBSTACLE:
-			_remove_obstacle(world_pos)
-		Tool.SPAWN_WAVE:
-			_spawn_wave(world_pos)
-		Tool.BLESS:
-			_bless_agent(world_pos)
-		Tool.CURSE:
-			_curse_agent(world_pos)
-	return true
-
-
-func _place_obstacle(pos: Vector2) -> void:
-	var obstacle_scene: PackedScene = load("res://obstacle.tscn")
-	var obstacle = obstacle_scene.instantiate()
-	obstacle.position = pos
-	main_scene.add_child(obstacle)
-	player_obstacles.append(obstacle)
-	main_scene.spawned_obstacle_positions.append(pos)
-	_log_event("Placed obstacle at (%.0f, %.0f)" % [pos.x, pos.y])
-
-
-func _remove_obstacle(pos: Vector2) -> void:
-	var nearest_obs = null
-	var nearest_dist: float = OBSTACLE_REMOVE_RADIUS
-	for obs in player_obstacles:
-		if not is_instance_valid(obs):
-			continue
-		var dist: float = obs.position.distance_to(pos)
-		if dist < nearest_dist:
-			nearest_dist = dist
-			nearest_obs = obs
-	if nearest_obs:
-		# Remove from tracking arrays
-		var obs_pos: Vector2 = nearest_obs.position
-		player_obstacles.erase(nearest_obs)
-		var pos_idx: int = main_scene.spawned_obstacle_positions.find(obs_pos)
-		if pos_idx >= 0:
-			main_scene.spawned_obstacle_positions.remove_at(pos_idx)
-		nearest_obs.queue_free()
-		_log_event("Removed obstacle at (%.0f, %.0f)" % [obs_pos.x, obs_pos.y])
-
-
-func _spawn_wave(pos: Vector2) -> void:
-	# Weighted types: 50% pawn, 25% knight, 12.5% bishop, 8.3% rook, 4.2% queen
-	var weights: Array[int] = [0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3]
-	for i in WAVE_SIZE:
-		var angle: float = TAU * i / WAVE_SIZE
-		var spawn_pos: Vector2 = pos + Vector2(cos(angle), sin(angle)) * WAVE_SPREAD
-		var enemy_type: int = weights[randi() % weights.size()]
-		main_scene.spawn_enemy_at(spawn_pos, enemy_type)
-	_log_event("Spawned wave of %d enemies at (%.0f, %.0f)" % [WAVE_SIZE, pos.x, pos.y])
-
 
 func _bless_agent(pos: Vector2) -> void:
 	var idx: int = get_agent_at_position(pos)
@@ -429,9 +392,3 @@ func _curse_agent(pos: Vector2) -> void:
 					agents[idx].update_sprite_color()
 		)
 	_log_event("Cursed #%d (-%.0f fitness)" % [idx, CURSE_FITNESS])
-
-
-func _log_event(text: String) -> void:
-	replacement_log.push_front({"text": text, "time": _total_time})
-	if replacement_log.size() > MAX_LOG_ENTRIES:
-		replacement_log.pop_back()

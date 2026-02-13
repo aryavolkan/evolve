@@ -699,7 +699,8 @@ func is_ai_active() -> bool:
 	return current_mode != Mode.HUMAN
 
 
-const SPEED_STEPS: Array[float] = [0.25, 0.5, 1.0, 1.5, 2.0, 4.0, 8.0, 16.0]
+const _ConstantsScript = preload("res://constants.gd")
+const SPEED_STEPS: Array[float] = _ConstantsScript.TIME_SCALE_STEPS
 
 func adjust_speed(delta: float) -> void:
 	var current_idx := SPEED_STEPS.find(time_scale)

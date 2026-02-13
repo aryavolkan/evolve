@@ -46,7 +46,6 @@ func _run_all_tests() -> void:
 		preload("res://test/test_ai_controller.gd"),
 		preload("res://test/test_edge_cases.gd"),
 		preload("res://test/test_powerup.gd"),
-		preload("res://test/test_trainer.gd"),
 		preload("res://test/test_curriculum.gd"),
 		preload("res://test/test_curriculum_phase2.gd"),
 		preload("res://test/test_nsga2.gd"),

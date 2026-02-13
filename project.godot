@@ -19,6 +19,10 @@ run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
+[autoload]
+
+GameConstants="*res://constants.gd"
+
 [debug]
 
 settings/stdout/verbose_stdout=true
@@ -27,20 +31,6 @@ settings/stdout/verbose_stdout=true
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
-
-[physics]
-
-common/physics_ticks_per_second=120
-common/max_physics_steps_per_frame=16
-
-[rendering]
-
-driver/threads/thread_model=2
-textures/canvas_textures/default_texture_filter=0
-
-[threading]
-
-worker_pool/max_threads=8
 
 [input]
 
@@ -64,3 +54,17 @@ shoot_right={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":68,"key_label":0,"unicode":100,"location":0,"echo":false,"script":null)
 ]
 }
+
+[physics]
+
+common/physics_ticks_per_second=120
+common/max_physics_steps_per_frame=16
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+driver/threads/thread_model=2
+
+[threading]
+
+worker_pool/max_threads=8
