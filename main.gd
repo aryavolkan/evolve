@@ -531,7 +531,7 @@ func _process(delta: float) -> void:
 
 	if game_over:
 		if Input.is_action_just_pressed("ui_cancel"):
-			show_title_screen()
+			get_tree().paused = false
 			get_tree().reload_current_scene()
 			return
 		if entering_name:
