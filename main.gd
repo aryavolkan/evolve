@@ -16,6 +16,7 @@ var spawned_obstacle_positions: Array = []
 # Extracted module managers
 var spawn_mgr  # SpawnManager
 var score_mgr  # ScoreManager
+var powerup_mgr  # PowerupManager
 var ui_mgr  # UIManager
 
 # AI Training
@@ -36,8 +37,6 @@ var game_started: bool = false  # False until player selects mode from title scr
 # Chess piece types for spawning
 enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
 
-const POWERUP_DURATION: float = 5.0
-const SLOW_MULTIPLIER: float = 0.5
 const RESPAWN_INVINCIBILITY: float = 2.0
 
 # Arena configuration - large square arena
@@ -54,12 +53,7 @@ const BASE_SPAWN_INTERVAL: float = 50.0
 const MIN_SPAWN_INTERVAL: float = 20.0
 const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxed
 
-# Slow/Freeze enemies tracking
-var slow_active: bool = false
-var freeze_active: bool = false
-
-# Double points tracking
-var double_points_active: bool = false
+# Powerup state now managed by PowerupManager
 
 # Screen clear spawn cooldown
 var screen_clear_cooldown: float = 0.0
@@ -239,10 +233,12 @@ func _ready() -> void:
 	spawn_mgr.setup(self, player, rng)
 	spawn_mgr.effective_arena_width = effective_arena_width
 	spawn_mgr.effective_arena_height = effective_arena_height
+	powerup_mgr = load("res://powerup_manager.gd").new()
+	powerup_mgr.setup(self, player, score_mgr, spawn_mgr)
 
 	player.hit.connect(_on_player_hit)
 	player.enemy_killed.connect(_on_enemy_killed)
-	player.powerup_timer_updated.connect(_on_powerup_timer_updated)
+	player.powerup_timer_updated.connect(powerup_mgr.handle_powerup_timer_updated)
 	player.shot_fired.connect(_on_shot_fired)
 	game_over_label.visible = false
 	powerup_label.visible = false
@@ -646,7 +642,7 @@ func _process(delta: float) -> void:
 				get_tree().reload_current_scene()
 		return
 
-	var score_multiplier = 2.0 if double_points_active else 1.0
+	var score_multiplier = powerup_mgr.get_score_multiplier()
 	score += delta * 5 * score_multiplier  # Reduced base survival (5 pts/sec)
 	score_label.text = "Score: %d" % int(score)
 	if ui_mgr:
@@ -714,17 +710,17 @@ func get_scaled_spawn_interval() -> float:
 	return lerpf(BASE_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, factor)
 
 func spawn_enemy() -> void:
-	spawn_mgr.spawn_enemy(training_mode, curriculum_config, get_difficulty_factor(), get_scaled_enemy_speed(), enemy_ai_network, freeze_active, slow_active)
+	spawn_mgr.spawn_enemy(training_mode, curriculum_config, get_difficulty_factor(), get_scaled_enemy_speed(), enemy_ai_network, powerup_mgr.freeze_active, powerup_mgr.slow_active)
 
 
 func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
 	## Spawn enemy at specific position with specific type (for preset events).
-	spawn_mgr.spawn_enemy_at(pos, enemy_type, get_scaled_enemy_speed(), training_mode, enemy_ai_network, freeze_active, slow_active)
+	spawn_mgr.spawn_enemy_at(pos, enemy_type, get_scaled_enemy_speed(), training_mode, enemy_ai_network, powerup_mgr.freeze_active, powerup_mgr.slow_active)
 
 
 func spawn_powerup_at(pos: Vector2, powerup_type: int) -> void:
 	## Spawn powerup at specific position with specific type (for preset events).
-	spawn_mgr.spawn_powerup_at(pos, powerup_type, MAX_POWERUPS, _on_powerup_collected)
+	spawn_mgr.spawn_powerup_at(pos, powerup_type, MAX_POWERUPS, powerup_mgr.handle_powerup_collected)
 
 
 func spawn_initial_enemies() -> void:
@@ -736,55 +732,17 @@ func count_local_powerups() -> int:
 
 
 func spawn_powerup() -> bool:
-	return spawn_mgr.spawn_powerup(MAX_POWERUPS, _on_powerup_collected)
+	return spawn_mgr.spawn_powerup(MAX_POWERUPS, powerup_mgr.handle_powerup_collected)
 
 
 func find_valid_powerup_position() -> Vector2:
 	return spawn_mgr.find_valid_powerup_position()
 
-func _on_powerup_collected(type: String, collector: Node2D = null) -> void:
-	# Route to the collector; fallback to main player for backward compat
-	var target = collector if collector else player
-	powerups_collected += 1
-	show_powerup_message(type)
-
-	# Bonus for collecting powerup
-	var multiplier = 2 if double_points_active else 1
-	var bonus = score_mgr.POWERUP_COLLECT_BONUS * multiplier
-	score += bonus
-	score_from_powerups += bonus
-	var bonus_text = "+%d" % bonus
-	spawn_floating_text(bonus_text, Color(0, 1, 0.5, 1), target.position)
-
-	# Notify agent of powerup collection (for rtNEAT fitness tracking)
-	if collector and collector != player and collector.has_signal("powerup_collected_by_agent"):
-		collector.powerup_collected_by_agent.emit(collector, type)
-
-	match type:
-		"SPEED BOOST":
-			target.activate_speed_boost(POWERUP_DURATION)
-		"INVINCIBILITY":
-			target.activate_invincibility(POWERUP_DURATION)
-		"SLOW ENEMIES":
-			activate_slow_enemies()
-		"SCREEN CLEAR":
-			clear_all_enemies()
-		"RAPID FIRE":
-			target.activate_rapid_fire(POWERUP_DURATION)
-		"PIERCING":
-			target.activate_piercing(POWERUP_DURATION)
-		"SHIELD":
-			target.activate_shield()
-		"FREEZE":
-			activate_freeze_enemies()
-		"DOUBLE POINTS":
-			activate_double_points()
-		"BOMB":
-			explode_nearby_enemies(target.position)
+# Powerup collection now handled by PowerupManager
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	kills += 1
-	var multiplier = 2 if double_points_active else 1
+	var multiplier = powerup_mgr.get_score_multiplier()
 	var bonus = points * score_mgr.KILL_MULTIPLIER * multiplier
 	score += bonus
 	score_from_kills += bonus
@@ -796,22 +754,9 @@ func spawn_floating_text(text: String, color: Color, pos: Vector2) -> void:
 	add_child(floating)
 	floating.setup(text, color, pos)
 
-func show_powerup_message(type: String) -> void:
-	powerup_label.text = type + "!"
-	powerup_label.visible = true
-	await get_tree().create_timer(2.0).timeout
-	powerup_label.visible = false
+# Powerup message display now handled by PowerupManager
 
-func _on_powerup_timer_updated(powerup_type: String, time_left: float) -> void:
-	# Handle slow enemies ending
-	if powerup_type == "SLOW" and time_left <= 0:
-		end_slow_enemies()
-	# Handle freeze enemies ending
-	if powerup_type == "FREEZE" and time_left <= 0:
-		end_freeze_enemies()
-	# Handle double points ending
-	if powerup_type == "DOUBLE" and time_left <= 0:
-		end_double_points()
+# Powerup timer updates now handled by PowerupManager
 
 
 func _on_shot_fired(direction: Vector2) -> void:
@@ -835,114 +780,31 @@ func _on_shot_fired(direction: Vector2) -> void:
 			return  # Only reward once per shot
 
 
-func activate_slow_enemies() -> void:
-	# Apply slow to all current enemies if not already active
-	if not slow_active:
-		for enemy in get_local_enemies():
-			enemy.apply_slow(SLOW_MULTIPLIER)
-	slow_active = true
-	if player.is_physics_processing():
-		player.activate_slow_effect(POWERUP_DURATION)
-	else:
-		# rtNEAT mode: player physics disabled, use standalone timer
-		get_tree().create_timer(POWERUP_DURATION).timeout.connect(end_slow_enemies)
+# Slow enemies effect now handled by PowerupManager
 
 func get_local_enemies() -> Array:
 	return spawn_mgr.get_local_enemies()
 
 
-func end_slow_enemies() -> void:
-	if slow_active:
-		slow_active = false
-		for enemy in get_local_enemies():
-			enemy.remove_slow(SLOW_MULTIPLIER)
+# End slow enemies now handled by PowerupManager
 
 
-func activate_freeze_enemies() -> void:
-	# Freeze completely stops enemies (unlike slow which is 50%)
-	if not freeze_active:
-		for enemy in get_local_enemies():
-			enemy.apply_freeze()
-	freeze_active = true
-	if player.is_physics_processing():
-		player.activate_freeze_effect(POWERUP_DURATION)
-	else:
-		# rtNEAT mode: player physics disabled, use standalone timer
-		get_tree().create_timer(POWERUP_DURATION).timeout.connect(end_freeze_enemies)
+# Freeze enemies effect now handled by PowerupManager
 
 
-func end_freeze_enemies() -> void:
-	if freeze_active:
-		freeze_active = false
-		for enemy in get_local_enemies():
-			enemy.remove_freeze()
+# End freeze enemies now handled by PowerupManager
 
 
-func activate_double_points() -> void:
-	double_points_active = true
-	if player.is_physics_processing():
-		player.activate_double_points(POWERUP_DURATION)
-	else:
-		# rtNEAT mode: player physics disabled, use standalone timer
-		get_tree().create_timer(POWERUP_DURATION).timeout.connect(end_double_points)
+# Double points effect now handled by PowerupManager
 
 
-func end_double_points() -> void:
-	double_points_active = false
+# End double points now handled by PowerupManager
 
 
-func clear_all_enemies() -> void:
-	if player.is_physics_processing():
-		player.trigger_screen_clear_effect()
-	var local_enemies = get_local_enemies()
-	var total_points = 0
-	for enemy in local_enemies:
-		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
-			if enemy.has_method("get_point_value"):
-				total_points += enemy.get_point_value() * score_mgr.KILL_MULTIPLIER
-			else:
-				total_points += score_mgr.KILL_MULTIPLIER
-			enemy.die()
-
-	# Bonus points for screen clear (scaled piece values + flat bonus)
-	if total_points > 0:
-		total_points += score_mgr.SCREEN_CLEAR_BONUS
-		score += total_points
-		spawn_floating_text("+%d CLEAR!" % total_points, Color(1, 0.3, 0.3, 1), player.position + Vector2(0, -50))
-
-	# Prevent immediate respawning - set cooldown and advance spawn threshold
-	screen_clear_cooldown = SCREEN_CLEAR_SPAWN_DELAY
-	next_spawn_score = score + get_scaled_spawn_interval()
+# Screen clear now handled by PowerupManager
 
 
-const BOMB_RADIUS: float = 600.0  # Radius of bomb explosion
-
-func explode_nearby_enemies(center_pos: Vector2 = Vector2.ZERO) -> void:
-	## Kill all enemies within BOMB_RADIUS of center_pos (defaults to player).
-	if center_pos == Vector2.ZERO:
-		center_pos = player.position
-	var local_enemies = get_local_enemies()
-	var total_points = 0
-	var killed_count = 0
-
-	for enemy in local_enemies:
-		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
-			var distance = center_pos.distance_to(enemy.position)
-			if distance <= BOMB_RADIUS:
-				if enemy.has_method("get_point_value"):
-					total_points += enemy.get_point_value() * score_mgr.KILL_MULTIPLIER
-				else:
-					total_points += score_mgr.KILL_MULTIPLIER
-				killed_count += 1
-				enemy.die()
-
-	# Award points and show feedback
-	if total_points > 0:
-		var multiplier = 2 if double_points_active else 1
-		total_points *= multiplier
-		score += total_points
-		score_from_kills += total_points
-		spawn_floating_text("+%d BOMB!" % total_points, Color(1, 0.5, 0, 1), center_pos + Vector2(0, -50))
+# Bomb explosion now handled by PowerupManager
 
 
 func update_lives_display() -> void:
