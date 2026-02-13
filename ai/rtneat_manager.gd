@@ -52,6 +52,12 @@ var time_scale: float:
 # Inspected agent
 var inspected_agent_index: int = -1
 
+# Novelty search
+var novelty_search: NoveltySearch = null
+var _agent_behavior_data: Array = []  # Per-agent behavior tracking
+var _agent_start_positions: Array = []  # Per-agent spawn positions
+var _agent_move_directions: Array = []  # Per-agent movement direction history
+
 # State
 var _running: bool = false
 var _total_time: float = 0.0
@@ -80,6 +86,12 @@ func setup(scene: Node2D, config: Dictionary = {}) -> void:
 	population.replacement_interval = replacement_interval
 	population.min_lifetime = min_lifetime
 	population.initialize(agent_count, neat_config)
+
+	# Initialize novelty search
+	novelty_search = NoveltySearch.new()
+	novelty_search.novelty_weight = config.get("novelty_weight", 0.3)
+	novelty_search.k_nearest = config.get("novelty_k", 15)
+
 	_configure_interaction_tools()
 
 
@@ -109,6 +121,9 @@ func start() -> void:
 	_total_time = 0.0
 	interaction_tools.reset_time()
 	replacement_log.clear()
+	_agent_behavior_data.clear()
+	_agent_start_positions.clear()
+	_agent_move_directions.clear()
 
 	# Lazy-load agent scene
 	if not AgentScenePacked:
@@ -143,6 +158,9 @@ func start() -> void:
 		agents.append(agent)
 		sensors.append(sensor)
 		controllers.append(controller)
+		_agent_behavior_data.append(_new_behavior_data())
+		_agent_start_positions.append(agent.position)
+		_agent_move_directions.append([])
 
 		# Connect signals for fitness tracking
 		agent.enemy_killed.connect(_on_agent_enemy_killed.bind(i))
@@ -202,6 +220,19 @@ func process(delta: float) -> void:
 		# Accumulate survival fitness
 		population.update_fitness(i, delta * 5.0)
 
+		# Track behavior for novelty search
+		if i < _agent_behavior_data.size():
+			var bd: Dictionary = _agent_behavior_data[i]
+			bd["distance_traveled"] += agents[i].position.distance_to(bd.get("_last_pos", agents[i].position)) 
+			bd["_last_pos"] = agents[i].position
+			bd["time_alive"] += delta
+			var center := Vector2(main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
+			bd["_center_dist_sum"] += agents[i].position.distance_to(center)
+			bd["_center_dist_count"] += 1
+			# Track movement direction for entropy
+			if action.move_direction.length_squared() > 0.01 and i < _agent_move_directions.size():
+				_agent_move_directions[i].append(action.move_direction.angle())
+
 	# 2. Check for replacement
 	var idx: int = population.tick(delta)
 	if idx >= 0:
@@ -215,6 +246,36 @@ func process(delta: float) -> void:
 func _do_agent_replacement(index: int) -> void:
 	## Replace the agent at index with a new offspring.
 	var old_fitness: float = population.fitnesses[index]
+
+	# Compute novelty for the departing agent and blend into fitness
+	if novelty_search and index < _agent_behavior_data.size():
+		var bd: Dictionary = _agent_behavior_data[index]
+		if is_instance_valid(agents[index]):
+			bd["final_x"] = agents[index].position.x
+			bd["final_y"] = agents[index].position.y
+		bd["avg_center_distance"] = bd["_center_dist_sum"] / maxf(bd["_center_dist_count"], 1.0)
+		bd["movement_entropy"] = _compute_movement_entropy(index)
+
+		var bc: PackedFloat32Array = NoveltySearch.characterize(bd, main_scene.effective_arena_width, main_scene.effective_arena_height)
+
+		# Gather current population BCs
+		var pop_bcs: Array[PackedFloat32Array] = []
+		for j in agent_count:
+			if j != index and j < _agent_behavior_data.size():
+				var jbd: Dictionary = _agent_behavior_data[j]
+				if is_instance_valid(agents[j]):
+					jbd["final_x"] = agents[j].position.x
+					jbd["final_y"] = agents[j].position.y
+				jbd["avg_center_distance"] = jbd["_center_dist_sum"] / maxf(jbd["_center_dist_count"], 1.0)
+				pop_bcs.append(NoveltySearch.characterize(jbd, main_scene.effective_arena_width, main_scene.effective_arena_height))
+
+		var novelty_score: float = novelty_search.compute_novelty(bc, pop_bcs)
+		novelty_search.maybe_add_to_archive(bc, novelty_score)
+
+		# Blend novelty into the fitness used for parent selection
+		# Scale novelty to be on similar magnitude as fitness
+		var scaled_novelty: float = novelty_score * 1000.0
+		population.fitnesses[index] = novelty_search.blend_fitness(old_fitness, scaled_novelty)
 
 	# Get replacement data from population
 	var result: Dictionary = population.do_replacement(index)
@@ -260,6 +321,12 @@ func _do_agent_replacement(index: int) -> void:
 	# Start with brief invincibility
 	agent.activate_invincibility(2.0)
 
+	# Reset behavior tracking for new agent
+	if index < _agent_behavior_data.size():
+		_agent_behavior_data[index] = _new_behavior_data()
+		_agent_start_positions[index] = agent.position
+		_agent_move_directions[index] = []
+
 	# Clear inspected if it was this agent
 	if inspected_agent_index == index:
 		inspected_agent_index = -1
@@ -269,6 +336,8 @@ func _do_agent_replacement(index: int) -> void:
 func _on_agent_enemy_killed(pos: Vector2, points: int, agent_index: int) -> void:
 	var bonus: float = points * 1000.0  # Chess value × 1000
 	population.update_fitness(agent_index, bonus)
+	if agent_index < _agent_behavior_data.size():
+		_agent_behavior_data[agent_index]["enemies_killed"] += 1
 
 
 func _on_agent_died(_agent: CharacterBody2D, agent_index: int) -> void:
@@ -277,6 +346,8 @@ func _on_agent_died(_agent: CharacterBody2D, agent_index: int) -> void:
 
 func _on_agent_powerup(_agent: CharacterBody2D, _type: String, agent_index: int) -> void:
 	population.update_fitness(agent_index, 5000.0)
+	if agent_index < _agent_behavior_data.size():
+		_agent_behavior_data[agent_index]["powerups_collected"] += 1
 
 
 func _on_agent_shot_fired(direction: Vector2, agent_index: int) -> void:
@@ -392,3 +463,48 @@ func _curse_agent(pos: Vector2) -> void:
 					agents[idx].update_sprite_color()
 		)
 	_log_event("Cursed #%d (-%.0f fitness)" % [idx, CURSE_FITNESS])
+
+
+func _new_behavior_data() -> Dictionary:
+	## Create fresh behavior tracking data for an agent.
+	return {
+		"final_x": 0.0,
+		"final_y": 0.0,
+		"distance_traveled": 0.0,
+		"enemies_killed": 0,
+		"powerups_collected": 0,
+		"movement_entropy": 0.0,
+		"avg_center_distance": 0.0,
+		"time_alive": 0.0,
+		"_last_pos": Vector2.ZERO,
+		"_center_dist_sum": 0.0,
+		"_center_dist_count": 0,
+	}
+
+
+func _compute_movement_entropy(index: int) -> float:
+	## Compute directional entropy from movement angle history.
+	## Higher entropy = more varied movement directions.
+	if index >= _agent_move_directions.size():
+		return 0.0
+	var angles: Array = _agent_move_directions[index]
+	if angles.size() < 10:
+		return 0.0
+
+	# Bin angles into 8 directional buckets
+	var bins: PackedFloat32Array = PackedFloat32Array()
+	bins.resize(8)
+	for angle in angles:
+		var bucket: int = int(fposmod(angle, TAU) / (TAU / 8.0)) % 8
+		bins[bucket] += 1.0
+
+	# Normalize to probabilities
+	var total: float = float(angles.size())
+	var entropy: float = 0.0
+	for count in bins:
+		if count > 0:
+			var p: float = count / total
+			entropy -= p * log(p) / log(2.0)
+
+	# Normalize: max entropy for 8 bins = 3.0 bits
+	return clampf(entropy / 3.0, 0.0, 1.0)
