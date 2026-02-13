@@ -41,6 +41,12 @@ func process(delta: float) -> void:
 
 
 func handle_input(event: InputEvent) -> void:
+	# SPACE toggles pause
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_SPACE:
+		ctx.toggle_pause()
+		ctx.get_viewport().set_input_as_handled()
+		return
+
 	# ESC exits fullscreen
 	if event.is_action_pressed("ui_cancel") and ctx.arena_pool.fullscreen_index >= 0:
 		ctx.arena_pool.exit_fullscreen()

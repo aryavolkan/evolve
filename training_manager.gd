@@ -21,11 +21,21 @@ var player: CharacterBody2D
 # Configuration (centralized in TrainingConfig)
 var config: RefCounted = preload("res://ai/training_config.gd").new()
 var arena_pool: RefCounted = preload("res://ai/arena_pool.gd").new()
-var population_size: int = 150
-var max_generations: int = 100
-var time_scale: float = 1.0
-var parallel_count: int = 20
-var evals_per_individual: int = 2
+var population_size: int:
+	get: return config.population_size
+	set(v): config.population_size = v
+var max_generations: int:
+	get: return config.max_generations
+	set(v): config.max_generations = v
+var time_scale: float:
+	get: return config.time_scale
+	set(v): config.time_scale = v
+var parallel_count: int:
+	get: return config.parallel_count
+	set(v): config.parallel_count = v
+var evals_per_individual: int:
+	get: return config.evals_per_individual
+	set(v): config.evals_per_individual = v
 
 # Rolling evaluation
 var next_individual: int = 0
@@ -42,16 +52,24 @@ var playback_mgr: RefCounted = preload("res://ai/playback_manager.gd").new()
 var training_ui: RefCounted = preload("res://ai/training_ui.gd").new()
 
 # Multi-objective tracking (NSGA-II)
-var use_nsga2: bool = false
+var use_nsga2: bool:
+	get: return config.use_nsga2
+	set(v): config.use_nsga2 = v
 
 # NEAT topology evolution
-var use_neat: bool = false
+var use_neat: bool:
+	get: return config.use_neat
+	set(v): config.use_neat = v
 
 # Elman recurrent memory
-var use_memory: bool = false
+var use_memory: bool:
+	get: return config.use_memory
+	set(v): config.use_memory = v
 
 # MAP-Elites quality-diversity archive
-var use_map_elites: bool = true
+var use_map_elites: bool:
+	get: return config.use_map_elites
+	set(v): config.use_map_elites = v
 var map_elites_archive: MapElites = null
 
 # Co-evolution (Track A)
@@ -215,20 +233,9 @@ func _ready() -> void:
 	training_ui.training_exited.connect(_on_training_exited)
 
 
-var _space_was_pressed: bool = false
-
-
 func _input(event: InputEvent) -> void:
 	if _active_mode:
 		_active_mode.handle_input(event)
-
-
-func _process(_delta: float) -> void:
-	var space_pressed = Input.is_physical_key_pressed(KEY_SPACE)
-	if space_pressed and not _space_was_pressed:
-		if current_mode == Mode.TRAINING or current_mode == Mode.COEVOLUTION:
-			toggle_pause()
-	_space_was_pressed = space_pressed
 
 
 func initialize(scene: Node2D) -> void:
