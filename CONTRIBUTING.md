@@ -31,7 +31,7 @@ godot --path . --play
 godot --headless --script test/test_runner.gd
 ```
 
-All 137 tests must pass before submitting a PR. The test suite covers neural networks, evolution, sensors, AI controllers, curriculum learning, NEAT, MAP-Elites, and integration tests.
+All tests must pass before submitting a PR. The test suite covers neural networks, evolution, sensors, AI controllers, curriculum learning, NEAT, MAP-Elites, and integration tests.
 
 ---
 

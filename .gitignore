@@ -7,10 +7,6 @@
 # Import cache (already in .godot, but just in case)
 *.import
 
-# Claude Code (keep skills tracked)
-.claude/*
-!.claude/skills/
-
 # W&B local data
 wandb/
 overnight-agent/wandb_logs/

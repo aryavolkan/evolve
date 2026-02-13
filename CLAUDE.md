@@ -22,7 +22,7 @@ A 2D arcade survival game built with Godot 4.5+. Player avoids enemy entities to
 ├── ai/                # Neural network and evolution
 ├── scripts/           # Python W&B integration + demo export scripts
 ├── models/            # Temp dir for .pck export (gitignored)
-└── test/              # Test suite (562 tests)
+└── test/              # Test suite (run via test_runner.gd)
 ```
 
 ## Running the Project
@@ -301,7 +301,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (562 tests)
+### Test Coverage
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|

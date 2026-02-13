@@ -47,6 +47,12 @@ var _dashboard: TrainingDashboard = null
 
 
 func handle_input(event: InputEvent) -> void:
+	# SPACE toggles pause
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_SPACE:
+		ctx.toggle_pause()
+		ctx.get_viewport().set_input_as_handled()
+		return
+
 	# D toggles training dashboard
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_D:
 		_toggle_dashboard()
