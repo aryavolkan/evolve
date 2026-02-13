@@ -197,12 +197,19 @@ func get_random_edge_spawn_position() -> Vector2:
 	return pos
 
 
+var _cached_powerup_count: int = 0
+var _cached_powerup_frame: int = -1
+
 func count_local_powerups() -> int:
-	var count = 0
+	var frame := Engine.get_process_frames()
+	if frame == _cached_powerup_frame:
+		return _cached_powerup_count
+	_cached_powerup_count = 0
 	for p in scene.get_tree().get_nodes_in_group("powerup"):
 		if is_instance_valid(p) and not p.is_queued_for_deletion() and p.get_parent() == scene:
-			count += 1
-	return count
+			_cached_powerup_count += 1
+	_cached_powerup_frame = frame
+	return _cached_powerup_count
 
 
 func get_local_enemies() -> Array:
