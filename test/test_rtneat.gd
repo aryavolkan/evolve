@@ -30,6 +30,14 @@ func _run_tests() -> void:
 	_test("agent_reset_for_new_life", _test_agent_reset)
 	_test("agent_has_powerup_methods", _test_agent_powerups)
 
+	print("\n[rtNEAT Interaction Tests]")
+
+	_test("tool_default_is_inspect", _test_tool_default)
+	_test("set_tool_changes_state", _test_set_tool)
+	_test("bless_increases_fitness", _test_bless_fitness)
+	_test("curse_decreases_fitness", _test_curse_fitness)
+	_test("log_event_appears_in_log", _test_log_event)
+
 	print("\n[Enemy Targeting Tests]")
 
 	_test("enemy_find_nearest_target_exists", _test_enemy_targeting_method)
@@ -220,6 +228,51 @@ func _test_all_time_best() -> void:
 	pop._update_all_time_best()
 	assert_approx(pop.all_time_best_fitness, 999.0, 0.01, "All-time best should be 999")
 	assert_not_null(pop.all_time_best_genome, "All-time best genome should be saved")
+
+
+# ============================================================
+# Interaction tests
+# ============================================================
+
+func _test_tool_default() -> void:
+	var RtNeatMgr = load("res://ai/rtneat_manager.gd")
+	var mgr = RtNeatMgr.new()
+	assert_eq(mgr.current_tool, RtNeatMgr.Tool.INSPECT, "Default tool should be INSPECT")
+
+
+func _test_set_tool() -> void:
+	var RtNeatMgr = load("res://ai/rtneat_manager.gd")
+	var mgr = RtNeatMgr.new()
+	mgr.set_tool(RtNeatMgr.Tool.BLESS)
+	assert_eq(mgr.current_tool, RtNeatMgr.Tool.BLESS, "Tool should change to BLESS")
+	mgr.set_tool(RtNeatMgr.Tool.CURSE)
+	assert_eq(mgr.current_tool, RtNeatMgr.Tool.CURSE, "Tool should change to CURSE")
+
+
+func _test_bless_fitness() -> void:
+	var pop = _create_pop(5)
+	var initial: float = pop.fitnesses[2]
+	var RtNeatMgr = load("res://ai/rtneat_manager.gd")
+	pop.update_fitness(2, RtNeatMgr.BLESS_FITNESS)
+	assert_approx(pop.fitnesses[2], initial + 2000.0, 0.01, "Bless should add 2000 fitness")
+
+
+func _test_curse_fitness() -> void:
+	var pop = _create_pop(5)
+	pop.update_fitness(1, 5000.0)  # Start with some fitness
+	var before: float = pop.fitnesses[1]
+	var RtNeatMgr = load("res://ai/rtneat_manager.gd")
+	pop.update_fitness(1, -RtNeatMgr.CURSE_FITNESS)
+	assert_approx(pop.fitnesses[1], before - 2000.0, 0.01, "Curse should subtract 2000 fitness")
+
+
+func _test_log_event() -> void:
+	var RtNeatMgr = load("res://ai/rtneat_manager.gd")
+	var mgr = RtNeatMgr.new()
+	assert_eq(mgr.replacement_log.size(), 0, "Log should start empty")
+	mgr._log_event("Test event")
+	assert_eq(mgr.replacement_log.size(), 1, "Log should have 1 entry after event")
+	assert_eq(mgr.replacement_log[0].text, "Test event", "Log text should match")
 
 
 # ============================================================

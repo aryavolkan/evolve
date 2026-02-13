@@ -285,30 +285,24 @@ All phases through co-evolution and sandbox are implemented. See `ROADMAP.md` fo
 - **NEAT** — Topology evolution (`ai/neat_genome.gd`, `ai/neat_evolution.gd`, `ai/neat_network.gd`)
 - **Competitive Co-Evolution** — Dual populations, enemy neural networks, Hall of Fame (`ai/coevolution.gd`, `ai/enemy_sensor.gd`, `ai/enemy_ai_controller.gd`)
 - **Live Sandbox** — Configurable arena (`ui/sandbox_panel.gd`), side-by-side comparison (`ui/comparison_panel.gd`), network topology viz (`ui/network_visualizer.gd`), archive playback
+- **rtNEAT** — Continuous real-time evolution (`ai/rtneat_manager.gd`, `ai/rtneat_population.gd`, `ui/rtneat_overlay.gd`, `agent.gd`)
+- **Live Player Interactions** — 6 interaction tools during rtNEAT mode (keys 0-5): inspect, place/remove obstacles, spawn enemy waves, bless/curse agents
 
-### Phase 4: The Vision (Not Started)
+### Phase 4: The Vision (Remaining)
 
-**1. Real-Time NEAT (rtNEAT)**
-Continuous evolution without discrete generations. 20-50 visible agents evolve live — weakest replaced by offspring of fittest in real-time. No existing code.
-
-**2. Live Player Interactions**
-During sandbox/rtNEAT, player can place/remove obstacles, spawn enemy waves, bless agents (boost fitness) or curse them (reduce fitness). Currently sandbox is static config only.
-
-**3. Phylogenetic Tree Visualization**
+**1. Phylogenetic Tree Visualization**
 Track parent-child lineage across generations. Visualize ancestry of successful strategies as an interactive tree. No tracking infrastructure exists.
 
-**4. Educational Mode**
+**2. Educational Mode**
 Annotated playback explaining AI decisions: highlight active sensor rays, show network activations, narrate chosen actions. Could extend `ui/network_visualizer.gd`.
 
-**5. Multi-Agent Cooperation**
+**3. Multi-Agent Cooperation**
 Team-based scenarios where multiple AI agents coordinate. Not scoped.
 
 ### Implementation Priority
-1. **rtNEAT** — Biggest architectural feature, enables live sandbox interactions
-2. **Live Player Interactions** — Requires rtNEAT or can work with sandbox mode
-3. **Educational Mode** — Builds on existing network visualizer
-4. **Phylogenetic Trees** — Needs lineage tracking added to evolution pipeline
-5. **Multi-Agent Cooperation** — Exploratory, lowest priority
+1. **Educational Mode** — Builds on existing network visualizer
+2. **Phylogenetic Trees** — Needs lineage tracking added to evolution pipeline
+3. **Multi-Agent Cooperation** — Exploratory, lowest priority
 
 ## Testing
 
@@ -317,7 +311,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (137 tests)
+### Test Coverage (516 tests)
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -332,6 +326,7 @@ godot --headless --script test/test_runner.gd
 | `test_powerup.gd` | 12 | Type names, type count |
 | `test_trainer.gd` | 9 | Path constants, config defaults, stats/action structure |
 | `test_integration.gd` | 10 | Full Sensor → Network → Controller pipeline, data flow |
+| `test_rtneat.gd` | 26 | Population, agents, targeting, interaction tools (bless/curse/log) |
 
 ### Visible Training Mode
 

@@ -510,35 +510,52 @@ func _start_auto_training() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# rtNEAT click-to-inspect
+	# rtNEAT interactions
 	if training_manager and training_manager.get_mode() == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
 		var mgr = training_manager.rtneat_mgr
+
+		# Tool selection keys (0-5)
+		if event is InputEventKey and event.pressed:
+			var RtTool = mgr.Tool
+			match event.keycode:
+				KEY_0: mgr.set_tool(RtTool.INSPECT)
+				KEY_1: mgr.set_tool(RtTool.PLACE_OBSTACLE)
+				KEY_2: mgr.set_tool(RtTool.REMOVE_OBSTACLE)
+				KEY_3: mgr.set_tool(RtTool.SPAWN_WAVE)
+				KEY_4: mgr.set_tool(RtTool.BLESS)
+				KEY_5: mgr.set_tool(RtTool.CURSE)
+				KEY_ESCAPE:
+					mgr.set_tool(RtTool.INSPECT)
+					mgr.clear_inspection()
+					if mgr.overlay:
+						mgr.overlay.hide_inspect()
+					if network_visualizer:
+						network_visualizer.visible = false
+
+		# Click handling
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			# Convert screen position to world position
 			var world_pos: Vector2 = event.position
 			if arena_camera:
 				world_pos = arena_camera.get_screen_center_position() + (event.position - get_viewport().get_visible_rect().size / 2.0) / arena_camera.zoom
-			var idx: int = mgr.get_agent_at_position(world_pos)
-			if idx >= 0:
-				var data: Dictionary = mgr.inspect_agent(idx)
-				if mgr.overlay:
-					mgr.overlay.show_inspect(data)
-				# Show network visualizer for this agent
-				if network_visualizer and data.has("genome") and data.has("network"):
-					network_visualizer.set_neat_data(data.genome, data.network)
-					network_visualizer.visible = true
-			else:
-				mgr.clear_inspection()
-				if mgr.overlay:
-					mgr.overlay.hide_inspect()
-				if network_visualizer:
-					network_visualizer.visible = false
-		elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-			mgr.clear_inspection()
-			if mgr.overlay:
-				mgr.overlay.hide_inspect()
-			if network_visualizer:
-				network_visualizer.visible = false
+
+			# Try tool action first; if not handled, fall through to inspect
+			if not mgr.handle_click(world_pos):
+				# Inspect mode: find agent at position
+				var idx: int = mgr.get_agent_at_position(world_pos)
+				if idx >= 0:
+					var data: Dictionary = mgr.inspect_agent(idx)
+					if mgr.overlay:
+						mgr.overlay.show_inspect(data)
+					if network_visualizer and data.has("genome") and data.has("network"):
+						network_visualizer.set_neat_data(data.genome, data.network)
+						network_visualizer.visible = true
+				else:
+					mgr.clear_inspection()
+					if mgr.overlay:
+						mgr.overlay.hide_inspect()
+					if network_visualizer:
+						network_visualizer.visible = false
 
 
 func _process(delta: float) -> void:

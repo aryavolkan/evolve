@@ -11,6 +11,7 @@ var _log: Array = []
 var _speed: float = 1.0
 var _inspected_index: int = -1
 var _inspect_data: Dictionary = {}
+var _current_tool: int = 0  # RtNeatManager.Tool enum value
 
 # Cached font
 var _font: Font
@@ -21,11 +22,12 @@ func _ready() -> void:
 	_font = ThemeDB.fallback_font
 
 
-func update_display(stats: Dictionary, log: Array, speed: float, inspected: int) -> void:
+func update_display(stats: Dictionary, log: Array, speed: float, inspected: int, tool: int = 0) -> void:
 	_stats = stats
 	_log = log
 	_speed = speed
 	_inspected_index = inspected
+	_current_tool = tool
 	queue_redraw()
 
 
@@ -86,8 +88,22 @@ func _draw() -> void:
 			break
 
 	# Controls hint (top right)
-	var hint := "[-/+] Speed  [Click] Inspect  [H] Stop"
+	var hint := "[0-5] Tools  [-/+] Speed  [H] Stop"
 	draw_string(_font, Vector2(size.x - 380, y1), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.5, 0.5, 0.5, 0.8))
+
+	# Active tool indicator (below stats bar)
+	if _current_tool != 0:  # 0 = INSPECT (default, no indicator needed)
+		var tool_names := ["INSPECT", "PLACE", "REMOVE", "SPAWN", "BLESS", "CURSE"]
+		var tool_colors := [Color.WHITE, Color(0.3, 0.9, 0.3), Color(0.9, 0.5, 0.2), Color(0.4, 0.6, 1.0), Color(1.0, 0.85, 0.2), Color(1.0, 0.3, 0.3)]
+		var tool_name: String = tool_names[_current_tool] if _current_tool < tool_names.size() else "?"
+		var tool_color: Color = tool_colors[_current_tool] if _current_tool < tool_colors.size() else Color.WHITE
+		var tool_text := "Tool: %s" % tool_name
+		var tw: float = 120.0
+		var tx: float = 15.0
+		var ty: float = bar_height + 5.0
+		draw_rect(Rect2(tx, ty, tw, 22), Color(0.0, 0.0, 0.0, 0.7))
+		draw_rect(Rect2(tx, ty, tw, 22), tool_color * Color(1, 1, 1, 0.6), false, 1.0)
+		draw_string(_font, Vector2(tx + 8, ty + 16), tool_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, tool_color)
 
 	# Replacement log (bottom left)
 	if not _log.is_empty():
