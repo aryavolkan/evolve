@@ -136,9 +136,9 @@ func _draw_legend_item(font: Font, x: float, y: float, color: Color, label: Stri
 
 
 func _draw_fitness_chart(font: Font, x0: float, y0: float, w: float, h: float) -> void:
-	var best := stats_tracker.history_best_fitness
-	var avg := stats_tracker.history_avg_fitness
-	var mn := stats_tracker.history_min_fitness
+	var best: Array = stats_tracker.history_best_fitness
+	var avg: Array = stats_tracker.history_avg_fitness
+	var mn: Array = stats_tracker.history_min_fitness
 
 	var plot_x := x0 + CHART_MARGIN_LEFT
 	var plot_y := y0 + CHART_MARGIN_TOP
@@ -187,9 +187,9 @@ func _draw_line_series(data: Array[float], px: float, py: float, pw: float, ph: 
 
 
 func _draw_score_bars(font: Font, x0: float, y0: float, w: float, h: float) -> void:
-	var kill := stats_tracker.history_avg_kill_score
-	var pwr := stats_tracker.history_avg_powerup_score
-	var surv := stats_tracker.history_avg_survival_score
+	var kill: Array = stats_tracker.history_avg_kill_score
+	var pwr: Array = stats_tracker.history_avg_powerup_score
+	var surv: Array = stats_tracker.history_avg_survival_score
 
 	var plot_x := x0 + CHART_MARGIN_LEFT
 	var plot_y := y0 + 2
