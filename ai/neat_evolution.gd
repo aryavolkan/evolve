@@ -1,39 +1,24 @@
-extends RefCounted
+extends "res://ai/evolution_base.gd"
 class_name NeatEvolution
 
 ## NEAT evolution manager: manages a population of NeatGenomes,
 ## organizes them into species, and produces new generations via
 ## species-proportionate reproduction with crossover and mutation.
 
-signal generation_complete(generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
-
 var config: NeatConfig
 var innovation_tracker: NeatInnovation
-var population: Array = []  ## Array of NeatGenome
 var species_list: Array = []  ## Array of NeatSpecies
-var generation: int = 0
 var best_genome: NeatGenome = null
-var best_fitness: float = 0.0
 var all_time_best_genome: NeatGenome = null
-var all_time_best_fitness: float = 0.0
-
-# Cached stats from last completed generation
-var _last_min_fitness: float = 0.0
-var _last_avg_fitness: float = 0.0
 var _next_species_id: int = 0
 
 # Compatibility stubs for training_manager.gd integration
 var pareto_front: Array = []
 var last_hypervolume: float = 0.0
-var use_nsga2: bool = false
-
-# Lineage tracking (optional, set externally)
-var lineage: RefCounted = null
-var _lineage_ids: PackedInt32Array  # Maps population index to lineage ID
-
 
 func _init(p_config: NeatConfig) -> void:
 	config = p_config
+	super._init(config.population_size, 0.0, 0.0)
 	innovation_tracker = NeatInnovation.new(p_config.input_count + p_config.output_count + int(p_config.use_bias))
 	_initialize_population()
 
@@ -44,17 +29,10 @@ func _initialize_population() -> void:
 		var genome := NeatGenome.create(config, innovation_tracker)
 		genome.create_basic()
 		population.append(genome)
+	population_size = config.population_size
 	generation = 0
-	_seed_lineage()
-
-
-func _seed_lineage() -> void:
-	## Register initial population with lineage tracker if set.
-	if lineage:
-		var ids = lineage.record_seed(0, population.size())
-		_lineage_ids.resize(population.size())
-		for i in population.size():
-			_lineage_ids[i] = ids[i]
+	seed_lineage(population.size())
+	_reset_scores()
 
 
 func get_individual(index: int) -> NeatGenome:
@@ -68,8 +46,7 @@ func get_network(index: int) -> NeatNetwork:
 
 func set_fitness(index: int, fitness: float) -> void:
 	population[index].fitness = fitness
-	if lineage and index < _lineage_ids.size():
-		lineage.update_fitness(_lineage_ids[index], fitness)
+	super.set_fitness(index, fitness)
 
 
 func evolve() -> void:
@@ -80,6 +57,7 @@ func evolve() -> void:
 	## 4. Allocate offspring per species
 	## 5. Reproduce (crossover + mutation)
 	## 6. Adjust compatibility threshold
+	save_backup()
 
 	# 1. Speciate
 	var spec_result: Dictionary = NeatSpecies.speciate(population, species_list, config, _next_species_id)
@@ -204,9 +182,7 @@ func evolve() -> void:
 	if min_fitness == INF:
 		min_fitness = 0.0
 
-	# Cache for get_stats()
-	_last_min_fitness = min_fitness
-	_last_avg_fitness = avg_fitness
+	cache_stats(min_fitness, avg_fitness, best_fitness)
 
 	# Trim or pad to exact population size
 	while new_population.size() > config.population_size:
@@ -222,6 +198,7 @@ func evolve() -> void:
 				new_lineage_ids[new_population.size() - 1] = lineage.record_birth(generation + 1, lid, -1, 0.0, "mutation")
 
 	population = new_population
+	population_size = config.population_size
 	if lineage:
 		_lineage_ids = new_lineage_ids
 	generation += 1
@@ -231,6 +208,8 @@ func evolve() -> void:
 
 	# 6. Adjust compatibility threshold
 	NeatSpecies.adjust_compatibility_threshold(species_list, config)
+
+	_reset_scores()
 
 	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
 
@@ -262,71 +241,69 @@ func get_species_count() -> int:
 	return species_list.size()
 
 
-func get_generation() -> int:
-	return generation
+func inject_immigrant(genome: NeatGenome) -> void:
+	## Replace worst individual with an immigrant genome.
+	if population.is_empty():
+		return
+	var worst_idx := 0
+	var worst_fit: float = population[0].fitness
+	for i in range(1, population.size()):
+		if population[i].fitness < worst_fit:
+			worst_fit = population[i].fitness
+			worst_idx = i
+	population[worst_idx] = genome
 
 
-func get_best_fitness() -> float:
-	return best_fitness
-
-
-func get_all_time_best_fitness() -> float:
-	return all_time_best_fitness
-
-
-func get_stats() -> Dictionary:
-	## Computes from live genome fitness if available, otherwise uses cached
-	## values from last evolve() (which survive fitness resets).
-	var min_fit := _last_min_fitness
-	var max_fit := best_fitness
-	var avg_fit := _last_avg_fitness
-
-	# Check if live scores are available (any non-zero means not yet reset)
-	var has_live_scores := false
-	for genome in population:
-		if genome.fitness != 0.0:
-			has_live_scores = true
-			break
-
-	if has_live_scores:
-		min_fit = INF
-		max_fit = -INF
-		var total := 0.0
-		for genome in population:
-			min_fit = minf(min_fit, genome.fitness)
-			max_fit = maxf(max_fit, genome.fitness)
-			total += genome.fitness
-		avg_fit = total / population.size() if not population.is_empty() else 0.0
-		if min_fit == INF:
-			min_fit = 0.0
-		if max_fit == -INF:
-			max_fit = 0.0
-
+func _get_additional_stats() -> Dictionary:
 	return {
-		"generation": generation,
-		"population_size": population.size(),
 		"species_count": species_list.size(),
-		"best_fitness": best_fitness,
-		"all_time_best": all_time_best_fitness,
 		"compatibility_threshold": config.compatibility_threshold,
-		"current_min": min_fit,
-		"current_max": max_fit,
-		"current_avg": avg_fit,
 	}
 
 
-func save_best(path: String) -> void:
-	## Save best genome to JSON file.
-	if not all_time_best_genome:
+func _get_live_fitness_samples() -> Array:
+	var samples: Array = []
+	for genome in population:
+		samples.append(genome.fitness)
+	return samples
+
+
+func _clone_individual(individual):
+	return individual.copy()
+
+
+func _get_all_time_best_entity():
+	return all_time_best_genome
+
+
+func _set_all_time_best_entity(entity) -> void:
+	all_time_best_genome = entity
+
+
+func _save_entity(path: String, entity) -> void:
+	if not entity:
 		return
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file:
-		file.store_string(JSON.stringify(all_time_best_genome.serialize()))
+		file.store_string(JSON.stringify(entity.serialize()))
 		file.close()
 
 
-func save_population(path: String) -> void:
-	## Save full population state to JSON file.
+func _load_entity(path: String):
+	if not FileAccess.file_exists(path):
+		return null
+	var file := FileAccess.open(path, FileAccess.READ)
+	if not file:
+		return null
+	var json := JSON.new()
+	var text := file.get_as_text()
+	file.close()
+	if json.parse(text) != OK:
+		return null
+	return NeatGenome.deserialize(json.data, config, innovation_tracker)
+
+
+func _save_population_impl(path: String) -> void:
 	var genomes: Array = []
 	for genome in population:
 		genomes.append(genome.serialize())
@@ -343,24 +320,24 @@ func save_population(path: String) -> void:
 		file.close()
 
 
-func load_population(path: String) -> bool:
-	## Load population state from JSON file. Returns true on success.
+func _load_population_impl(path: String) -> bool:
 	if not FileAccess.file_exists(path):
 		return false
 	var file := FileAccess.open(path, FileAccess.READ)
 	if not file:
 		return false
 	var json := JSON.new()
-	if json.parse(file.get_as_text()) != OK:
-		file.close()
-		return false
+	var text := file.get_as_text()
 	file.close()
+	if json.parse(text) != OK:
+		return false
 	var data: Dictionary = json.data
 
 	population.clear()
 	for genome_data in data.get("genomes", []):
 		population.append(NeatGenome.deserialize(genome_data, config, innovation_tracker))
 
+	population_size = population.size()
 	generation = int(data.get("generation", 0))
 	best_fitness = float(data.get("best_fitness", 0.0))
 	all_time_best_fitness = float(data.get("all_time_best_fitness", 0.0))
@@ -368,21 +345,3 @@ func load_population(path: String) -> bool:
 	if atb_data and atb_data is Dictionary:
 		all_time_best_genome = NeatGenome.deserialize(atb_data, config, innovation_tracker)
 	return true
-
-
-func inject_immigrant(genome: NeatGenome) -> void:
-	## Replace worst individual with an immigrant genome.
-	if population.is_empty():
-		return
-	var worst_idx := 0
-	var worst_fit: float = population[0].fitness
-	for i in range(1, population.size()):
-		if population[i].fitness < worst_fit:
-			worst_fit = population[i].fitness
-			worst_idx = i
-	population[worst_idx] = genome
-
-
-func restore_backup() -> void:
-	## Stub for backup restore (NEAT uses speciation, not rollback).
-	pass
