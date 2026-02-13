@@ -437,8 +437,8 @@ func _toggle_network_visualizer() -> void:
 		# Try to get the current network being played
 		if training_manager.ai_controller and training_manager.ai_controller.network:
 			var net = training_manager.ai_controller.network
-			# Check if it's a NEAT network (has _connections property)
-			if net is NeatNetwork:
+			# Check if it's a NEAT network (duck-typed: has connection helpers)
+			if net and net.has_method("get_connection_count"):
 				# For NEAT, we'd need the genome too — for now just show the network
 				network_visualizer.set_neat_data(null, net)
 			else:
@@ -938,7 +938,16 @@ func setup_training_manager() -> void:
 
 # Input handling state now managed by TrainingInputHandler
 
-# Key press handling now managed by TrainingInputHandler
+var _pressed_keys: Dictionary = {}
+
+
+func _key_just_pressed(key_name: String) -> bool:
+	if _pressed_keys.get(key_name, false):
+		return false  # Already pressed
+	_pressed_keys[key_name] = true
+	# Reset after a short delay
+	get_tree().create_timer(0.3).timeout.connect(func(): _pressed_keys[key_name] = false)
+	return true
 
 
 # AI status display now handled by UIManager
