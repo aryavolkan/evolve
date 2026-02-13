@@ -1,22 +1,13 @@
-extends RefCounted
+extends "res://ai/evolution_base.gd"
 
 ## Manages a population of neural networks and evolves them.
 ## Supports single-objective (fitness-proportionate with elitism) or
 ## multi-objective NSGA-II selection (3 objectives: survival, kills, powerups).
 
-signal generation_complete(generation: int, best_fitness: float, avg_fitness: float, min_fitness: float)
-
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 const NSGA2 = preload("res://ai/nsga2.gd")
 
-var population: Array = []
-var fitness_scores: PackedFloat32Array
-var generation: int = 0
-
 # NSGA-II multi-objective mode
-var use_nsga2: bool = false
-
-# Elman recurrent memory
 var use_memory: bool = false
 var objective_scores: Array = []  # Array of Vector3 per individual (survival, kills, powerups)
 var pareto_front: Array = []  # Current generation's Pareto front [{index, objectives}]
@@ -24,21 +15,8 @@ var last_hypervolume: float = 0.0  # For stagnation detection in NSGA-II mode
 var _last_num_fronts: int = 0  # Cached front count from last evolve
 
 # Evolution parameters
-var population_size: int
 var elite_count: int
-var mutation_rate: float
-var mutation_strength: float
 var crossover_rate: float
-
-# Base parameters (for adaptive mutation reset)
-var base_mutation_rate: float
-var base_mutation_strength: float
-
-# Adaptive mutation tracking
-var stagnant_generations: int = 0
-var last_best_fitness: float = 0.0
-const STAGNATION_THRESHOLD: int = 3  # Generations without improvement to trigger adaptation
-const MAX_MUTATION_BOOST: float = 3.0  # Maximum multiplier for mutation
 
 # Network architecture
 var input_size: int
@@ -47,22 +25,7 @@ var output_size: int
 
 # Best network tracking
 var best_network = null
-var best_fitness: float = 0.0
 var all_time_best_network = null
-var all_time_best_fitness: float = 0.0
-
-# Cached stats from last completed generation (survives _reset_scores)
-var _last_min_fitness: float = 0.0
-var _last_avg_fitness: float = 0.0
-var _last_max_fitness: float = 0.0
-
-# Lineage tracking (optional, set externally)
-var lineage: RefCounted = null
-var _lineage_ids: PackedInt32Array
-
-# Backup for generation rollback
-var backup_population: Array = []
-var backup_generation: int = 0
 
 
 func _init(
@@ -75,23 +38,17 @@ func _init(
 	p_mutation_strength: float = 0.09,
 	p_crossover_rate: float = 0.73
 ) -> void:
-	population_size = p_population_size
+	super._init(p_population_size, p_mutation_rate, p_mutation_strength)
 	input_size = p_input_size
 	hidden_size = p_hidden_size
 	output_size = p_output_size
 	elite_count = p_elite_count
-	mutation_rate = p_mutation_rate
-	mutation_strength = p_mutation_strength
 	crossover_rate = p_crossover_rate
 
-	# Save base parameters for adaptive mutation
-	base_mutation_rate = p_mutation_rate
-	base_mutation_strength = p_mutation_strength
-
-	fitness_scores.resize(population_size)
-	objective_scores.resize(population_size)
-	for i in population_size:
+	objective_scores.resize(p_population_size)
+	for i in p_population_size:
 		objective_scores[i] = Vector3.ZERO
+
 	initialize_population()
 
 
@@ -109,23 +66,8 @@ func initialize_population() -> void:
 		var net = NeuralNetworkScript.new(input_size, hidden_size, output_size)
 		population.append(net)
 	generation = 0
-	_seed_lineage()
-
-
-func _seed_lineage() -> void:
-	## Register initial population with lineage tracker if set.
-	if lineage:
-		var ids = lineage.record_seed(0, population_size)
-		_lineage_ids.resize(population_size)
-		for i in population_size:
-			_lineage_ids[i] = ids[i]
-
-
-func set_fitness(index: int, fitness: float) -> void:
-	## Set the fitness score for a specific individual.
-	fitness_scores[index] = fitness
-	if lineage and index < _lineage_ids.size():
-		lineage.update_fitness(_lineage_ids[index], fitness)
+	seed_lineage(population_size)
+	_reset_scores()
 
 
 func set_objectives(index: int, objectives: Vector3) -> void:
@@ -133,9 +75,7 @@ func set_objectives(index: int, objectives: Vector3) -> void:
 	## Also sets scalar fitness as the sum for backward compatibility.
 	objective_scores[index] = objectives
 	var total: float = objectives.x + objectives.y + objectives.z
-	fitness_scores[index] = total
-	if lineage and index < _lineage_ids.size():
-		lineage.update_fitness(_lineage_ids[index], total)
+	super.set_fitness(index, total)
 
 
 func get_objectives(index: int) -> Vector3:
@@ -146,27 +86,6 @@ func get_objectives(index: int) -> Vector3:
 func get_individual(index: int):
 	## Get a network from the population.
 	return population[index]
-
-
-func save_backup() -> void:
-	## Save current population state before evolving.
-	backup_population.clear()
-	for net in population:
-		backup_population.append(net.clone())
-	backup_generation = generation
-
-
-func restore_backup() -> void:
-	## Restore population from backup (for re-running a generation).
-	if backup_population.is_empty():
-		return
-	population.clear()
-	for net in backup_population:
-		population.append(net.clone())
-	generation = backup_generation
-	# Reset fitness scores
-	for i in population_size:
-		fitness_scores[i] = 0.0
 
 
 func evolve() -> void:
@@ -185,6 +104,8 @@ func evolve() -> void:
 
 func _evolve_single_objective() -> void:
 	## Original single-objective evolution with elitism and tournament selection.
+	if population_size == 0:
+		return
 
 	# Find best performers
 	var indexed_fitness: Array = []
@@ -207,25 +128,11 @@ func _evolve_single_objective() -> void:
 	for i in population_size:
 		total_fitness += fitness_scores[i]
 		min_fitness = minf(min_fitness, fitness_scores[i])
-	var avg_fitness := total_fitness / population_size
+	var avg_fitness := total_fitness / population_size if population_size > 0 else 0.0
 
-	# Cache for get_stats() (survives _reset_scores)
-	_last_min_fitness = min_fitness
-	_last_avg_fitness = avg_fitness
-	_last_max_fitness = best_fitness
-
-	# Adaptive mutation: increase mutation when stagnating
-	if best_fitness > last_best_fitness * 1.01:  # 1% improvement threshold
-		stagnant_generations = 0
-		mutation_rate = base_mutation_rate
-		mutation_strength = base_mutation_strength
-	else:
-		stagnant_generations += 1
-
-	last_best_fitness = best_fitness
-
-	# Boost mutation if stagnating
-	_apply_adaptive_mutation()
+	cache_stats(min_fitness, avg_fitness, best_fitness)
+	track_stagnation(best_fitness)
+	apply_adaptive_mutation()
 
 	# Create new population
 	var new_population: Array = []
@@ -237,20 +144,32 @@ func _evolve_single_objective() -> void:
 	var old_lid := _lineage_ids.duplicate() if lineage else PackedInt32Array()
 
 	# Elitism: keep top performers unchanged
-	for i in elite_count:
-		var elite = population[indexed_fitness[i].index].clone()
+	var elite_indices := get_elite_indices(indexed_fitness, elite_count)
+	for i in elite_indices.size():
+		var elite_idx: int = elite_indices[i]
+		var elite = population[elite_idx].clone()
 		new_population.append(elite)
 		if lineage:
-			var src_idx: int = indexed_fitness[i].index
-			new_lineage_ids[i] = lineage.record_birth(generation + 1, old_lid[src_idx] if src_idx < old_lid.size() else -1, -1, indexed_fitness[i].fitness, "elite")
+			var src_idx: int = elite_idx
+			new_lineage_ids[i] = lineage.record_birth(
+				generation + 1,
+				old_lid[src_idx] if src_idx < old_lid.size() else -1,
+				-1,
+				indexed_fitness[i].fitness,
+				"elite"
+			)
 
 	# Fill rest with offspring
 	while new_population.size() < population_size:
-		var parent_a_idx: int = _select_parent_index(indexed_fitness)
+		var parent_a_idx: int = tournament_select(indexed_fitness)
+		if parent_a_idx == -1:
+			break
 		var child
 
 		if randf() < crossover_rate:
-			var parent_b_idx: int = _select_parent_index(indexed_fitness)
+			var parent_b_idx: int = tournament_select(indexed_fitness)
+			if parent_b_idx == -1:
+				parent_b_idx = parent_a_idx
 			child = population[parent_a_idx].crossover_with(population[parent_b_idx])
 			if lineage:
 				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
@@ -279,6 +198,8 @@ func _evolve_single_objective() -> void:
 func _evolve_nsga2() -> void:
 	## NSGA-II multi-objective evolution.
 	## Selection based on Pareto dominance and crowding distance.
+	if population_size == 0:
+		return
 
 	# Non-dominated sorting
 	var fronts := NSGA2.non_dominated_sort(objective_scores)
@@ -307,10 +228,7 @@ func _evolve_nsga2() -> void:
 
 	var avg_fitness := total_fitness / population_size
 
-	# Cache for get_stats() (survives _reset_scores)
-	_last_min_fitness = min_fitness
-	_last_avg_fitness = avg_fitness
-	_last_max_fitness = best_fitness
+	cache_stats(min_fitness, avg_fitness, best_fitness)
 
 	# Adaptive mutation using hypervolume for stagnation detection
 	var hv := _compute_hypervolume()
@@ -322,7 +240,7 @@ func _evolve_nsga2() -> void:
 		stagnant_generations += 1
 	last_hypervolume = hv
 
-	_apply_adaptive_mutation()
+	apply_adaptive_mutation()
 
 	# Build crowding distance map for tournament selection
 	var crowding_map: Dictionary = {}
@@ -352,7 +270,13 @@ func _evolve_nsga2() -> void:
 	for idx in elite_indices:
 		new_population.append(population[idx].clone())
 		if lineage:
-			new_lineage_ids[new_population.size() - 1] = lineage.record_birth(generation + 1, old_lid[idx] if idx < old_lid.size() else -1, -1, fitness_scores[idx], "elite")
+			new_lineage_ids[new_population.size() - 1] = lineage.record_birth(
+				generation + 1,
+				old_lid[idx] if idx < old_lid.size() else -1,
+				-1,
+				fitness_scores[idx],
+				"elite"
+			)
 
 	# Fill rest with offspring via NSGA-II tournament selection
 	while new_population.size() < population_size:
@@ -386,22 +310,6 @@ func _evolve_nsga2() -> void:
 	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
 
 
-func _apply_adaptive_mutation() -> void:
-	## Boost mutation rate when stagnating.
-	if stagnant_generations >= STAGNATION_THRESHOLD:
-		var mutation_boost := minf(1.0 + (stagnant_generations - STAGNATION_THRESHOLD + 1) * 0.5, MAX_MUTATION_BOOST)
-		mutation_rate = minf(base_mutation_rate * mutation_boost, 0.5)
-		mutation_strength = base_mutation_strength * mutation_boost
-		print("  Adaptive mutation: %.0fx boost (stagnant %d gens)" % [mutation_boost, stagnant_generations])
-
-
-func _reset_scores() -> void:
-	## Reset all fitness and objective scores.
-	for i in population_size:
-		fitness_scores[i] = 0.0
-		objective_scores[i] = Vector3.ZERO
-
-
 func _compute_hypervolume() -> float:
 	## Compute 2D hypervolume (survival vs kills) for stagnation tracking.
 	if pareto_front.is_empty():
@@ -413,24 +321,10 @@ func _compute_hypervolume() -> float:
 	return NSGA2.hypervolume_2d(front_2d, Vector2.ZERO)
 
 
-func _select_parent_index(indexed_fitness: Array) -> int:
-	## Tournament selection: pick best of 3 random individuals. Returns population index.
-	var tournament_size := 3
-	var best_idx := -1
-	var best_fit := -INF
-
-	for i in tournament_size:
-		var candidate = indexed_fitness[randi() % indexed_fitness.size()]
-		if candidate.fitness > best_fit:
-			best_fit = candidate.fitness
-			best_idx = candidate.index
-
-	return best_idx
-
-
 func select_parent(indexed_fitness: Array):
 	## Tournament selection: pick best of 3 random individuals.
-	return population[_select_parent_index(indexed_fitness)]
+	var idx := tournament_select(indexed_fitness)
+	return population[idx] if idx >= 0 else null
 
 
 func get_best_network():
@@ -443,24 +337,6 @@ func get_all_time_best():
 	return all_time_best_network
 
 
-func get_generation() -> int:
-	return generation
-
-
-func get_best_fitness() -> float:
-	return best_fitness
-
-
-func get_all_time_best_fitness() -> float:
-	return all_time_best_fitness
-
-
-func save_best(path: String) -> void:
-	## Save the all-time best network.
-	if all_time_best_network:
-		all_time_best_network.save_to_file(path)
-
-
 func save_generation_best(base_path: String) -> void:
 	## Save the best network for the current generation.
 	## Creates files like user://gen_001.nn, user://gen_002.nn, etc.
@@ -469,16 +345,43 @@ func save_generation_best(base_path: String) -> void:
 		best_network.save_to_file(gen_path)
 
 
-func load_best(path: String) -> void:
-	## Load a network and set it as the best.
+func _get_additional_stats() -> Dictionary:
+	var extra := {}
+	if use_nsga2:
+		extra["pareto_front_size"] = pareto_front.size()
+		extra["hypervolume"] = last_hypervolume
+		extra["num_fronts"] = _last_num_fronts
+	return extra
+
+
+func _reset_scores() -> void:
+	super._reset_scores()
+	for i in objective_scores.size():
+		objective_scores[i] = Vector3.ZERO
+
+
+func _clone_individual(individual):
+	return individual.clone()
+
+
+func _get_all_time_best_entity():
+	return all_time_best_network
+
+
+func _set_all_time_best_entity(entity) -> void:
+	all_time_best_network = entity
+
+
+func _save_entity(path: String, entity) -> void:
+	entity.save_to_file(path)
+
+
+func _load_entity(path: String):
 	var net = NeuralNetworkScript.load_from_file(path)
-	if net:
-		all_time_best_network = net
-		all_time_best_fitness = 0.0  # Unknown fitness
+	return net
 
 
-func save_population(path: String) -> void:
-	## Save entire population state.
+func _save_population_impl(path: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if not file:
 		return
@@ -506,8 +409,7 @@ func save_population(path: String) -> void:
 	file.close()
 
 
-func load_population(path: String) -> bool:
-	## Load population state.
+func _load_population_impl(path: String) -> bool:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if not file:
 		return false
@@ -522,7 +424,7 @@ func load_population(path: String) -> bool:
 		return false  # Population size mismatch
 
 	# Load each network
-	var weight_count: int = population[0].get_weight_count()
+	var weight_count: int = population[0].get_weight_count() if not population.is_empty() else 0
 	for i in population_size:
 		var weights := PackedFloat32Array()
 		weights.resize(weight_count)
@@ -545,46 +447,3 @@ func load_population(path: String) -> bool:
 
 	file.close()
 	return true
-
-
-func get_stats() -> Dictionary:
-	## Get current evolution statistics.
-	## Computes from live scores if available, otherwise uses cached values
-	## from last evolve() (which survive _reset_scores()).
-	var min_fit := _last_min_fitness
-	var max_fit := _last_max_fitness
-	var avg_fit := _last_avg_fitness
-
-	# Check if live scores are available (any non-zero means not yet reset)
-	var has_live_scores := false
-	for f in fitness_scores:
-		if f != 0.0:
-			has_live_scores = true
-			break
-
-	if has_live_scores:
-		min_fit = INF
-		max_fit = -INF
-		var total := 0.0
-		for f in fitness_scores:
-			min_fit = minf(min_fit, f)
-			max_fit = maxf(max_fit, f)
-			total += f
-		avg_fit = total / population_size if population_size > 0 else 0.0
-
-	var stats := {
-		"generation": generation,
-		"population_size": population_size,
-		"best_fitness": best_fitness,
-		"all_time_best": all_time_best_fitness,
-		"current_min": min_fit,
-		"current_max": max_fit,
-		"current_avg": avg_fit,
-	}
-
-	if use_nsga2:
-		stats["pareto_front_size"] = pareto_front.size()
-		stats["hypervolume"] = last_hypervolume
-		stats["num_fronts"] = _last_num_fronts
-
-	return stats
