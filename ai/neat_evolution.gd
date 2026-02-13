@@ -194,6 +194,20 @@ func evolve() -> void:
 			child.mutate(config)
 			new_population.append(child)
 
+	# Compute average and min fitness from OLD population (before replacement)
+	var avg_fitness: float = 0.0
+	var min_fitness: float = INF
+	for genome in population:
+		avg_fitness += genome.fitness
+		min_fitness = minf(min_fitness, genome.fitness)
+	avg_fitness /= population.size() if not population.is_empty() else 1.0
+	if min_fitness == INF:
+		min_fitness = 0.0
+
+	# Cache for get_stats()
+	_last_min_fitness = min_fitness
+	_last_avg_fitness = avg_fitness
+
 	# Trim or pad to exact population size
 	while new_population.size() > config.population_size:
 		new_population.pop_back()
@@ -217,20 +231,6 @@ func evolve() -> void:
 
 	# 6. Adjust compatibility threshold
 	NeatSpecies.adjust_compatibility_threshold(species_list, config)
-
-	# Compute average and min fitness for signal
-	var avg_fitness: float = 0.0
-	var min_fitness: float = INF
-	for genome in population:
-		avg_fitness += genome.fitness
-		min_fitness = minf(min_fitness, genome.fitness)
-	avg_fitness /= population.size() if not population.is_empty() else 1.0
-	if min_fitness == INF:
-		min_fitness = 0.0
-
-	# Cache for get_stats() (genome.fitness gets overwritten next generation)
-	_last_min_fitness = min_fitness
-	_last_avg_fitness = avg_fitness
 
 	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
 
