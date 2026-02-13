@@ -10,12 +10,12 @@ var score_from_powerups: float = 0.0
 var entering_name: bool = false
 var next_spawn_score: float = 50.0
 var next_powerup_score: float = 30.0
-var enemy_scene: PackedScene = preload("res://enemy.tscn")
-var powerup_scene: PackedScene = preload("res://powerup.tscn")
-var obstacle_scene: PackedScene = preload("res://obstacle.tscn")
 var floating_text_scene: PackedScene = preload("res://floating_text.tscn")
-var high_scores: Array = []
 var spawned_obstacle_positions: Array = []
+
+# Extracted module managers
+var spawn_mgr  # SpawnManager
+var score_mgr  # ScoreManager
 
 # AI Training
 var training_manager: Node
@@ -32,14 +32,6 @@ var educational_overlay: Control = null
 var phylogenetic_tree: Control = null
 var game_started: bool = false  # False until player selects mode from title screen
 
-# Bonus points - kills/powerups dominate, survival is minor
-const POWERUP_COLLECT_BONUS: int = 5000    # Massive incentive to collect powerups
-const SCREEN_CLEAR_BONUS: int = 8000       # Huge reward for screen clear
-const KILL_MULTIPLIER: int = 1000          # Chess values (1-9 -> 1000-9000)
-const SURVIVAL_MILESTONE_BONUS: int = 100  # Small milestone bonus
-const SHOOT_TOWARD_ENEMY_BONUS: int = 50   # Reward for shooting toward enemies
-const SHOOT_HIT_BONUS: int = 200           # Bonus when projectile is near enemy
-
 # Chess piece types for spawning
 enum ChessPiece { PAWN, KNIGHT, BISHOP, ROOK, QUEEN }
 
@@ -47,19 +39,9 @@ const POWERUP_DURATION: float = 5.0
 const SLOW_MULTIPLIER: float = 0.5
 const RESPAWN_INVINCIBILITY: float = 2.0
 
-const MAX_HIGH_SCORES: int = 5
-const SAVE_PATH: String = "user://highscores.save"
-
 # Arena configuration - large square arena
 const ARENA_WIDTH: float = 3840.0   # 3x viewport width
 const ARENA_HEIGHT: float = 3840.0  # Square arena
-const ARENA_WALL_THICKNESS: float = 40.0
-const ARENA_PADDING: float = 100.0  # Safe zone from walls for spawning
-
-# Permanent obstacle configuration
-const OBSTACLE_COUNT: int = 40      # More obstacles for larger arena
-const OBSTACLE_MIN_DISTANCE: float = 150.0  # Min distance between obstacles
-const OBSTACLE_PLAYER_SAFE_ZONE: float = 300.0  # Keep obstacles away from player spawn
 
 # Power-up limit
 const MAX_POWERUPS: int = 15  # Maximum power-ups on the map at once
@@ -85,7 +67,6 @@ const SCREEN_CLEAR_SPAWN_DELAY: float = 2.0  # No enemy spawns for 2 seconds aft
 # Survival milestone tracking
 var survival_time: float = 0.0
 var last_milestone: int = 0
-const MILESTONE_INTERVAL: float = 15.0  # Bonus every 15 seconds
 
 # Arena camera
 var arena_camera: Camera2D
@@ -131,6 +112,9 @@ func set_training_mode(enabled: bool, p_curriculum_config: Dictionary = {}) -> v
 	else:
 		effective_arena_width = ARENA_WIDTH
 		effective_arena_height = ARENA_HEIGHT
+	if spawn_mgr:
+		spawn_mgr.effective_arena_width = effective_arena_width
+		spawn_mgr.effective_arena_height = effective_arena_height
 
 var preset_powerup_spawns: Array = []  # [{time: float, pos: Vector2, type: int}, ...]
 
@@ -247,6 +231,14 @@ func _ready() -> void:
 	if DisplayServer.get_name() != "headless":
 		print("Evolve app started!")
 	get_tree().paused = false
+
+	# Initialize extracted managers
+	score_mgr = load("res://score_manager.gd").new()
+	spawn_mgr = load("res://spawn_manager.gd").new()
+	spawn_mgr.setup(self, player, rng)
+	spawn_mgr.effective_arena_width = effective_arena_width
+	spawn_mgr.effective_arena_height = effective_arena_height
+
 	player.hit.connect(_on_player_hit)
 	player.enemy_killed.connect(_on_enemy_killed)
 	player.powerup_timer_updated.connect(_on_powerup_timer_updated)
@@ -745,9 +737,9 @@ func _process(delta: float) -> void:
 
 	# Track survival time and award milestone bonuses
 	survival_time += delta
-	var current_milestone = int(survival_time / MILESTONE_INTERVAL)
+	var current_milestone = int(survival_time / score_mgr.MILESTONE_INTERVAL)
 	if current_milestone > last_milestone:
-		var bonus = SURVIVAL_MILESTONE_BONUS * current_milestone
+		var bonus = score_mgr.SURVIVAL_MILESTONE_BONUS * current_milestone
 		score += bonus
 		last_milestone = current_milestone
 
@@ -794,24 +786,7 @@ func get_difficulty_factor() -> float:
 
 func calculate_proximity_bonus(delta: float) -> float:
 	## Reward AI for being close to powerups (continuous shaping signal).
-	## Returns bonus points to add this frame.
-	var bonus := 0.0
-	var powerups = get_tree().get_nodes_in_group("powerup")
-	var nearest_dist := 99999.0
-
-	for powerup in powerups:
-		if not is_instance_valid(powerup) or powerup.get_parent() != self:
-			continue
-		var dist = player.position.distance_to(powerup.position)
-		nearest_dist = minf(nearest_dist, dist)
-
-	# Reward based on distance to NEAREST powerup (range 1500 for large arena)
-	if nearest_dist < 1500:
-		# Closer = more bonus (100 pts/sec at distance 0, scaling down)
-		var proximity_factor = 1.0 - (nearest_dist / 1500.0)
-		bonus = 100.0 * proximity_factor * delta
-
-	return bonus
+	return score_mgr.calculate_proximity_bonus(delta, player, self)
 
 func get_scaled_enemy_speed() -> float:
 	var factor = get_difficulty_factor()
@@ -822,155 +797,33 @@ func get_scaled_spawn_interval() -> float:
 	return lerpf(BASE_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, factor)
 
 func spawn_enemy() -> void:
-	var enemy = enemy_scene.instantiate()
-	enemy.speed = get_scaled_enemy_speed()
-
-	if training_mode and not curriculum_config.is_empty():
-		# Use curriculum-allowed enemy types
-		var allowed: Array = curriculum_config.get("enemy_types", [0])
-		enemy.type = allowed[rng.randi() % allowed.size()]
-	elif training_mode:
-		# Simplified: only pawns in training mode (no curriculum)
-		enemy.type = ChessPiece.PAWN
-	else:
-		# Chess piece type (weighted: pawns common, higher pieces rarer)
-		var type_roll = rng.randf()
-		var difficulty = get_difficulty_factor()
-
-		if type_roll < 0.5 - difficulty * 0.3:
-			enemy.type = ChessPiece.PAWN
-		elif type_roll < 0.7 - difficulty * 0.1:
-			enemy.type = ChessPiece.KNIGHT
-		elif type_roll < 0.85:
-			enemy.type = ChessPiece.BISHOP
-		elif type_roll < 0.95:
-			enemy.type = ChessPiece.ROOK
-		else:
-			enemy.type = ChessPiece.QUEEN
-
-	# Spawn at random position along arena edges
-	var pos = get_random_edge_spawn_position()
-	enemy.position = pos
-	enemy.rng = rng
-	add_child(enemy)
-
-	# Wire AI if co-evolution is active
-	if enemy_ai_network:
-		enemy.setup_ai(enemy_ai_network)
-
-	# Apply slow/freeze after adding to tree (so apply_type_config has run)
-	if freeze_active:
-		enemy.apply_freeze()
-	elif slow_active:
-		enemy.apply_slow(SLOW_MULTIPLIER)
+	spawn_mgr.spawn_enemy(training_mode, curriculum_config, get_difficulty_factor(), get_scaled_enemy_speed(), enemy_ai_network, freeze_active, slow_active)
 
 
 func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
 	## Spawn enemy at specific position with specific type (for preset events).
-	var enemy = enemy_scene.instantiate()
-	# Much slower enemies in training mode for easier learning
-	enemy.speed = get_scaled_enemy_speed() * (0.5 if training_mode else 1.0)
-	enemy.type = enemy_type  # 0=pawn, 1=knight, etc.
-	enemy.position = pos
-	enemy.rng = rng
-	add_child(enemy)
-
-	# Wire AI if co-evolution is active
-	if enemy_ai_network:
-		enemy.setup_ai(enemy_ai_network)
-
-	if freeze_active:
-		enemy.apply_freeze()
-	elif slow_active:
-		enemy.apply_slow(SLOW_MULTIPLIER)
+	spawn_mgr.spawn_enemy_at(pos, enemy_type, get_scaled_enemy_speed(), training_mode, enemy_ai_network, freeze_active, slow_active)
 
 
 func spawn_powerup_at(pos: Vector2, powerup_type: int) -> void:
 	## Spawn powerup at specific position with specific type (for preset events).
-	if count_local_powerups() >= MAX_POWERUPS:
-		return  # Don't exceed max powerups
-	var powerup = powerup_scene.instantiate()
-	powerup.position = pos
-	powerup.set_type(powerup_type)
-	powerup.collected.connect(_on_powerup_collected)
-	add_child(powerup)
+	spawn_mgr.spawn_powerup_at(pos, powerup_type, MAX_POWERUPS, _on_powerup_collected)
 
 
 func spawn_initial_enemies() -> void:
-	## Spawn initial enemies at the arena edges
-	var enemy_count = 3 if training_mode else 10  # Fewer enemies in training
-	for i in range(enemy_count):
-		var enemy = enemy_scene.instantiate()
-		enemy.speed = BASE_ENEMY_SPEED * (0.5 if training_mode else 1.0)  # Slower in training
-		enemy.type = ChessPiece.PAWN  # Start with pawns
-		enemy.position = get_random_edge_spawn_position()
-		enemy.rng = rng
-		add_child(enemy)
-		# Wire AI if co-evolution is active
-		if enemy_ai_network:
-			enemy.setup_ai(enemy_ai_network)
+	spawn_mgr.spawn_initial_enemies(training_mode, BASE_ENEMY_SPEED, enemy_ai_network)
 
 
 func count_local_powerups() -> int:
-	## Count powerups that are children of this scene (not global).
-	## This is needed for parallel training where multiple scenes share the tree.
-	var count = 0
-	for p in get_tree().get_nodes_in_group("powerup"):
-		if is_instance_valid(p) and not p.is_queued_for_deletion() and p.get_parent() == self:
-			count += 1
-	return count
+	return spawn_mgr.count_local_powerups()
 
 
 func spawn_powerup() -> bool:
-	## Returns true if a power-up was successfully spawned
-	# Check if we've reached the maximum number of power-ups (local only)
-	if count_local_powerups() >= MAX_POWERUPS:
-		return false  # Don't spawn more power-ups
+	return spawn_mgr.spawn_powerup(MAX_POWERUPS, _on_powerup_collected)
 
-	var powerup = powerup_scene.instantiate()
-
-	# Find a valid position not overlapping obstacles
-	var pos = find_valid_powerup_position()
-	if pos == Vector2.ZERO:
-		powerup.queue_free()
-		return false  # Couldn't find valid position
-
-	powerup.position = pos
-
-	# Random powerup type (10 types: 0-9)
-	var type_index = rng.randi() % 10
-	powerup.set_type(type_index)
-	powerup.collected.connect(_on_powerup_collected)
-	add_child(powerup)
-	return true
 
 func find_valid_powerup_position() -> Vector2:
-	const POWERUP_OBSTACLE_MIN_DIST: float = 80.0  # Obstacle size + buffer
-	const POWERUP_PLAYER_MIN_DIST: float = 150.0   # Not too close to player
-
-	for attempt in range(20):
-		# Random position within arena bounds
-		var pos = Vector2(
-			rng.randf_range(ARENA_PADDING, effective_arena_width - ARENA_PADDING),
-			rng.randf_range(ARENA_PADDING, effective_arena_height - ARENA_PADDING)
-		)
-
-		# Check distance from player (not too close, not too far)
-		var player_dist = pos.distance_to(player.position)
-		if player_dist < POWERUP_PLAYER_MIN_DIST:
-			continue
-
-		# Check distance from all obstacles
-		var valid = true
-		for obstacle_pos in spawned_obstacle_positions:
-			if pos.distance_to(obstacle_pos) < POWERUP_OBSTACLE_MIN_DIST:
-				valid = false
-				break
-
-		if valid:
-			return pos
-
-	return Vector2.ZERO  # Failed to find valid position
+	return spawn_mgr.find_valid_powerup_position()
 
 func _on_powerup_collected(type: String, collector: Node2D = null) -> void:
 	# Route to the collector; fallback to main player for backward compat
@@ -980,7 +833,7 @@ func _on_powerup_collected(type: String, collector: Node2D = null) -> void:
 
 	# Bonus for collecting powerup
 	var multiplier = 2 if double_points_active else 1
-	var bonus = POWERUP_COLLECT_BONUS * multiplier
+	var bonus = score_mgr.POWERUP_COLLECT_BONUS * multiplier
 	score += bonus
 	score_from_powerups += bonus
 	var bonus_text = "+%d" % bonus
@@ -1015,7 +868,7 @@ func _on_powerup_collected(type: String, collector: Node2D = null) -> void:
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	kills += 1
 	var multiplier = 2 if double_points_active else 1
-	var bonus = points * KILL_MULTIPLIER * multiplier
+	var bonus = points * score_mgr.KILL_MULTIPLIER * multiplier
 	score += bonus
 	score_from_kills += bonus
 	var bonus_text = "+%d" % bonus
@@ -1059,7 +912,7 @@ func _on_shot_fired(direction: Vector2) -> void:
 
 		# Reward if shooting toward a nearby enemy (within 45 degrees and 800 units)
 		if dot > 0.7 and dist < 800:
-			var bonus = SHOOT_TOWARD_ENEMY_BONUS
+			var bonus = score_mgr.SHOOT_TOWARD_ENEMY_BONUS
 			score += bonus
 			score_from_kills += bonus  # Count as kill-related
 			return  # Only reward once per shot
@@ -1078,12 +931,7 @@ func activate_slow_enemies() -> void:
 		get_tree().create_timer(POWERUP_DURATION).timeout.connect(end_slow_enemies)
 
 func get_local_enemies() -> Array:
-	## Get enemies that belong to this scene (not other parallel training scenes).
-	var local_enemies = []
-	for child in get_children():
-		if child.is_in_group("enemy"):
-			local_enemies.append(child)
-	return local_enemies
+	return spawn_mgr.get_local_enemies()
 
 
 func end_slow_enemies() -> void:
@@ -1134,14 +982,14 @@ func clear_all_enemies() -> void:
 	for enemy in local_enemies:
 		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
 			if enemy.has_method("get_point_value"):
-				total_points += enemy.get_point_value() * KILL_MULTIPLIER
+				total_points += enemy.get_point_value() * score_mgr.KILL_MULTIPLIER
 			else:
-				total_points += KILL_MULTIPLIER
+				total_points += score_mgr.KILL_MULTIPLIER
 			enemy.die()
 
 	# Bonus points for screen clear (scaled piece values + flat bonus)
 	if total_points > 0:
-		total_points += SCREEN_CLEAR_BONUS
+		total_points += score_mgr.SCREEN_CLEAR_BONUS
 		score += total_points
 		spawn_floating_text("+%d CLEAR!" % total_points, Color(1, 0.3, 0.3, 1), player.position + Vector2(0, -50))
 
@@ -1165,9 +1013,9 @@ func explode_nearby_enemies(center_pos: Vector2 = Vector2.ZERO) -> void:
 			var distance = center_pos.distance_to(enemy.position)
 			if distance <= BOMB_RADIUS:
 				if enemy.has_method("get_point_value"):
-					total_points += enemy.get_point_value() * KILL_MULTIPLIER
+					total_points += enemy.get_point_value() * score_mgr.KILL_MULTIPLIER
 				else:
-					total_points += KILL_MULTIPLIER
+					total_points += score_mgr.KILL_MULTIPLIER
 				killed_count += 1
 				enemy.die()
 
@@ -1224,32 +1072,15 @@ func _on_player_hit() -> void:
 		var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
 		player.respawn(arena_center, RESPAWN_INVINCIBILITY)
 
-# High score functions
+# High score functions (delegated to ScoreManager)
 func load_high_scores() -> void:
-	if FileAccess.file_exists(SAVE_PATH):
-		var file = FileAccess.open(SAVE_PATH, FileAccess.READ)
-		var data = file.get_var()
-		if data is Array:
-			high_scores = data
-		file.close()
-
-func save_high_scores() -> void:
-	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	file.store_var(high_scores)
-	file.close()
+	score_mgr.load_high_scores()
 
 func is_high_score(new_score: int) -> bool:
-	if high_scores.size() < MAX_HIGH_SCORES:
-		return true
-	return new_score > high_scores[-1]["score"]
+	return score_mgr.is_high_score(new_score)
 
 func submit_high_score(player_name: String) -> void:
-	var entry = { "name": player_name.substr(0, 10), "score": int(score) }
-	high_scores.append(entry)
-	high_scores.sort_custom(func(a, b): return a["score"] > b["score"])
-	if high_scores.size() > MAX_HIGH_SCORES:
-		high_scores.resize(MAX_HIGH_SCORES)
-	save_high_scores()
+	score_mgr.submit_high_score(player_name, int(score))
 
 	entering_name = false
 	name_entry.visible = false
@@ -1265,214 +1096,36 @@ func submit_high_score(player_name: String) -> void:
 		game_over_label.visible = true
 
 func update_scoreboard_display() -> void:
-	var text = "HIGH SCORES\n"
-	for i in range(high_scores.size()):
-		text += "%d. %s - %d\n" % [i + 1, high_scores[i]["name"], high_scores[i]["score"]]
-	for i in range(high_scores.size(), MAX_HIGH_SCORES):
-		text += "%d. ---\n" % [i + 1]
-	scoreboard_label.text = text
+	scoreboard_label.text = score_mgr.get_scoreboard_text()
 
-# Arena setup functions
+var _ArenaSetup = preload("res://arena_setup.gd")
+
+# Arena setup functions (delegated to ArenaSetup)
 func setup_arena() -> void:
-	## Create the arena with walls and a static camera
-	var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
-
-	# Disable player's camera (we use arena camera instead)
-	var player_camera = player.get_node_or_null("Camera2D")
-	if player_camera:
-		player_camera.enabled = false
-
-	# Position player at arena center
-	player.position = arena_center
-
-	# Create arena walls (visual boundary)
-	create_arena_walls()
-
-	# Draw arena floor (visual background with grid)
-	create_arena_floor()
-
-	# Create static camera centered on arena
-	arena_camera = Camera2D.new()
-	arena_camera.position = arena_center
-	add_child(arena_camera)
-	arena_camera.make_current()
-
-	# Update camera zoom to fit current viewport
+	var arena_setup_mgr = _ArenaSetup.new()
+	arena_camera = arena_setup_mgr.setup_arena(self, player, effective_arena_width, effective_arena_height)
 	update_camera_zoom()
-
-	# Connect to viewport size changes
 	get_tree().root.size_changed.connect(_on_viewport_size_changed)
 
 
 func _on_viewport_size_changed() -> void:
-	## Called when the window is resized
 	update_camera_zoom()
 
 
 func update_camera_zoom() -> void:
-	## Update camera zoom to fit arena in current viewport
-	if not arena_camera:
-		return
-
-	var viewport_size = get_viewport().get_visible_rect().size
-	var zoom_x = viewport_size.x / effective_arena_width
-	var zoom_y = viewport_size.y / effective_arena_height
-	var zoom_level = min(zoom_x, zoom_y)  # Use smaller to fit both dimensions
-	arena_camera.zoom = Vector2(zoom_level, zoom_level)
-
-
-func create_arena_walls() -> void:
-	## Create visible border walls inside the arena boundary
-	var wall_thickness = ARENA_WALL_THICKNESS
-	var wall_positions = [
-		# Top wall - inside the arena, at y = wall_thickness/2
-		{"pos": Vector2(effective_arena_width / 2, wall_thickness / 2),
-		 "size": Vector2(effective_arena_width, wall_thickness)},
-		# Bottom wall - inside the arena
-		{"pos": Vector2(effective_arena_width / 2, effective_arena_height - wall_thickness / 2),
-		 "size": Vector2(effective_arena_width, wall_thickness)},
-		# Left wall - inside the arena
-		{"pos": Vector2(wall_thickness / 2, effective_arena_height / 2),
-		 "size": Vector2(wall_thickness, effective_arena_height - wall_thickness * 2)},
-		# Right wall - inside the arena
-		{"pos": Vector2(effective_arena_width - wall_thickness / 2, effective_arena_height / 2),
-		 "size": Vector2(wall_thickness, effective_arena_height - wall_thickness * 2)}
-	]
-
-	for wall_data in wall_positions:
-		var wall = StaticBody2D.new()
-		wall.position = wall_data.pos
-		wall.collision_layer = 4  # Same as obstacles
-		wall.collision_mask = 0
-
-		# Collision shape - centered at wall position
-		var collision = CollisionShape2D.new()
-		collision.position = Vector2.ZERO  # Explicitly centered
-		var shape = RectangleShape2D.new()
-		shape.size = wall_data.size
-		collision.shape = shape
-		wall.add_child(collision)
-
-		# Visual representation - must match collision exactly
-		# ColorRect uses top-left positioning, so offset by half size to center
-		var rect = ColorRect.new()
-		rect.size = wall_data.size
-		rect.position = -wall_data.size / 2  # Center the rect on the wall position
-		rect.color = Color(0.25, 0.3, 0.45, 1)  # Blue-gray
-		rect.z_index = 5  # Above floor
-		wall.add_child(rect)
-
-		# Inner highlight for visibility
-		var inner_size = wall_data.size - Vector2(6, 6)
-		if inner_size.x > 0 and inner_size.y > 0:
-			var highlight = ColorRect.new()
-			highlight.size = inner_size
-			highlight.position = -inner_size / 2  # Also centered
-			highlight.color = Color(0.35, 0.4, 0.55, 1)  # Brighter inner
-			highlight.z_index = 6
-			wall.add_child(highlight)
-
-		wall.add_to_group("wall")
-		add_child(wall)
-
-
-func create_arena_floor() -> void:
-	## Draw the arena floor as a visual background
-	var floor_rect = ColorRect.new()
-	floor_rect.position = Vector2(0, 0)
-	floor_rect.size = Vector2(effective_arena_width, effective_arena_height)
-	floor_rect.color = Color(0.08, 0.08, 0.12, 1)  # Very dark blue
-	floor_rect.z_index = -10
-	add_child(floor_rect)
-
-	# Add grid lines for visual reference
-	var grid_size = 160.0  # Larger grid for bigger arena
-	for x in range(int(effective_arena_width / grid_size) + 1):
-		var line = ColorRect.new()
-		line.position = Vector2(x * grid_size - 1, 0)
-		line.size = Vector2(2, effective_arena_height)
-		line.color = Color(0.12, 0.12, 0.18, 0.5)
-		line.z_index = -9
-		add_child(line)
-
-	for y in range(int(effective_arena_height / grid_size) + 1):
-		var line = ColorRect.new()
-		line.position = Vector2(0, y * grid_size - 1)
-		line.size = Vector2(effective_arena_width, 2)
-		line.color = Color(0.12, 0.12, 0.18, 0.5)
-		line.z_index = -9
-		add_child(line)
+	_ArenaSetup.update_camera_zoom(arena_camera, effective_arena_width, effective_arena_height)
 
 
 func spawn_arena_obstacles() -> void:
-	## Spawn permanent obstacles throughout the arena
-	spawned_obstacle_positions.clear()
-
-	# Use preset positions if available (for deterministic training)
-	if use_preset_events and preset_obstacles.size() > 0:
-		for obstacle_data in preset_obstacles:
-			var obstacle = obstacle_scene.instantiate()
-			obstacle.position = obstacle_data.pos
-			add_child(obstacle)
-			spawned_obstacle_positions.append(obstacle_data.pos)
-		return
-
-	# Generate random positions
-	var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
-	for i in range(OBSTACLE_COUNT):
-		var placed = false
-		for attempt in range(50):
-			var pos = Vector2(
-				rng.randf_range(ARENA_PADDING, effective_arena_width - ARENA_PADDING),
-				rng.randf_range(ARENA_PADDING, effective_arena_height - ARENA_PADDING)
-			)
-
-			if pos.distance_to(arena_center) < OBSTACLE_PLAYER_SAFE_ZONE:
-				continue
-
-			var too_close = false
-			for existing_pos in spawned_obstacle_positions:
-				if pos.distance_to(existing_pos) < OBSTACLE_MIN_DISTANCE:
-					too_close = true
-					break
-
-			if not too_close:
-				var obstacle = obstacle_scene.instantiate()
-				obstacle.position = pos
-				add_child(obstacle)
-				spawned_obstacle_positions.append(pos)
-				placed = true
-				break
-
-		if not placed:
-			print("Warning: Could not place obstacle %d" % i)
+	spawn_mgr.spawn_arena_obstacles(use_preset_events, preset_obstacles)
 
 
 func get_random_edge_spawn_position() -> Vector2:
-	## Get a random position along the arena edges for enemy spawning
-	var edge = rng.randi() % 4
-	var pos: Vector2
-
-	match edge:
-		0:  # Top edge
-			pos = Vector2(rng.randf_range(ARENA_PADDING, effective_arena_width - ARENA_PADDING), ARENA_PADDING)
-		1:  # Bottom edge
-			pos = Vector2(rng.randf_range(ARENA_PADDING, effective_arena_width - ARENA_PADDING), effective_arena_height - ARENA_PADDING)
-		2:  # Left edge
-			pos = Vector2(ARENA_PADDING, rng.randf_range(ARENA_PADDING, effective_arena_height - ARENA_PADDING))
-		3:  # Right edge
-			pos = Vector2(effective_arena_width - ARENA_PADDING, rng.randf_range(ARENA_PADDING, effective_arena_height - ARENA_PADDING))
-
-	return pos
+	return spawn_mgr.get_random_edge_spawn_position()
 
 
 func get_arena_bounds() -> Rect2:
-	## Return the playable arena bounds (inside the walls)
-	## Player collision should stop at the wall inner edge
-	var wall_inner = ARENA_WALL_THICKNESS  # Where walls end
-	return Rect2(wall_inner, wall_inner,
-				 effective_arena_width - wall_inner * 2,
-				 effective_arena_height - wall_inner * 2)
+	return _ArenaSetup.get_arena_bounds(effective_arena_width, effective_arena_height)
 
 
 # AI Training functions
