@@ -51,6 +51,10 @@ var best_fitness: float = 0.0
 var all_time_best_network = null
 var all_time_best_fitness: float = 0.0
 
+# Lineage tracking (optional, set externally)
+var lineage: RefCounted = null
+var _lineage_ids: PackedInt32Array
+
 # Backup for generation rollback
 var backup_population: Array = []
 var backup_generation: int = 0
@@ -100,18 +104,33 @@ func initialize_population() -> void:
 		var net = NeuralNetworkScript.new(input_size, hidden_size, output_size)
 		population.append(net)
 	generation = 0
+	_seed_lineage()
+
+
+func _seed_lineage() -> void:
+	## Register initial population with lineage tracker if set.
+	if lineage:
+		var ids = lineage.record_seed(0, population_size)
+		_lineage_ids.resize(population_size)
+		for i in population_size:
+			_lineage_ids[i] = ids[i]
 
 
 func set_fitness(index: int, fitness: float) -> void:
 	## Set the fitness score for a specific individual.
 	fitness_scores[index] = fitness
+	if lineage and index < _lineage_ids.size():
+		lineage.update_fitness(_lineage_ids[index], fitness)
 
 
 func set_objectives(index: int, objectives: Vector3) -> void:
 	## Set the 3 objective scores for an individual (survival, kills, powerups).
 	## Also sets scalar fitness as the sum for backward compatibility.
 	objective_scores[index] = objectives
-	fitness_scores[index] = objectives.x + objectives.y + objectives.z
+	var total: float = objectives.x + objectives.y + objectives.z
+	fitness_scores[index] = total
+	if lineage and index < _lineage_ids.size():
+		lineage.update_fitness(_lineage_ids[index], total)
 
 
 func get_objectives(index: int) -> Vector3:
@@ -200,27 +219,45 @@ func _evolve_single_objective() -> void:
 
 	# Create new population
 	var new_population: Array = []
+	var new_lineage_ids: PackedInt32Array
+	if lineage:
+		new_lineage_ids.resize(population_size)
+
+	# Save old lineage ID mapping before building new population
+	var old_lid := _lineage_ids.duplicate() if lineage else PackedInt32Array()
 
 	# Elitism: keep top performers unchanged
 	for i in elite_count:
 		var elite = population[indexed_fitness[i].index].clone()
 		new_population.append(elite)
+		if lineage:
+			var src_idx: int = indexed_fitness[i].index
+			new_lineage_ids[i] = lineage.record_birth(generation + 1, old_lid[src_idx] if src_idx < old_lid.size() else -1, -1, indexed_fitness[i].fitness, "elite")
 
 	# Fill rest with offspring
 	while new_population.size() < population_size:
-		var parent_a = select_parent(indexed_fitness)
+		var parent_a_idx: int = _select_parent_index(indexed_fitness)
 		var child
 
 		if randf() < crossover_rate:
-			var parent_b = select_parent(indexed_fitness)
-			child = parent_a.crossover_with(parent_b)
+			var parent_b_idx: int = _select_parent_index(indexed_fitness)
+			child = population[parent_a_idx].crossover_with(population[parent_b_idx])
+			if lineage:
+				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
+				var lid_b: int = old_lid[parent_b_idx] if parent_b_idx < old_lid.size() else -1
+				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
 		else:
-			child = parent_a.clone()
+			child = population[parent_a_idx].clone()
+			if lineage:
+				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
+				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
 
 		child.mutate(mutation_rate, mutation_strength)
 		new_population.append(child)
 
 	population = new_population
+	if lineage:
+		_lineage_ids = new_lineage_ids
 	generation += 1
 
 	# Reset fitness scores
@@ -284,6 +321,10 @@ func _evolve_nsga2() -> void:
 
 	# Create new population using selected individuals as parents
 	var new_population: Array = []
+	var new_lineage_ids: PackedInt32Array
+	if lineage:
+		new_lineage_ids.resize(population_size)
+	var old_lid := _lineage_ids.duplicate() if lineage else PackedInt32Array()
 
 	# Elitism: keep front 0 individuals (up to elite_count)
 	var elite_indices: Array = []
@@ -295,6 +336,8 @@ func _evolve_nsga2() -> void:
 
 	for idx in elite_indices:
 		new_population.append(population[idx].clone())
+		if lineage:
+			new_lineage_ids[new_population.size() - 1] = lineage.record_birth(generation + 1, old_lid[idx] if idx < old_lid.size() else -1, -1, fitness_scores[idx], "elite")
 
 	# Fill rest with offspring via NSGA-II tournament selection
 	while new_population.size() < population_size:
@@ -304,13 +347,22 @@ func _evolve_nsga2() -> void:
 		if randf() < crossover_rate:
 			var parent_b_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map)
 			child = population[parent_a_idx].crossover_with(population[parent_b_idx])
+			if lineage:
+				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
+				var lid_b: int = old_lid[parent_b_idx] if parent_b_idx < old_lid.size() else -1
+				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
 		else:
 			child = population[parent_a_idx].clone()
+			if lineage:
+				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
+				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
 
 		child.mutate(mutation_rate, mutation_strength)
 		new_population.append(child)
 
 	population = new_population
+	if lineage:
+		_lineage_ids = new_lineage_ids
 	generation += 1
 
 	# Reset scores
@@ -346,8 +398,8 @@ func _compute_hypervolume() -> float:
 	return NSGA2.hypervolume_2d(front_2d, Vector2.ZERO)
 
 
-func select_parent(indexed_fitness: Array):
-	## Tournament selection: pick best of 3 random individuals.
+func _select_parent_index(indexed_fitness: Array) -> int:
+	## Tournament selection: pick best of 3 random individuals. Returns population index.
 	var tournament_size := 3
 	var best_idx := -1
 	var best_fit := -INF
@@ -358,7 +410,12 @@ func select_parent(indexed_fitness: Array):
 			best_fit = candidate.fitness
 			best_idx = candidate.index
 
-	return population[best_idx]
+	return best_idx
+
+
+func select_parent(indexed_fitness: Array):
+	## Tournament selection: pick best of 3 random individuals.
+	return population[_select_parent_index(indexed_fitness)]
 
 
 func get_best_network():

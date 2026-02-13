@@ -64,6 +64,10 @@ var coevo_is_hof_generation: bool = false  # True when evaluating against Hall o
 # rtNEAT continuous evolution
 var rtneat_mgr = null  # RtNeatManager instance
 
+# Lineage tracking
+var lineage_tracker: RefCounted = null
+var LineageTrackerScript = preload("res://ai/lineage_tracker.gd")
+
 # Co-evolution paths (aliases from config)
 var ENEMY_POPULATION_PATH: String:
 	get: return config.ENEMY_POPULATION_PATH
@@ -330,6 +334,10 @@ func start_training(pop_size: int = 100, generations: int = 100) -> void:
 
 	evolution.generation_complete.connect(_on_generation_complete)
 
+	# Initialize lineage tracker
+	lineage_tracker = LineageTrackerScript.new()
+	evolution.lineage = lineage_tracker
+
 	# Clean up any leftover pause state
 	if training_ui.pause_overlay:
 		training_ui.destroy_pause_overlay()
@@ -395,6 +403,10 @@ func start_coevolution_training(pop_size: int = 100, generations: int = 100) -> 
 		population_size,  # Enemy pop same size as player pop
 		config.elite_count, config.mutation_rate, config.mutation_strength, config.crossover_rate
 	)
+
+	# Initialize lineage tracker for co-evolution (tracks player population)
+	lineage_tracker = LineageTrackerScript.new()
+	coevolution.player_evolution.lineage = lineage_tracker
 
 	# Clean up any leftover pause state
 	if training_ui.pause_overlay:
@@ -470,9 +482,16 @@ func start_rtneat(rtneat_config: Dictionary = {}) -> void:
 	current_mode = Mode.RTNEAT
 	Engine.time_scale = 1.0
 
+	# Initialize lineage tracker for rtNEAT
+	lineage_tracker = LineageTrackerScript.new()
+
 	var RtNeatManagerScript = load("res://ai/rtneat_manager.gd")
 	rtneat_mgr = RtNeatManagerScript.new()
 	rtneat_mgr.setup(main_scene, rtneat_config)
+
+	# Wire lineage to population after setup
+	if rtneat_mgr.population:
+		rtneat_mgr.population.lineage = lineage_tracker
 
 	# Hide the main player (agents replace it)
 	player.visible = false
@@ -1283,6 +1302,10 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 
 	# Check curriculum advancement (before saving so metrics include new stage)
 	check_curriculum_advancement()
+
+	# Prune old lineage data
+	if lineage_tracker:
+		lineage_tracker.prune_old(gen)
 
 	# Auto-save every generation
 	evolution.save_best(BEST_NETWORK_PATH)

@@ -200,6 +200,7 @@ training_manager.gd     # Main scene integration
 | H | Return to human control |
 | [ or - | Slow down training (min 0.25x) |
 | ] or + | Speed up training (max 16x) |
+| Y | Toggle phylogenetic lineage tree |
 
 ### Fitness Function
 
@@ -288,18 +289,12 @@ All phases through co-evolution and sandbox are implemented. See `ROADMAP.md` fo
 - **rtNEAT** — Continuous real-time evolution (`ai/rtneat_manager.gd`, `ai/rtneat_population.gd`, `ui/rtneat_overlay.gd`, `agent.gd`)
 - **Live Player Interactions** — 6 interaction tools during rtNEAT mode (keys 0-5): inspect, place/remove obstacles, spawn enemy waves, bless/curse agents
 - **Educational Mode** — Annotated AI decision narration (`ui/educational_overlay.gd`), auto-shows sensor rays + network viz, highlights most significant ray, E key toggle
+- **Phylogenetic Tree** — Lineage tracking across all 3 evolution pipelines (`ai/lineage_tracker.gd`), champion ancestry DAG visualization (`ui/phylogenetic_tree.gd`), Y key toggle
 
 ### Phase 4: The Vision (Remaining)
 
-**1. Phylogenetic Tree Visualization**
-Track parent-child lineage across generations. Visualize ancestry of successful strategies as an interactive tree. No tracking infrastructure exists.
-
-**2. Multi-Agent Cooperation**
+**1. Multi-Agent Cooperation**
 Team-based scenarios where multiple AI agents coordinate. Not scoped.
-
-### Implementation Priority
-1. **Phylogenetic Trees** — Needs lineage tracking added to evolution pipeline
-2. **Multi-Agent Cooperation** — Exploratory, lowest priority
 
 ## Testing
 
@@ -308,7 +303,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (525 tests)
+### Test Coverage (535 tests)
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -325,6 +320,7 @@ godot --headless --script test/test_runner.gd
 | `test_integration.gd` | 10 | Full Sensor → Network → Controller pipeline, data flow |
 | `test_rtneat.gd` | 26 | Population, agents, targeting, interaction tools (bless/curse/log) |
 | `test_educational.gd` | 9 | Educational overlay analysis: threats, shooting, state, narration |
+| `test_lineage.gd` | 10 | Lineage tracker: birth recording, ancestry tracing, pruning, fitness |
 
 ### Visible Training Mode
 

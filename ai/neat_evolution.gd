@@ -23,6 +23,10 @@ var pareto_front: Array = []
 var last_hypervolume: float = 0.0
 var use_nsga2: bool = false
 
+# Lineage tracking (optional, set externally)
+var lineage: RefCounted = null
+var _lineage_ids: PackedInt32Array  # Maps population index to lineage ID
+
 
 func _init(p_config: NeatConfig) -> void:
 	config = p_config
@@ -37,6 +41,16 @@ func _initialize_population() -> void:
 		genome.create_basic()
 		population.append(genome)
 	generation = 0
+	_seed_lineage()
+
+
+func _seed_lineage() -> void:
+	## Register initial population with lineage tracker if set.
+	if lineage:
+		var ids = lineage.record_seed(0, population.size())
+		_lineage_ids.resize(population.size())
+		for i in population.size():
+			_lineage_ids[i] = ids[i]
 
 
 func get_individual(index: int) -> NeatGenome:
@@ -50,6 +64,8 @@ func get_network(index: int) -> NeatNetwork:
 
 func set_fitness(index: int, fitness: float) -> void:
 	population[index].fitness = fitness
+	if lineage and index < _lineage_ids.size():
+		lineage.update_fitness(_lineage_ids[index], fitness)
 
 
 func evolve() -> void:
@@ -105,6 +121,17 @@ func evolve() -> void:
 
 	var new_population: Array = []
 
+	# Build genome → lineage ID map for tracking parents
+	var genome_lid: Dictionary = {}  # genome ref → lineage_id
+	if lineage:
+		for i in population.size():
+			if i < _lineage_ids.size():
+				genome_lid[population[i]] = _lineage_ids[i]
+
+	var new_lineage_ids: PackedInt32Array
+	if lineage:
+		new_lineage_ids.resize(config.population_size)
+
 	# 5. Reproduce
 	for species in species_list:
 		var sp_adjusted: float = species.get_total_adjusted_fitness()
@@ -124,6 +151,9 @@ func evolve() -> void:
 		var elite_count: int = maxi(1, int(sorted_members.size() * config.elite_fraction))
 		for i in mini(elite_count, offspring_count):
 			new_population.append(sorted_members[i].copy())
+			if lineage:
+				var src_lid: int = genome_lid.get(sorted_members[i], -1)
+				new_lineage_ids[new_population.size() - 1] = lineage.record_birth(generation + 1, src_lid, -1, sorted_members[i].fitness, "elite")
 
 		# Breeding pool: top survival_fraction
 		var pool_size: int = maxi(1, int(sorted_members.size() * config.survival_fraction))
@@ -146,8 +176,16 @@ func evolve() -> void:
 				else:
 					parent_b = pool[randi() % pool.size()]
 				child = NeatGenome.crossover(parent_a, parent_b)
+				if lineage:
+					var lid_a: int = genome_lid.get(parent_a, -1)
+					var lid_b: int = genome_lid.get(parent_b, -1)
+					new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
 			else:
-				child = pool[randi() % pool.size()].copy()
+				var parent: NeatGenome = pool[randi() % pool.size()]
+				child = parent.copy()
+				if lineage:
+					var lid_a: int = genome_lid.get(parent, -1)
+					new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
 
 			child.mutate(config)
 			new_population.append(child)
@@ -156,11 +194,18 @@ func evolve() -> void:
 	while new_population.size() > config.population_size:
 		new_population.pop_back()
 	while new_population.size() < config.population_size:
-		var filler = population[randi() % population.size()].copy()
+		var src_idx: int = randi() % population.size()
+		var filler = population[src_idx].copy()
 		filler.mutate(config)
 		new_population.append(filler)
+		if lineage:
+			var lid: int = genome_lid.get(population[src_idx], -1)
+			if new_population.size() - 1 < new_lineage_ids.size():
+				new_lineage_ids[new_population.size() - 1] = lineage.record_birth(generation + 1, lid, -1, 0.0, "mutation")
 
 	population = new_population
+	if lineage:
+		_lineage_ids = new_lineage_ids
 	generation += 1
 
 	# Reset innovation cache for next generation

@@ -32,6 +32,10 @@ var all_time_best_fitness: float = 0.0
 var all_time_best_genome: NeatGenome = null
 var _replacement_timer: float = 0.0
 
+# Lineage tracking (optional, set externally)
+var lineage: RefCounted = null
+var _lineage_ids: PackedInt32Array  # Per-slot lineage IDs
+
 # Species color palette (12 visually distinct colors)
 const SPECIES_COLORS: Array = [
 	Color(0.2, 0.6, 1.0),   # Blue
@@ -83,6 +87,13 @@ func initialize(size: int, p_config: NeatConfig = null) -> void:
 
 	# Initial speciation
 	_full_speciate()
+
+	# Seed lineage if tracker is set
+	if lineage:
+		var ids = lineage.record_seed(0, pop_size)
+		_lineage_ids.resize(pop_size)
+		for i in pop_size:
+			_lineage_ids[i] = ids[i]
 
 
 func update_fitness(index: int, delta_fitness: float) -> void:
@@ -187,6 +198,14 @@ func do_replacement(index: int) -> Dictionary:
 		# Don't track the one we're replacing as best; check all
 		pass
 	_update_all_time_best()
+
+	# Record lineage before installing
+	if lineage and _lineage_ids.size() > 0:
+		var lid_a: int = _lineage_ids[parent_a_idx] if parent_a_idx < _lineage_ids.size() else -1
+		var lid_b: int = _lineage_ids[parent_b_idx] if parent_b_idx < _lineage_ids.size() else -1
+		var origin: String = "crossover" if parent_a_idx != parent_b_idx and randf() < config.crossover_rate else "mutation"
+		var gen: int = total_replacements  # Use replacement count as pseudo-generation
+		_lineage_ids[index] = lineage.record_birth(gen, lid_a, lid_b, 0.0, origin)
 
 	# Install new genome
 	genomes[index] = child

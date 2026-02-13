@@ -29,6 +29,7 @@ var sandbox_panel: Control = null
 var comparison_panel: Control = null
 var network_visualizer: Control = null
 var educational_overlay: Control = null
+var phylogenetic_tree: Control = null
 var game_started: bool = false  # False until player selects mode from title screen
 
 # Bonus points - kills/powerups dominate, survival is minor
@@ -343,6 +344,14 @@ func setup_ui_screens() -> void:
 	educational_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	educational_overlay.visible = false
 
+	# Phylogenetic tree overlay
+	var PhyloTreeScript = preload("res://ui/phylogenetic_tree.gd")
+	phylogenetic_tree = PhyloTreeScript.new()
+	phylogenetic_tree.name = "PhylogeneticTree"
+	$CanvasLayer/UI.add_child(phylogenetic_tree)
+	phylogenetic_tree.set_anchors_preset(Control.PRESET_FULL_RECT)
+	phylogenetic_tree.visible = false
+
 
 func show_title_screen() -> void:
 	## Show title screen and pause game.
@@ -511,6 +520,14 @@ func _toggle_network_visualizer() -> void:
 				network_visualizer.set_fixed_network(net)
 
 
+func _toggle_phylogenetic_tree() -> void:
+	## Toggle the phylogenetic lineage tree overlay.
+	if not phylogenetic_tree:
+		return
+	phylogenetic_tree.panel_visible = not phylogenetic_tree.panel_visible
+	phylogenetic_tree.visible = phylogenetic_tree.panel_visible
+
+
 func _toggle_educational_mode() -> void:
 	## Toggle the educational narration overlay.
 	if not educational_overlay:
@@ -603,6 +620,11 @@ func _process(delta: float) -> void:
 		if _key_just_pressed("edu_mode"):
 			_toggle_educational_mode()
 
+	# Phylogenetic tree toggle (Y key)
+	if phylogenetic_tree and Input.is_physical_key_pressed(KEY_Y):
+		if _key_just_pressed("phylo_tree"):
+			_toggle_phylogenetic_tree()
+
 	# Feed data to educational overlay each frame when visible
 	if educational_overlay and educational_overlay.visible and training_manager:
 		var controller = null
@@ -620,6 +642,29 @@ func _process(delta: float) -> void:
 			educational_overlay.update_from_controller(controller, sensor)
 			if sensor_visualizer:
 				sensor_visualizer.highlighted_ray = educational_overlay.get_highlight_ray()
+
+	# Feed data to phylogenetic tree when visible
+	if phylogenetic_tree and phylogenetic_tree.visible and phylogenetic_tree.panel_visible and training_manager:
+		if training_manager.lineage_tracker:
+			var mode = training_manager.get_mode()
+			var best_id: int = -1
+			if mode == training_manager.Mode.TRAINING or mode == training_manager.Mode.COEVOLUTION:
+				best_id = training_manager.lineage_tracker.get_best_id(training_manager.generation)
+				# If current gen has no evaluated individuals yet, try previous gen
+				if best_id < 0 and training_manager.generation > 0:
+					best_id = training_manager.lineage_tracker.get_best_id(training_manager.generation - 1)
+			elif mode == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
+				# For rtNEAT, find the best across all tracked records
+				var pop = training_manager.rtneat_mgr.population
+				if pop:
+					var best_fit: float = -INF
+					for i in pop.pop_size:
+						if pop.fitnesses[i] > best_fit:
+							best_fit = pop.fitnesses[i]
+							if pop._lineage_ids.size() > i:
+								best_id = pop._lineage_ids[i]
+			if best_id >= 0:
+				phylogenetic_tree.set_lineage_data(training_manager.lineage_tracker, best_id)
 
 	if game_over:
 		if entering_name:
@@ -1523,7 +1568,7 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.ORANGE)
 	elif mode_str == "PLAYBACK":
-		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network [E]=Educate"
+		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network [E]=Educate [Y]=Lineage"
 		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
 	elif mode_str == "GENERATION_PLAYBACK":
 		ai_status_label.text = "GENERATION %d/%d\n[SPACE]=Next [G]=Restart [H]=Human" % [
@@ -1542,5 +1587,5 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
 	else:
-		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net"
+		ai_status_label.text = "[T]=Train | [C]=CoEvo | [P]=Playback | [G]=Gen Play | [V]=Sensors [N]=Net [Y]=Lineage"
 		ai_status_label.add_theme_color_override("font_color", Color.WHITE)
