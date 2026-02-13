@@ -84,7 +84,7 @@ var coevo_is_hof_generation: bool = false
 var rtneat_mgr = null
 
 # Team battle mode
-var TeamManagerScript = preload("res://ai/team_manager.gd")
+var TeamManagerScript = null  # Lazy-loaded to avoid headless parse issues
 var team_mgr = null
 
 # Lineage tracking
