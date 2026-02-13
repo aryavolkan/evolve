@@ -16,6 +16,10 @@ var best_genome: NeatGenome = null
 var best_fitness: float = 0.0
 var all_time_best_genome: NeatGenome = null
 var all_time_best_fitness: float = 0.0
+
+# Cached stats from last completed generation
+var _last_min_fitness: float = 0.0
+var _last_avg_fitness: float = 0.0
 var _next_species_id: int = 0
 
 # Compatibility stubs for training_manager.gd integration
@@ -224,6 +228,10 @@ func evolve() -> void:
 	if min_fitness == INF:
 		min_fitness = 0.0
 
+	# Cache for get_stats() (genome.fitness gets overwritten next generation)
+	_last_min_fitness = min_fitness
+	_last_avg_fitness = avg_fitness
+
 	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
 
 
@@ -267,14 +275,33 @@ func get_all_time_best_fitness() -> float:
 
 
 func get_stats() -> Dictionary:
-	var min_fit: float = INF
-	var max_fit: float = -INF
-	var total: float = 0.0
+	## Computes from live genome fitness if available, otherwise uses cached
+	## values from last evolve() (which survive fitness resets).
+	var min_fit := _last_min_fitness
+	var max_fit := best_fitness
+	var avg_fit := _last_avg_fitness
+
+	# Check if live scores are available (any non-zero means not yet reset)
+	var has_live_scores := false
 	for genome in population:
-		min_fit = minf(min_fit, genome.fitness)
-		max_fit = maxf(max_fit, genome.fitness)
-		total += genome.fitness
-	var avg: float = total / population.size() if not population.is_empty() else 0.0
+		if genome.fitness != 0.0:
+			has_live_scores = true
+			break
+
+	if has_live_scores:
+		min_fit = INF
+		max_fit = -INF
+		var total := 0.0
+		for genome in population:
+			min_fit = minf(min_fit, genome.fitness)
+			max_fit = maxf(max_fit, genome.fitness)
+			total += genome.fitness
+		avg_fit = total / population.size() if not population.is_empty() else 0.0
+		if min_fit == INF:
+			min_fit = 0.0
+		if max_fit == -INF:
+			max_fit = 0.0
+
 	return {
 		"generation": generation,
 		"population_size": population.size(),
@@ -282,9 +309,9 @@ func get_stats() -> Dictionary:
 		"best_fitness": best_fitness,
 		"all_time_best": all_time_best_fitness,
 		"compatibility_threshold": config.compatibility_threshold,
-		"current_min": min_fit if min_fit != INF else 0.0,
-		"current_max": max_fit if max_fit != -INF else 0.0,
-		"current_avg": avg,
+		"current_min": min_fit,
+		"current_max": max_fit,
+		"current_avg": avg_fit,
 	}
 
 

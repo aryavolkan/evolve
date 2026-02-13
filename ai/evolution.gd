@@ -51,6 +51,11 @@ var best_fitness: float = 0.0
 var all_time_best_network = null
 var all_time_best_fitness: float = 0.0
 
+# Cached stats from last completed generation (survives _reset_scores)
+var _last_min_fitness: float = 0.0
+var _last_avg_fitness: float = 0.0
+var _last_max_fitness: float = 0.0
+
 # Lineage tracking (optional, set externally)
 var lineage: RefCounted = null
 var _lineage_ids: PackedInt32Array
@@ -204,6 +209,11 @@ func _evolve_single_objective() -> void:
 		min_fitness = minf(min_fitness, fitness_scores[i])
 	var avg_fitness := total_fitness / population_size
 
+	# Cache for get_stats() (survives _reset_scores)
+	_last_min_fitness = min_fitness
+	_last_avg_fitness = avg_fitness
+	_last_max_fitness = best_fitness
+
 	# Adaptive mutation: increase mutation when stagnating
 	if best_fitness > last_best_fitness * 1.01:  # 1% improvement threshold
 		stagnant_generations = 0
@@ -296,6 +306,11 @@ func _evolve_nsga2() -> void:
 		all_time_best_network = best_network.clone()
 
 	var avg_fitness := total_fitness / population_size
+
+	# Cache for get_stats() (survives _reset_scores)
+	_last_min_fitness = min_fitness
+	_last_avg_fitness = avg_fitness
+	_last_max_fitness = best_fitness
 
 	# Adaptive mutation using hypervolume for stagnation detection
 	var hv := _compute_hypervolume()
@@ -534,14 +549,28 @@ func load_population(path: String) -> bool:
 
 func get_stats() -> Dictionary:
 	## Get current evolution statistics.
-	var min_fit := INF
-	var max_fit := -INF
-	var total := 0.0
+	## Computes from live scores if available, otherwise uses cached values
+	## from last evolve() (which survive _reset_scores()).
+	var min_fit := _last_min_fitness
+	var max_fit := _last_max_fitness
+	var avg_fit := _last_avg_fitness
 
+	# Check if live scores are available (any non-zero means not yet reset)
+	var has_live_scores := false
 	for f in fitness_scores:
-		min_fit = minf(min_fit, f)
-		max_fit = maxf(max_fit, f)
-		total += f
+		if f != 0.0:
+			has_live_scores = true
+			break
+
+	if has_live_scores:
+		min_fit = INF
+		max_fit = -INF
+		var total := 0.0
+		for f in fitness_scores:
+			min_fit = minf(min_fit, f)
+			max_fit = maxf(max_fit, f)
+			total += f
+		avg_fit = total / population_size if population_size > 0 else 0.0
 
 	var stats := {
 		"generation": generation,
@@ -550,7 +579,7 @@ func get_stats() -> Dictionary:
 		"all_time_best": all_time_best_fitness,
 		"current_min": min_fit,
 		"current_max": max_fit,
-		"current_avg": total / population_size if population_size > 0 else 0.0
+		"current_avg": avg_fit,
 	}
 
 	if use_nsga2:
