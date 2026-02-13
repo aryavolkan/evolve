@@ -13,6 +13,7 @@ extends Node2D
 var enabled: bool = false
 var sensor: RefCounted = null  # ai/sensor.gd instance
 var player: CharacterBody2D = null
+var highlighted_ray: int = -1  # Ray index to highlight (-1 = none)
 
 # Colors
 const COLOR_ENEMY := Color(1.0, 0.2, 0.2, 0.7)
@@ -91,6 +92,9 @@ func _draw() -> void:
 
 		var end_pos: Vector2 = player_pos + ray_dir * draw_length
 		var width: float = 2.0 if (enemy_dist_val > 0.01 or powerup_dist_val > 0.01) else 1.0
+		if i == highlighted_ray:
+			width = maxf(width, 3.0)
+			color.a = minf(color.a + 0.3, 1.0)
 		draw_line(player_pos, end_pos, color, width, true)
 
 		# Draw a small dot at detection point for enemies and powerups

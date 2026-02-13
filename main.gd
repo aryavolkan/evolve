@@ -28,6 +28,7 @@ var sensor_visualizer: Node2D = null
 var sandbox_panel: Control = null
 var comparison_panel: Control = null
 var network_visualizer: Control = null
+var educational_overlay: Control = null
 var game_started: bool = false  # False until player selects mode from title screen
 
 # Bonus points - kills/powerups dominate, survival is minor
@@ -334,6 +335,14 @@ func setup_ui_screens() -> void:
 	network_visualizer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	network_visualizer.visible = false
 
+	# Educational overlay
+	var EduOverlayScript = preload("res://ui/educational_overlay.gd")
+	educational_overlay = EduOverlayScript.new()
+	educational_overlay.name = "EducationalOverlay"
+	$CanvasLayer/UI.add_child(educational_overlay)
+	educational_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	educational_overlay.visible = false
+
 
 func show_title_screen() -> void:
 	## Show title screen and pause game.
@@ -502,6 +511,23 @@ func _toggle_network_visualizer() -> void:
 				network_visualizer.set_fixed_network(net)
 
 
+func _toggle_educational_mode() -> void:
+	## Toggle the educational narration overlay.
+	if not educational_overlay:
+		return
+	educational_overlay.visible = not educational_overlay.visible
+	if educational_overlay.visible:
+		# Auto-show sensor visualizer and network visualizer
+		if sensor_visualizer and not sensor_visualizer.enabled:
+			sensor_visualizer.toggle()
+		if network_visualizer and not network_visualizer.visible:
+			_toggle_network_visualizer()
+	else:
+		# Clear ray highlighting when disabling
+		if sensor_visualizer:
+			sensor_visualizer.highlighted_ray = -1
+
+
 func _start_auto_training() -> void:
 	## Start training automatically (for headless sweep runs)
 	if training_manager:
@@ -571,6 +597,29 @@ func _process(delta: float) -> void:
 	if network_visualizer and Input.is_physical_key_pressed(KEY_N):
 		if _key_just_pressed("net_viz"):
 			_toggle_network_visualizer()
+
+	# Educational mode toggle (E key)
+	if educational_overlay and Input.is_physical_key_pressed(KEY_E):
+		if _key_just_pressed("edu_mode"):
+			_toggle_educational_mode()
+
+	# Feed data to educational overlay each frame when visible
+	if educational_overlay and educational_overlay.visible and training_manager:
+		var controller = null
+		var sensor = null
+		var mode = training_manager.get_mode()
+		if mode == training_manager.Mode.PLAYBACK and training_manager.ai_controller:
+			controller = training_manager.ai_controller
+			sensor = training_manager.ai_controller.sensor
+		elif mode == training_manager.Mode.RTNEAT and training_manager.rtneat_mgr:
+			var idx: int = training_manager.rtneat_mgr.inspected_agent_index
+			if idx >= 0 and idx < training_manager.rtneat_mgr.controllers.size():
+				controller = training_manager.rtneat_mgr.controllers[idx]
+				sensor = training_manager.rtneat_mgr.sensors[idx]
+		if controller:
+			educational_overlay.update_from_controller(controller, sensor)
+			if sensor_visualizer:
+				sensor_visualizer.highlighted_ray = educational_overlay.get_highlight_ray()
 
 	if game_over:
 		if entering_name:
@@ -1474,7 +1523,7 @@ func update_ai_status_display() -> void:
 		]
 		ai_status_label.add_theme_color_override("font_color", Color.ORANGE)
 	elif mode_str == "PLAYBACK":
-		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network"
+		ai_status_label.text = "PLAYBACK | Watching best AI\n[P]=Stop [H]=Human [V]=Sensors [N]=Network [E]=Educate"
 		ai_status_label.add_theme_color_override("font_color", Color.CYAN)
 	elif mode_str == "GENERATION_PLAYBACK":
 		ai_status_label.text = "GENERATION %d/%d\n[SPACE]=Next [G]=Restart [H]=Human" % [

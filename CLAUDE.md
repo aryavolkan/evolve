@@ -287,22 +287,19 @@ All phases through co-evolution and sandbox are implemented. See `ROADMAP.md` fo
 - **Live Sandbox** — Configurable arena (`ui/sandbox_panel.gd`), side-by-side comparison (`ui/comparison_panel.gd`), network topology viz (`ui/network_visualizer.gd`), archive playback
 - **rtNEAT** — Continuous real-time evolution (`ai/rtneat_manager.gd`, `ai/rtneat_population.gd`, `ui/rtneat_overlay.gd`, `agent.gd`)
 - **Live Player Interactions** — 6 interaction tools during rtNEAT mode (keys 0-5): inspect, place/remove obstacles, spawn enemy waves, bless/curse agents
+- **Educational Mode** — Annotated AI decision narration (`ui/educational_overlay.gd`), auto-shows sensor rays + network viz, highlights most significant ray, E key toggle
 
 ### Phase 4: The Vision (Remaining)
 
 **1. Phylogenetic Tree Visualization**
 Track parent-child lineage across generations. Visualize ancestry of successful strategies as an interactive tree. No tracking infrastructure exists.
 
-**2. Educational Mode**
-Annotated playback explaining AI decisions: highlight active sensor rays, show network activations, narrate chosen actions. Could extend `ui/network_visualizer.gd`.
-
-**3. Multi-Agent Cooperation**
+**2. Multi-Agent Cooperation**
 Team-based scenarios where multiple AI agents coordinate. Not scoped.
 
 ### Implementation Priority
-1. **Educational Mode** — Builds on existing network visualizer
-2. **Phylogenetic Trees** — Needs lineage tracking added to evolution pipeline
-3. **Multi-Agent Cooperation** — Exploratory, lowest priority
+1. **Phylogenetic Trees** — Needs lineage tracking added to evolution pipeline
+2. **Multi-Agent Cooperation** — Exploratory, lowest priority
 
 ## Testing
 
@@ -311,7 +308,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (516 tests)
+### Test Coverage (525 tests)
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -327,6 +324,7 @@ godot --headless --script test/test_runner.gd
 | `test_trainer.gd` | 9 | Path constants, config defaults, stats/action structure |
 | `test_integration.gd` | 10 | Full Sensor → Network → Controller pipeline, data flow |
 | `test_rtneat.gd` | 26 | Population, agents, targeting, interaction tools (bless/curse/log) |
+| `test_educational.gd` | 9 | Educational overlay analysis: threats, shooting, state, narration |
 
 ### Visible Training Mode
 
