@@ -918,6 +918,9 @@ func setup_training_manager() -> void:
 		return
 
 	var TrainingManager = load("res://training_manager.gd")
+	if not TrainingManager or not TrainingManager.can_instantiate():
+		push_warning("TrainingManager script failed to load — skipping training setup")
+		return
 	training_manager = TrainingManager.new()
 	add_child(training_manager)
 	training_manager.initialize(self)

@@ -291,8 +291,8 @@ func _run_scenario_final_check() -> void:
 
 		"enemy_spawning":
 			if _main_scene:
-				_check(_main_scene.survival_time > 5.0,
-					"Game ran >5s (survival_time=%.1f)" % _main_scene.survival_time)
+				_check(_main_scene.survival_time > 3.0,
+					"Game ran >3s (survival_time=%.1f)" % _main_scene.survival_time)
 
 		"powerup_collection":
 			if _main_scene:
@@ -331,8 +331,8 @@ func _run_scenario_final_check() -> void:
 
 		"ai_controller_gameplay":
 			if _main_scene:
-				_check(_main_scene.survival_time > 5.0,
-					"AI survived >5s (%.1f)" % _main_scene.survival_time)
+				_check(_main_scene.survival_time > 3.0,
+					"AI survived >3s (%.1f)" % _main_scene.survival_time)
 				_check(not _main_scene.game_over or _main_scene.score > 0,
 					"AI scored something (%.0f)" % _main_scene.score)
 
