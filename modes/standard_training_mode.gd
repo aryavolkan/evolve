@@ -18,6 +18,10 @@ func exit() -> void:
 		ctx.training_ui.destroy_pause_overlay()
 		ctx.training_ui.is_paused = false
 
+	if _dashboard:
+		_dashboard.queue_free()
+		_dashboard = null
+
 	Engine.time_scale = 1.0
 
 	# Cleanup training instances and visual layer
@@ -39,7 +43,15 @@ func process(delta: float) -> void:
 	_process_parallel_training(delta)
 
 
+var _dashboard: TrainingDashboard = null
+
+
 func handle_input(event: InputEvent) -> void:
+	# D toggles training dashboard
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_D:
+		_toggle_dashboard()
+		return
+
 	# ESC exits fullscreen
 	if event.is_action_pressed("ui_cancel") and ctx.arena_pool.fullscreen_index >= 0:
 		ctx.arena_pool.exit_fullscreen()
@@ -57,6 +69,18 @@ func handle_input(event: InputEvent) -> void:
 			if clicked_index >= 0:
 				ctx.arena_pool.enter_fullscreen(clicked_index)
 				ctx.get_viewport().set_input_as_handled()
+
+
+func _toggle_dashboard() -> void:
+	if _dashboard:
+		_dashboard.visible = not _dashboard.visible
+	else:
+		_dashboard = TrainingDashboard.new()
+		_dashboard.name = "TrainingDashboard"
+		_dashboard.setup(ctx)
+		_dashboard.size = ctx.get_viewport().get_visible_rect().size
+		_dashboard.anchors_preset = Control.PRESET_FULL_RECT
+		ctx.get_tree().root.add_child(_dashboard)
 
 
 # ============================================================
@@ -430,6 +454,10 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 	print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s%s%s" % [
 		gen, best, avg, avg_kill_score, avg_powerup_score, ctx.generations_without_improvement, ctx.stagnation_limit, curriculum_info, neat_info, me_info
 	])
+
+	# Track species count for dashboard
+	if _dashboard and ctx.use_neat and ctx.evolution:
+		_dashboard.update_species_count(ctx.evolution.get_species_count())
 
 	ctx.check_curriculum_advancement()
 

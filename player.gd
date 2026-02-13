@@ -185,11 +185,28 @@ func end_double_points() -> void:
 	powerup_timer_updated.emit("DOUBLE", 0.0)
 
 
+var _respawn_flash_tween: Tween = null
+
 func respawn(pos: Vector2, invincibility_duration: float) -> void:
 	position = pos
 	is_hit = false
 	activate_invincibility(invincibility_duration)
+	_start_respawn_flash(invincibility_duration)
 
+func _start_respawn_flash(duration: float) -> void:
+	_stop_respawn_flash()
+	_respawn_flash_tween = create_tween()
+	_respawn_flash_tween.set_loops(int(duration / 0.2))
+	_respawn_flash_tween.tween_property(sprite, "modulate:a", 0.3, 0.1)
+	_respawn_flash_tween.tween_property(sprite, "modulate:a", 1.0, 0.1)
+	_respawn_flash_tween.finished.connect(_stop_respawn_flash)
+
+func _stop_respawn_flash() -> void:
+	if _respawn_flash_tween and _respawn_flash_tween.is_valid():
+		_respawn_flash_tween.kill()
+	_respawn_flash_tween = null
+	if sprite:
+		sprite.modulate.a = 1.0
 
 func trigger_screen_clear_effect() -> void:
 	$ScreenClearParticles.restart()

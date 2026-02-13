@@ -20,3 +20,6 @@ overnight-agent/wandb_logs/
 models/
 *.pck
 export_presets.cfg
+
+# Web export build output
+build/
