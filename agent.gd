@@ -44,6 +44,7 @@ var rapid_fire_time: float = 0.0
 var piercing_time: float = 0.0
 
 var projectile_scene: PackedScene = preload("res://projectile.tscn")
+var death_effect_scene: PackedScene = preload("res://death_effect.tscn")
 
 @onready var sprite: Sprite2D = $Sprite2D
 
@@ -135,7 +136,10 @@ func on_enemy_collision(enemy: Node) -> void:
 	if is_invincible:
 		var enemy_pos = enemy.global_position
 		var points = enemy.get_point_value() if enemy.has_method("get_point_value") else 1
-		enemy.queue_free()
+		if enemy.has_method("die"):
+			enemy.die()
+		else:
+			enemy.queue_free()
 		enemy_killed.emit(enemy_pos, points)
 		return
 	if has_shield:
@@ -161,6 +165,10 @@ func _trigger_hit() -> void:
 	if is_hit:
 		return
 	is_hit = true
+	if is_inside_tree():
+		var effect = death_effect_scene.instantiate()
+		effect.setup(global_position, 20.0, Color(1, 0.3, 0.3, 0.6))
+		get_parent().add_child(effect)
 	lives -= 1
 	if lives <= 0:
 		is_dead = true

@@ -1121,7 +1121,7 @@ func clear_all_enemies() -> void:
 				total_points += enemy.get_point_value() * KILL_MULTIPLIER
 			else:
 				total_points += KILL_MULTIPLIER
-			enemy.queue_free()
+			enemy.die()
 
 	# Bonus points for screen clear (scaled piece values + flat bonus)
 	if total_points > 0:
@@ -1153,7 +1153,7 @@ func explode_nearby_enemies(center_pos: Vector2 = Vector2.ZERO) -> void:
 				else:
 					total_points += KILL_MULTIPLIER
 				killed_count += 1
-				enemy.queue_free()
+				enemy.die()
 
 	# Award points and show feedback
 	if total_points > 0:

@@ -28,6 +28,8 @@ var move_duration: float = 0.3  # Changed from const to allow slowing
 var base_move_duration: float = 0.3  # Store original for slow effect
 
 # Chess piece textures
+var death_effect_scene: PackedScene = preload("res://death_effect.tscn")
+
 var PIECE_TEXTURES = {
 	Type.PAWN: preload("res://assets/pawn_icon.svg"),
 	Type.KNIGHT: preload("res://assets/knight_icon.svg"),
@@ -278,6 +280,14 @@ func get_queen_move(to_player: Vector2) -> Vector2:
 
 func get_point_value() -> int:
 	return point_value
+
+
+func die() -> void:
+	if is_inside_tree():
+		var effect = death_effect_scene.instantiate()
+		effect.setup(global_position, TYPE_CONFIG[type]["size"], $Sprite2D.modulate, $Sprite2D.texture)
+		get_parent().add_child(effect)
+	queue_free()
 
 
 func apply_slow(multiplier: float) -> void:

@@ -28,7 +28,10 @@ func _on_body_entered(body: Node2D) -> void:
 	if body.is_in_group("enemy"):
 		var enemy_pos = body.global_position
 		var points = body.get_point_value() if body.has_method("get_point_value") else 1
-		body.queue_free()
+		if body.has_method("die"):
+			body.die()
+		else:
+			body.queue_free()
 		# Piercing projectiles don't disappear on enemy hit
 		if not is_piercing:
 			queue_free()

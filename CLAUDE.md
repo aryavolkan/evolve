@@ -21,7 +21,7 @@ A 2D arcade survival game built with Godot 4.5+. Player avoids enemy entities to
 ├── training_manager.gd # AI training orchestration
 ├── ai/                # Neural network and evolution
 ├── scripts/           # Python W&B integration scripts
-└── test/              # Test suite (137 tests)
+└── test/              # Test suite (558 tests)
 ```
 
 ## Running the Project
@@ -300,7 +300,7 @@ Run tests with:
 godot --headless --script test/test_runner.gd
 ```
 
-### Test Coverage (550 tests)
+### Test Coverage (558 tests)
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
@@ -319,6 +319,7 @@ godot --headless --script test/test_runner.gd
 | `test_educational.gd` | 9 | Educational overlay analysis: threats, shooting, state, narration |
 | `test_lineage.gd` | 10 | Lineage tracker: birth recording, ancestry tracing, pruning, fitness |
 | `test_teams.gd` | 15 | Team battle: TeamManager, PvP hits, team sensors, team colors, signals |
+| `test_death_effects.gd` | 8 | Death effect: instantiation, setup, enemy die(), player/agent effects |
 
 ### Visible Training Mode
 
