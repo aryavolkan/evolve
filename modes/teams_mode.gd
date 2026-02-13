@@ -13,6 +13,8 @@ func enter(context) -> void:
 	# Initialize lineage tracker
 	ctx.lineage_tracker = ctx.LineageTrackerScript.new()
 
+	if not ctx.TeamManagerScript:
+		ctx.TeamManagerScript = load("res://ai/team_manager.gd")
 	ctx.team_mgr = ctx.TeamManagerScript.new()
 	ctx.team_mgr.setup(ctx.main_scene, teams_config)
 

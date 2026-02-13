@@ -18,6 +18,7 @@ var spawn_mgr  # SpawnManager
 var score_mgr  # ScoreManager
 var powerup_mgr  # PowerupManager
 var ui_mgr  # UIManager
+var training_input_handler  # TrainingInputHandler
 
 # AI Training
 var training_manager: Node
@@ -251,6 +252,8 @@ func _ready() -> void:
 	spawn_arena_obstacles()
 	spawn_initial_enemies()
 	setup_training_manager()
+	training_input_handler = load("res://training_input_handler.gd").new()
+	training_input_handler.setup(self, training_manager)
 	ui_mgr = load("res://ui_manager.gd").new()
 	ui_mgr.setup(self, training_manager, ai_status_label)
 	ui_mgr.setup_ui_screens()
@@ -434,8 +437,8 @@ func _toggle_network_visualizer() -> void:
 		# Try to get the current network being played
 		if training_manager.ai_controller and training_manager.ai_controller.network:
 			var net = training_manager.ai_controller.network
-			# Check if it's a NEAT network (has _connections property)
-			if net is NeatNetwork:
+			# Check if it's a NEAT network (duck-typed: has connection helpers)
+			if net and net.has_method("get_connection_count"):
 				# For NEAT, we'd need the genome too — for now just show the network
 				network_visualizer.set_neat_data(null, net)
 			else:
@@ -570,7 +573,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	# Handle AI training controls (always check these)
-	handle_training_input()
+	if training_input_handler:
+		training_input_handler.handle_training_input()
 
 	# Sensor viz toggle (V key)
 	if sensor_visualizer and Input.is_physical_key_pressed(KEY_V):
@@ -914,6 +918,9 @@ func setup_training_manager() -> void:
 		return
 
 	var TrainingManager = load("res://training_manager.gd")
+	if not TrainingManager or not TrainingManager.can_instantiate():
+		push_warning("TrainingManager script failed to load — skipping training setup")
+		return
 	training_manager = TrainingManager.new()
 	add_child(training_manager)
 	training_manager.initialize(self)
@@ -929,94 +936,13 @@ func setup_training_manager() -> void:
 	ai_status_label.text = "T=Train | C=CoEvo | P=Playback | H=Human"
 
 
-func handle_training_input() -> void:
-	if not training_manager:
-		return
+# Training input handling now managed by TrainingInputHandler
 
-	# T = Start/Stop Training
-	if Input.is_action_just_pressed("ui_text_submit"):  # We'll use a different key
-		pass
 
-	if Input.is_key_pressed(KEY_T) and Input.is_action_just_pressed("ui_focus_next"):
-		# Avoid accidental triggers
-		pass
-
-	# Check for key presses (using _unhandled_key_input would be cleaner but this works)
-	if Input.is_physical_key_pressed(KEY_T) and not Input.is_physical_key_pressed(KEY_SHIFT):
-		if not _key_just_pressed("train"):
-			return
-		if training_manager.get_mode() == training_manager.Mode.TRAINING:
-			training_manager.stop_training()
-		else:
-			training_manager.start_training(100, 100)
-
-	elif Input.is_physical_key_pressed(KEY_P):
-		if not _key_just_pressed("playback"):
-			return
-		if training_manager.get_mode() == training_manager.Mode.PLAYBACK:
-			training_manager.stop_playback()
-		else:
-			training_manager.start_playback()
-
-	elif Input.is_physical_key_pressed(KEY_C) and not Input.is_physical_key_pressed(KEY_SHIFT):
-		if not _key_just_pressed("coevo"):
-			return
-		if training_manager.get_mode() == training_manager.Mode.COEVOLUTION:
-			training_manager.stop_coevolution_training()
-		else:
-			training_manager.start_coevolution_training(100, 100)
-
-	elif Input.is_physical_key_pressed(KEY_H):
-		if not _key_just_pressed("human"):
-			return
-		if training_manager.get_mode() == training_manager.Mode.TRAINING:
-			training_manager.stop_training()
-		elif training_manager.get_mode() == training_manager.Mode.COEVOLUTION:
-			training_manager.stop_coevolution_training()
-		elif training_manager.get_mode() == training_manager.Mode.PLAYBACK:
-			training_manager.stop_playback()
-		elif training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
-			training_manager.stop_playback()
-		elif training_manager.get_mode() == training_manager.Mode.SANDBOX:
-			training_manager.stop_sandbox()
-		elif training_manager.get_mode() == training_manager.Mode.COMPARISON:
-			training_manager.stop_comparison()
-		elif training_manager.get_mode() == training_manager.Mode.RTNEAT:
-			training_manager.stop_rtneat()
-		elif training_manager.get_mode() == training_manager.Mode.TEAMS:
-			training_manager.stop_rtneat_teams()
-
-	elif Input.is_physical_key_pressed(KEY_G):
-		if not _key_just_pressed("gen_playback"):
-			return
-		if training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
-			training_manager.stop_playback()
-		else:
-			training_manager.start_generation_playback()
-
-	# SPACE to advance generation playback (only when game over)
-	if training_manager.get_mode() == training_manager.Mode.GENERATION_PLAYBACK:
-		if Input.is_action_just_pressed("ui_accept") and game_over:
-			training_manager.advance_generation_playback()
-
-	# Speed controls ([ and ] or - and =) — unified across all modes
-	var speed_target = _get_speed_target()
-	if speed_target:
-		var speed_down = Input.is_physical_key_pressed(KEY_BRACKETLEFT) or Input.is_physical_key_pressed(KEY_MINUS)
-		var speed_up = Input.is_physical_key_pressed(KEY_BRACKETRIGHT) or Input.is_physical_key_pressed(KEY_EQUAL)
-
-		if speed_down and not _speed_down_held:
-			speed_target.adjust_speed(-1.0)
-		if speed_up and not _speed_up_held:
-			speed_target.adjust_speed(1.0)
-
-		_speed_down_held = speed_down
-		_speed_up_held = speed_up
-
+# Input handling state now managed by TrainingInputHandler
 
 var _pressed_keys: Dictionary = {}
-var _speed_down_held: bool = false
-var _speed_up_held: bool = false
+
 
 func _key_just_pressed(key_name: String) -> bool:
 	if _pressed_keys.get(key_name, false):
