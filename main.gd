@@ -14,11 +14,11 @@ var floating_text_scene: PackedScene = preload("res://floating_text.tscn")
 var spawned_obstacle_positions: Array = []
 
 # Extracted module managers
-var spawn_mgr  # SpawnManager
-var score_mgr  # ScoreManager
-var powerup_mgr  # PowerupManager
-var ui_mgr  # UIManager
-var training_input_handler  # TrainingInputHandler
+var spawn_mgr: RefCounted  ## SpawnManager
+var score_mgr: RefCounted  ## ScoreManager
+var powerup_mgr: RefCounted  ## PowerupManager
+var ui_mgr: RefCounted  ## UIManager
+var training_input_handler: RefCounted  ## TrainingInputHandler
 
 # AI Training
 var training_manager: Node
@@ -53,8 +53,6 @@ const MAX_ENEMY_SPEED: float = 300.0
 const BASE_SPAWN_INTERVAL: float = 50.0
 const MIN_SPAWN_INTERVAL: float = 20.0
 const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxed
-
-# Powerup state now managed by PowerupManager
 
 # Screen clear spawn cooldown
 var screen_clear_cooldown: float = 0.0
@@ -271,10 +269,6 @@ func _ready() -> void:
 	if get_viewport() == get_tree().root:
 		show_title_screen()
 
-
-# UI screen setup now handled by UIManager
-
-
 func show_title_screen() -> void:
 	## Show title screen and pause game.
 	if not title_screen:
@@ -288,7 +282,6 @@ func show_title_screen() -> void:
 	if ai_status_label:
 		ai_status_label.visible = false
 	title_screen.show_menu()
-
 
 func _on_title_mode_selected(mode: String) -> void:
 	## Handle mode selection from the title screen.
@@ -332,7 +325,6 @@ func _on_title_mode_selected(mode: String) -> void:
 			if training_manager:
 				training_manager.start_rtneat_teams({"team_size": 15})
 
-
 func _show_game_over_stats() -> void:
 	## Show the enhanced game over screen with stats.
 	if not game_over_screen:
@@ -359,12 +351,10 @@ func _show_game_over_stats() -> void:
 		"mode": mode_str,
 	})
 
-
 func _on_game_over_restart() -> void:
 	## Restart game from the game over screen.
 	game_over_screen.hide_screen()
 	get_tree().reload_current_scene()
-
 
 func _on_game_over_menu() -> void:
 	## Return to title screen from game over.
@@ -372,12 +362,10 @@ func _on_game_over_menu() -> void:
 	# Reset game state and show title
 	get_tree().reload_current_scene()
 
-
 func _show_sandbox_panel() -> void:
 	## Show the sandbox configuration panel.
 	if sandbox_panel:
 		sandbox_panel.visible = true
-
 
 func _on_sandbox_start(config: Dictionary) -> void:
 	## Start sandbox mode with given configuration.
@@ -394,18 +382,15 @@ func _on_sandbox_start(config: Dictionary) -> void:
 	if training_manager:
 		training_manager.start_sandbox(config)
 
-
 func _on_sandbox_back() -> void:
 	## Return to title screen from sandbox panel.
 	sandbox_panel.visible = false
 	show_title_screen()
 
-
 func _show_comparison_panel() -> void:
 	## Show the comparison configuration panel.
 	if comparison_panel:
 		comparison_panel.visible = true
-
 
 func _on_comparison_start(strategies: Array) -> void:
 	## Start comparison mode with selected strategies.
@@ -421,12 +406,10 @@ func _on_comparison_start(strategies: Array) -> void:
 	if training_manager:
 		training_manager.start_comparison(strategies)
 
-
 func _on_comparison_back() -> void:
 	## Return to title screen from comparison panel.
 	comparison_panel.visible = false
 	show_title_screen()
-
 
 func _toggle_network_visualizer() -> void:
 	## Toggle the network topology visualization.
@@ -444,14 +427,12 @@ func _toggle_network_visualizer() -> void:
 			else:
 				network_visualizer.set_fixed_network(net)
 
-
 func _toggle_phylogenetic_tree() -> void:
 	## Toggle the phylogenetic lineage tree overlay.
 	if not phylogenetic_tree:
 		return
 	phylogenetic_tree.panel_visible = not phylogenetic_tree.panel_visible
 	phylogenetic_tree.visible = phylogenetic_tree.panel_visible
-
 
 func _toggle_educational_mode() -> void:
 	## Toggle the educational narration overlay.
@@ -469,13 +450,11 @@ func _toggle_educational_mode() -> void:
 		if sensor_visualizer:
 			sensor_visualizer.highlighted_ray = -1
 
-
 func _start_auto_training() -> void:
 	## Start training automatically (for headless sweep runs)
 	if training_manager:
 		print("Auto-training started via command line")
 		training_manager.start_training()
-
 
 func _start_demo_playback() -> void:
 	## Start AI playback directly, skipping the title screen (for .pck demos).
@@ -489,8 +468,7 @@ func _start_demo_playback() -> void:
 	if training_manager:
 		training_manager.start_playback()
 
-
-func _get_speed_target():
+func _get_speed_target() -> Variant:
 	## Return the object that owns adjust_speed() for the current mode, or null.
 	if not training_manager:
 		return null
@@ -503,8 +481,7 @@ func _get_speed_target():
 		return training_manager.team_mgr
 	return null
 
-
-func _get_interactive_manager():
+func _get_interactive_manager() -> Variant:
 	## Return the active interactive manager (rtNEAT or Teams), or null.
 	if not training_manager:
 		return null
@@ -515,13 +492,11 @@ func _get_interactive_manager():
 		return training_manager.rtneat_mgr
 	return null
 
-
 func _screen_to_world(screen_pos: Vector2) -> Vector2:
 	## Convert screen position to world position using arena camera.
 	if arena_camera:
 		return arena_camera.get_screen_center_position() + (screen_pos - get_viewport().get_visible_rect().size / 2.0) / arena_camera.zoom
 	return screen_pos
-
 
 func _handle_interactive_input(event: InputEvent, mgr) -> void:
 	## Handle tool selection and click interactions for an interactive manager.
@@ -563,13 +538,11 @@ func _handle_interactive_input(event: InputEvent, mgr) -> void:
 				if network_visualizer:
 					network_visualizer.visible = false
 
-
 func _unhandled_input(event: InputEvent) -> void:
 	# Interactive mode input (shared by rtNEAT and Teams)
 	var interactive_mgr = _get_interactive_manager()
 	if interactive_mgr:
 		_handle_interactive_input(event, interactive_mgr)
-
 
 func _process(delta: float) -> void:
 	# Handle AI training controls (always check these)
@@ -700,7 +673,6 @@ func _process(delta: float) -> void:
 func get_difficulty_factor() -> float:
 	return clampf(score / DIFFICULTY_SCALE_SCORE, 0.0, 1.0)
 
-
 func calculate_proximity_bonus(delta: float) -> float:
 	## Reward AI for being close to powerups (continuous shaping signal).
 	return score_mgr.calculate_proximity_bonus(delta, player, self)
@@ -716,33 +688,25 @@ func get_scaled_spawn_interval() -> float:
 func spawn_enemy() -> void:
 	spawn_mgr.spawn_enemy(training_mode, curriculum_config, get_difficulty_factor(), get_scaled_enemy_speed(), enemy_ai_network, powerup_mgr.freeze_active, powerup_mgr.slow_active)
 
-
 func spawn_enemy_at(pos: Vector2, enemy_type: int) -> void:
 	## Spawn enemy at specific position with specific type (for preset events).
 	spawn_mgr.spawn_enemy_at(pos, enemy_type, get_scaled_enemy_speed(), training_mode, enemy_ai_network, powerup_mgr.freeze_active, powerup_mgr.slow_active)
-
 
 func spawn_powerup_at(pos: Vector2, powerup_type: int) -> void:
 	## Spawn powerup at specific position with specific type (for preset events).
 	spawn_mgr.spawn_powerup_at(pos, powerup_type, MAX_POWERUPS, powerup_mgr.handle_powerup_collected)
 
-
 func spawn_initial_enemies() -> void:
 	spawn_mgr.spawn_initial_enemies(training_mode, BASE_ENEMY_SPEED, enemy_ai_network)
-
 
 func count_local_powerups() -> int:
 	return spawn_mgr.count_local_powerups()
 
-
 func spawn_powerup() -> bool:
 	return spawn_mgr.spawn_powerup(MAX_POWERUPS, powerup_mgr.handle_powerup_collected)
 
-
 func find_valid_powerup_position() -> Vector2:
 	return spawn_mgr.find_valid_powerup_position()
-
-# Powerup collection now handled by PowerupManager
 
 func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	kills += 1
@@ -757,10 +721,6 @@ func spawn_floating_text(text: String, color: Color, pos: Vector2) -> void:
 	var floating = floating_text_scene.instantiate()
 	add_child(floating)
 	floating.setup(text, color, pos)
-
-# Powerup message display now handled by PowerupManager
-
-# Powerup timer updates now handled by PowerupManager
 
 
 func _on_shot_fired(direction: Vector2) -> void:
@@ -783,33 +743,8 @@ func _on_shot_fired(direction: Vector2) -> void:
 			score_from_kills += bonus  # Count as kill-related
 			return  # Only reward once per shot
 
-
-# Slow enemies effect now handled by PowerupManager
-
 func get_local_enemies() -> Array:
 	return spawn_mgr.get_local_enemies()
-
-
-# End slow enemies now handled by PowerupManager
-
-
-# Freeze enemies effect now handled by PowerupManager
-
-
-# End freeze enemies now handled by PowerupManager
-
-
-# Double points effect now handled by PowerupManager
-
-
-# End double points now handled by PowerupManager
-
-
-# Screen clear now handled by PowerupManager
-
-
-# Bomb explosion now handled by PowerupManager
-
 
 func update_lives_display() -> void:
 	lives_label.text = "Lives: %d" % lives
@@ -890,26 +825,20 @@ func setup_arena() -> void:
 	update_camera_zoom()
 	get_tree().root.size_changed.connect(_on_viewport_size_changed)
 
-
 func _on_viewport_size_changed() -> void:
 	update_camera_zoom()
-
 
 func update_camera_zoom() -> void:
 	_ArenaSetup.update_camera_zoom(arena_camera, effective_arena_width, effective_arena_height)
 
-
 func spawn_arena_obstacles() -> void:
 	spawn_mgr.spawn_arena_obstacles(use_preset_events, preset_obstacles)
-
 
 func get_random_edge_spawn_position() -> Vector2:
 	return spawn_mgr.get_random_edge_spawn_position()
 
-
 func get_arena_bounds() -> Rect2:
 	return _ArenaSetup.get_arena_bounds(effective_arena_width, effective_arena_height)
-
 
 # AI Training functions
 func setup_training_manager() -> void:
@@ -935,14 +864,7 @@ func setup_training_manager() -> void:
 	$CanvasLayer/UI.add_child(ai_status_label)
 	ai_status_label.text = "T=Train | C=CoEvo | P=Playback | H=Human"
 
-
-# Training input handling now managed by TrainingInputHandler
-
-
-# Input handling state now managed by TrainingInputHandler
-
 var _pressed_keys: Dictionary = {}
-
 
 func _key_just_pressed(key_name: String) -> bool:
 	if _pressed_keys.get(key_name, false):
@@ -952,5 +874,3 @@ func _key_just_pressed(key_name: String) -> bool:
 	get_tree().create_timer(0.3).timeout.connect(func(): _pressed_keys[key_name] = false)
 	return true
 
-
-# AI status display now handled by UIManager
