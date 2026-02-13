@@ -151,9 +151,9 @@ func _ready() -> void:
 	powerup_label.visible = false
 	name_entry.visible = false
 	name_prompt.visible = false
-	load_high_scores()
+	score_mgr.load_high_scores()
 	update_lives_display()
-	update_scoreboard_display()
+	scoreboard_label.text = score_mgr.get_scoreboard_text()
 	setup_arena()
 	spawn_arena_obstacles()
 	spawn_initial_enemies()
@@ -255,7 +255,7 @@ func _show_game_over_stats() -> void:
 		"survival_time": survival_time,
 		"score_from_kills": score_from_kills,
 		"score_from_powerups": score_from_powerups,
-		"is_high_score": is_high_score(int(score)),
+		"is_high_score": score_mgr.is_high_score(int(score)),
 		"mode": mode_str,
 	})
 
@@ -521,7 +521,7 @@ func _process(delta: float) -> void:
 	if game_over:
 		if entering_name:
 			if Input.is_action_just_pressed("ui_accept") and name_entry.text.strip_edges() != "":
-				submit_high_score(name_entry.text.strip_edges())
+				_submit_high_score(name_entry.text.strip_edges())
 		else:
 			if Input.is_action_just_pressed("ui_accept"):
 				get_tree().reload_current_scene()
@@ -668,7 +668,7 @@ func _on_player_hit() -> void:
 		game_over = true
 		get_tree().paused = true
 
-		if is_high_score(int(score)):
+		if score_mgr.is_high_score(int(score)):
 			entering_name = true
 			game_over_label.text = "NEW HIGH SCORE!\nScore: %d" % int(score)
 			game_over_label.visible = true
@@ -686,21 +686,14 @@ func _on_player_hit() -> void:
 		var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
 		player.respawn(arena_center, RESPAWN_INVINCIBILITY)
 
-# High score functions (delegated to ScoreManager)
-func load_high_scores() -> void:
-	score_mgr.load_high_scores()
-
-func is_high_score(new_score: int) -> bool:
-	return score_mgr.is_high_score(new_score)
-
-func submit_high_score(player_name: String) -> void:
+func _submit_high_score(player_name: String) -> void:
 	score_mgr.submit_high_score(player_name, int(score))
 
 	entering_name = false
 	name_entry.visible = false
 	name_prompt.visible = false
 	game_over_label.visible = false
-	update_scoreboard_display()
+	scoreboard_label.text = score_mgr.get_scoreboard_text()
 
 	# Show enhanced game over screen after name entry
 	if game_over_screen and get_viewport() == get_tree().root:
@@ -708,9 +701,6 @@ func submit_high_score(player_name: String) -> void:
 	else:
 		game_over_label.text = "GAME OVER\nFinal Score: %d\nPress SPACE to restart" % int(score)
 		game_over_label.visible = true
-
-func update_scoreboard_display() -> void:
-	scoreboard_label.text = score_mgr.get_scoreboard_text()
 
 var _ArenaSetup = preload("res://arena_setup.gd")
 
