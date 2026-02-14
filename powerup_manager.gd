@@ -71,7 +71,8 @@ func activate_slow_enemies() -> void:
 	# Apply slow to all current enemies if not already active
 	if not slow_active:
 		for enemy in get_local_enemies():
-			enemy.apply_slow(SLOW_MULTIPLIER)
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+				enemy.apply_slow(SLOW_MULTIPLIER)
 	slow_active = true
 	if player.is_physics_processing():
 		player.activate_slow_effect(POWERUP_DURATION)
@@ -84,14 +85,16 @@ func end_slow_enemies() -> void:
 	if slow_active:
 		slow_active = false
 		for enemy in get_local_enemies():
-			enemy.remove_slow(SLOW_MULTIPLIER)
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+				enemy.remove_slow(SLOW_MULTIPLIER)
 
 func activate_freeze_enemies() -> void:
 	"""Freeze all current enemies completely."""
 	# Freeze completely stops enemies (unlike slow which is 50%)
 	if not freeze_active:
 		for enemy in get_local_enemies():
-			enemy.apply_freeze()
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+				enemy.apply_freeze()
 	freeze_active = true
 	if player.is_physics_processing():
 		player.activate_freeze_effect(POWERUP_DURATION)
@@ -104,7 +107,8 @@ func end_freeze_enemies() -> void:
 	if freeze_active:
 		freeze_active = false
 		for enemy in get_local_enemies():
-			enemy.remove_freeze()
+			if is_instance_valid(enemy) and not enemy.is_queued_for_deletion():
+				enemy.remove_freeze()
 
 func activate_double_points() -> void:
 	"""Activate double points scoring."""

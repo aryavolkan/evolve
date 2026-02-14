@@ -220,6 +220,7 @@ func get_local_enemies() -> Array:
 	_cached_enemies.clear()
 	for child in scene.get_children():
 		if child.is_in_group("enemy"):
-			_cached_enemies.append(child)
+			if is_instance_valid(child) and not child.is_queued_for_deletion():
+				_cached_enemies.append(child)
 	_cached_enemies_frame = frame
 	return _cached_enemies
