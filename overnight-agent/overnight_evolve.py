@@ -37,6 +37,9 @@ sweep_config = {
         'evals_per_individual': {'values': [1, 2, 3]},
         'time_scale': {'value': 16.0},  # 16x speed for faster training
         'parallel_count': {'value': 10},  # Reduced from 20 to prevent memory crashes
+
+        # Curriculum
+        'curriculum_enabled': {'values': [True, False]},
     }
 }
 
