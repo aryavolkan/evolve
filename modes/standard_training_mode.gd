@@ -166,6 +166,7 @@ func _start_training() -> void:
 	ctx.hide_main_game()
 	ctx.create_training_container()
 
+	_on_training_ready()
 	# Generate events for all seeds upfront
 	ctx.generate_all_seed_events()
 	_start_next_batch()
@@ -176,6 +177,11 @@ func _start_training() -> void:
 	print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d, evo=%s" % [
 		ctx.population_size, ctx.max_generations, ctx.parallel_count, ctx.evals_per_individual, ctx.stagnation_limit, evo_type
 	])
+
+func _on_training_ready() -> void:
+	pass
+
+
 
 
 # ============================================================
@@ -208,6 +214,7 @@ func _create_eval_instance(individual_index: int) -> Dictionary:
 
 	var scene: Node2D = ctx.MainScenePacked.instantiate()
 	scene.set_training_mode(true, ctx.get_current_curriculum_config())
+	ctx.apply_training_overrides_to_scene(scene)
 	if ctx.generation_events_by_seed.size() > ctx.current_eval_seed:
 		var events = ctx.generation_events_by_seed[ctx.current_eval_seed]
 		var enemy_copy = events.enemy_spawns.duplicate(true)
@@ -256,6 +263,7 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
 
 	var scene: Node2D = ctx.MainScenePacked.instantiate()
 	scene.set_training_mode(true, ctx.get_current_curriculum_config())
+	ctx.apply_training_overrides_to_scene(scene)
 	if ctx.generation_events_by_seed.size() > ctx.current_eval_seed:
 		var events = ctx.generation_events_by_seed[ctx.current_eval_seed]
 		var enemy_copy = events.enemy_spawns.duplicate(true)

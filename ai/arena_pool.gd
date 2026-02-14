@@ -261,18 +261,9 @@ func update_layout() -> void:
 
 func get_grid_dimensions() -> Dictionary:
 	## Returns {cols: int, rows: int} based on parallel_count.
-	var cols: int
-	if parallel_count <= 2:
-		cols = parallel_count
-	elif parallel_count <= 4:
-		cols = 2
-	elif parallel_count <= 9:
-		cols = 3
-	elif parallel_count <= 16:
-		cols = 4
-	else:
-		cols = 5
-	var rows = ceili(float(parallel_count) / cols)
+	var clamped_count: int = maxi(parallel_count, 1)
+	var cols: int = mini(clamped_count, 5)
+	var rows: int = ceili(float(clamped_count) / cols)
 	return {"cols": cols, "rows": rows}
 
 

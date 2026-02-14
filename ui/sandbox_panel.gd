@@ -10,6 +10,7 @@ extends Control
 
 signal config_changed(config: Dictionary)
 signal start_requested(config: Dictionary)
+signal train_requested(config: Dictionary)
 signal back_requested
 
 const BG_COLOR := Color(0.06, 0.06, 0.1, 0.95)
@@ -32,11 +33,15 @@ var spawn_rate_multiplier: float = 1.0   # 0.25 - 3.0
 var powerup_frequency: float = 1.0       # 0.25 - 3.0
 var starting_difficulty: float = 0.0     # 0.0 - 1.0
 var network_source: String = "best"      # "best", "none" (human)
+var training_network_source: String = "best"  # "best", "random", "generation"
+var training_generation: int = 1
 
 # UI elements
 var _sliders: Dictionary = {}
 var _checkboxes: Dictionary = {}
 var _built: bool = false
+var _training_generation_input: SpinBox = null
+var _training_source_option: OptionButton = null
 
 const ENEMY_NAMES: Dictionary = {
 	0: "Pawn",
@@ -117,7 +122,7 @@ func _build_ui() -> void:
 	y = _add_slider(panel, panel_x, y, "Starting Difficulty", "difficulty", 0.0, 1.0, starting_difficulty, 0.1, "")
 	y += 10
 
-	# --- Network Source ---
+	# --- Network Source (sandbox run) ---
 	var net_label = Label.new()
 	net_label.text = "AI Network"
 	net_label.position = Vector2(panel_x, y)
@@ -136,6 +141,45 @@ func _build_ui() -> void:
 	panel.add_child(net_option)
 	y += 50
 
+	# --- Training Seed Source ---
+	var train_label = Label.new()
+	train_label.text = "Training Seed"
+	train_label.position = Vector2(panel_x, y)
+	train_label.add_theme_font_size_override("font_size", 18)
+	train_label.add_theme_color_override("font_color", LABEL_COLOR)
+	panel.add_child(train_label)
+	y += 28
+
+	_training_source_option = OptionButton.new()
+	_training_source_option.add_item("Start from Best Saved Network", 0)
+	_training_source_option.add_item("Start from Fresh Random Population", 1)
+	_training_source_option.add_item("Start from Specific Generation", 2)
+	_training_source_option.position = Vector2(panel_x + 20, y)
+	_training_source_option.size = Vector2(320, 30)
+	_training_source_option.item_selected.connect(_on_training_source_changed)
+	panel.add_child(_training_source_option)
+	y += 35
+
+	var gen_label = Label.new()
+	gen_label.text = "Generation"
+	gen_label.position = Vector2(panel_x + 20, y)
+	gen_label.add_theme_font_size_override("font_size", 14)
+	gen_label.add_theme_color_override("font_color", LABEL_COLOR)
+	panel.add_child(gen_label)
+
+	_training_generation_input = SpinBox.new()
+	_training_generation_input.min_value = 1
+	_training_generation_input.max_value = 999
+	_training_generation_input.step = 1
+	_training_generation_input.value = training_generation
+	_training_generation_input.position = Vector2(panel_x + 150, y - 4)
+	_training_generation_input.size = Vector2(120, 26)
+	_training_generation_input.value_changed.connect(_on_training_generation_changed)
+	panel.add_child(_training_generation_input)
+	y += 40
+
+	_update_training_generation_state()
+
 	# --- Buttons ---
 	var start_btn = Button.new()
 	start_btn.text = "  START SANDBOX  "
@@ -144,13 +188,21 @@ func _build_ui() -> void:
 	start_btn.pressed.connect(_on_start_pressed)
 	panel.add_child(start_btn)
 
+	var train_btn = Button.new()
+	train_btn.text = "  TRAIN WITH CONFIG  "
+	train_btn.position = Vector2(panel_x + 230, y)
+	train_btn.add_theme_font_size_override("font_size", 20)
+	train_btn.pressed.connect(_on_train_pressed)
+	panel.add_child(train_btn)
+	y += 50
+
 	var back_btn = Button.new()
 	back_btn.text = "  BACK  "
-	back_btn.position = Vector2(panel_x + 280, y)
+	back_btn.position = Vector2(panel_x, y)
 	back_btn.add_theme_font_size_override("font_size", 20)
 	back_btn.pressed.connect(func(): back_requested.emit())
 	panel.add_child(back_btn)
-	y += 50
+	y += 45
 
 	# Key hint
 	var hint = Label.new()
@@ -220,7 +272,8 @@ func _on_enemy_type_toggled(type_id: int, pressed: bool) -> void:
 			break
 	if not any_enabled:
 		enemy_types_enabled[0] = true  # Force pawn on
-		_checkboxes[0].button_pressed = true
+		if _checkboxes.has(0):
+			_checkboxes[0].button_pressed = true
 	config_changed.emit(get_config())
 
 
@@ -231,8 +284,37 @@ func _on_network_source_changed(index: int) -> void:
 	config_changed.emit(get_config())
 
 
+func _on_training_source_changed(index: int) -> void:
+	match index:
+		0:
+			training_network_source = "best"
+		1:
+			training_network_source = "random"
+		2:
+			training_network_source = "generation"
+	_update_training_generation_state()
+	config_changed.emit(get_config())
+
+
+func _update_training_generation_state() -> void:
+	if not _training_generation_input:
+		return
+	var needs_generation := training_network_source == "generation"
+	_training_generation_input.editable = needs_generation
+	_training_generation_input.modulate = Color(1, 1, 1, 1) if needs_generation else Color(1, 1, 1, 0.5)
+
+
+func _on_training_generation_changed(value: float) -> void:
+	training_generation = int(round(value))
+	config_changed.emit(get_config())
+
+
 func _on_start_pressed() -> void:
 	start_requested.emit(get_config())
+
+
+func _on_train_pressed() -> void:
+	train_requested.emit(get_config())
 
 
 func get_config() -> Dictionary:
@@ -249,6 +331,8 @@ func get_config() -> Dictionary:
 		"powerup_frequency": powerup_frequency,
 		"starting_difficulty": starting_difficulty,
 		"network_source": network_source,
+		"training_network_source": training_network_source,
+		"training_generation": training_generation,
 	}
 
 

@@ -4,8 +4,13 @@ class_name EventGenerator
 ## Generates deterministic random events (obstacles, enemy spawns, powerup spawns)
 ## for a game session based on a seed value and optional curriculum config.
 
+const DEFAULT_SPAWN_INTERVAL: float = 6.0
+const MIN_SPAWN_INTERVAL: float = 3.0
+const SPAWN_DECAY: float = 0.95
+const DEFAULT_POWERUP_STEP: float = 3.0
+const DEFAULT_POWERUP_START: float = 1.0
 
-static func generate(seed_value: int, p_curriculum_config: Dictionary = {}) -> Dictionary:
+static func generate(seed_value: int, p_curriculum_config: Dictionary = {}, sandbox_overrides: Dictionary = {}) -> Dictionary:
 	## Generate random events for a deterministic game session.
 	## Call once per generation, share results with all individuals.
 	## p_curriculum_config: optional curriculum config to filter enemy/powerup types and scale arena.
@@ -14,6 +19,18 @@ static func generate(seed_value: int, p_curriculum_config: Dictionary = {}) -> D
 
 	var obstacles: Array = []
 	var enemy_spawns: Array = []
+
+	var spawn_rate_multiplier := clampf(sandbox_overrides.get("spawn_rate_multiplier", 1.0), 0.25, 3.0)
+	var powerup_frequency := clampf(sandbox_overrides.get("powerup_frequency", 1.0), 0.25, 3.0)
+	var starting_difficulty := clampf(sandbox_overrides.get("starting_difficulty", 0.0), 0.0, 1.0)
+	var spawn_rate_scale := maxf(spawn_rate_multiplier, 0.1)
+	var powerup_freq_scale := maxf(powerup_frequency, 0.1)
+
+	var spawn_interval := lerpf(DEFAULT_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, starting_difficulty) / spawn_rate_scale
+	var min_spawn_interval := MIN_SPAWN_INTERVAL / spawn_rate_scale
+
+	var current_powerup_time := DEFAULT_POWERUP_START / powerup_freq_scale
+	var powerup_step := DEFAULT_POWERUP_STEP / powerup_freq_scale
 
 	# Apply arena scaling from curriculum
 	var arena_scale: float = p_curriculum_config.get("arena_scale", 1.0)
@@ -55,10 +72,10 @@ static func generate(seed_value: int, p_curriculum_config: Dictionary = {}) -> D
 
 	# Generate enemy spawn events
 	var spawn_time: float = 0.0
-	var spawn_interval: float = 6.0
+	var current_spawn_interval := spawn_interval
 	while spawn_time < 120.0:
-		spawn_time += spawn_interval
-		spawn_interval = maxf(spawn_interval * 0.95, 3.0)
+		spawn_time += current_spawn_interval
+		current_spawn_interval = maxf(current_spawn_interval * SPAWN_DECAY, min_spawn_interval)
 		var edge = gen_rng.randi() % 4
 		var pos: Vector2
 		match edge:
@@ -75,7 +92,7 @@ static func generate(seed_value: int, p_curriculum_config: Dictionary = {}) -> D
 
 	# Generate powerup spawn events
 	var powerup_spawns: Array = []
-	var powerup_time: float = 1.0
+	var powerup_time := current_powerup_time
 	var max_powerup_dist: float = minf(1000.0, scaled_width * 0.3)
 	while powerup_time < 120.0:
 		var angle = gen_rng.randf() * TAU
@@ -92,6 +109,6 @@ static func generate(seed_value: int, p_curriculum_config: Dictionary = {}) -> D
 		else:
 			powerup_type = allowed_powerup_types[gen_rng.randi() % allowed_powerup_types.size()]
 		powerup_spawns.append({"time": powerup_time, "pos": pos, "type": powerup_type})
-		powerup_time += 3.0
+		powerup_time += powerup_step
 
 	return {"obstacles": obstacles, "enemy_spawns": enemy_spawns, "powerup_spawns": powerup_spawns}

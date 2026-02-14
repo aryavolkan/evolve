@@ -78,6 +78,12 @@ var game_seed: int = 0  # Seed for deterministic training
 var training_mode: bool = false  # Simplified game for AI training
 var rng: RandomNumberGenerator  # Per-arena RNG for deterministic replay
 
+# Sandbox overrides
+var sandbox_spawn_rate_multiplier: float = 1.0
+var sandbox_powerup_frequency: float = 1.0
+var sandbox_starting_difficulty: float = 0.0
+var sandbox_overrides_active: bool = false
+
 # Curriculum config applied to this instance
 var curriculum_config: Dictionary = {}  # From training_manager curriculum stages
 var effective_arena_width: float = ARENA_WIDTH
@@ -110,6 +116,39 @@ func set_training_mode(enabled: bool, p_curriculum_config: Dictionary = {}) -> v
 		spawn_mgr.effective_arena_width = effective_arena_width
 		spawn_mgr.effective_arena_height = effective_arena_height
 
+func apply_sandbox_overrides(config: Dictionary) -> void:
+	sandbox_spawn_rate_multiplier = clampf(config.get("spawn_rate_multiplier", 1.0), 0.25, 3.0)
+	sandbox_powerup_frequency = clampf(config.get("powerup_frequency", 1.0), 0.25, 3.0)
+	sandbox_starting_difficulty = clampf(config.get("starting_difficulty", 0.0), 0.0, 1.0)
+	sandbox_overrides_active = true
+	var enemy_types: Array = config.get("enemy_types", [])
+	if enemy_types.size() > 0:
+		curriculum_config = {"enemy_types": enemy_types.duplicate()}
+	_apply_sandbox_starting_state()
+
+
+func clear_sandbox_overrides() -> void:
+	sandbox_spawn_rate_multiplier = 1.0
+	sandbox_powerup_frequency = 1.0
+	sandbox_starting_difficulty = 0.0
+	sandbox_overrides_active = false
+	curriculum_config = {}
+
+
+func _apply_sandbox_starting_state() -> void:
+	if not sandbox_overrides_active:
+		return
+	score = sandbox_starting_difficulty * DIFFICULTY_SCALE_SCORE
+	next_spawn_score = score + get_scaled_spawn_interval()
+	next_powerup_score = score + _get_powerup_interval(80.0)
+
+
+func _get_powerup_interval(base: float = 80.0) -> float:
+	var interval = base
+	if sandbox_overrides_active:
+		interval = interval / maxf(sandbox_powerup_frequency, 0.1)
+	return interval
+
 var preset_powerup_spawns: Array = []  # [{time: float, pos: Vector2, type: int}, ...]
 
 # Co-evolution: if set, all spawned enemies use this neural network for AI control
@@ -122,8 +161,8 @@ func set_preset_events(obstacles: Array, enemy_spawns: Array, powerup_spawns: Ar
 	preset_powerup_spawns = powerup_spawns.duplicate()
 	use_preset_events = true
 
-static func generate_random_events(seed_value: int, p_curriculum_config: Dictionary = {}) -> Dictionary:
-	return EventGenerator.generate(seed_value, p_curriculum_config)
+static func generate_random_events(seed_value: int, p_curriculum_config: Dictionary = {}, sandbox_overrides: Dictionary = {}) -> Dictionary:
+	return EventGenerator.generate(seed_value, p_curriculum_config, sandbox_overrides)
 
 func _ready() -> void:
 	if not rng:
@@ -300,6 +339,20 @@ func _on_sandbox_start(config: Dictionary) -> void:
 
 	if training_manager:
 		training_manager.start_sandbox(config)
+
+func _on_sandbox_train(config: Dictionary) -> void:
+	## Start full training using the current sandbox configuration.
+	sandbox_panel.visible = false
+	game_started = true
+	get_tree().paused = false
+	score_label.visible = true
+	lives_label.visible = true
+	scoreboard_label.visible = true
+	if ai_status_label:
+		ai_status_label.visible = true
+
+	if training_manager:
+		training_manager.start_sandbox_training(config)
 
 func _on_sandbox_back() -> void:
 	## Return to title screen from sandbox panel.
@@ -590,11 +643,11 @@ func _process(delta: float) -> void:
 		var powerup_count = count_local_powerups()
 
 		if powerup_count >= MAX_POWERUPS:
-			next_powerup_score = score + 80.0
+			next_powerup_score = score + _get_powerup_interval(80.0)
 		elif spawn_powerup():
-			next_powerup_score += 80.0
+			next_powerup_score += _get_powerup_interval(80.0)
 		else:
-			next_powerup_score = score + 20.0
+			next_powerup_score = score + _get_powerup_interval(20.0)
 
 func get_difficulty_factor() -> float:
 	return clampf(score / DIFFICULTY_SCALE_SCORE, 0.0, 1.0)
@@ -609,7 +662,10 @@ func get_scaled_enemy_speed() -> float:
 
 func get_scaled_spawn_interval() -> float:
 	var factor = get_difficulty_factor()
-	return lerpf(BASE_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, factor)
+	var interval = lerpf(BASE_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, factor)
+	if sandbox_overrides_active:
+		interval = interval / maxf(sandbox_spawn_rate_multiplier, 0.1)
+	return interval
 
 func spawn_enemy() -> void:
 	spawn_mgr.spawn_enemy(training_mode, curriculum_config, get_difficulty_factor(), get_scaled_enemy_speed(), enemy_ai_network, powerup_mgr.freeze_active, powerup_mgr.slow_active)
@@ -706,7 +762,7 @@ func _on_player_hit() -> void:
 		var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
 		player.respawn(arena_center, RESPAWN_INVINCIBILITY)
 
-func _submit_high_score(player_name: String) -> void:
+func submit_high_score(player_name: String) -> void:
 	score_mgr.submit_high_score(player_name, int(score))
 
 	entering_name = false

@@ -227,11 +227,6 @@ func start_sandbox(config: Dictionary) -> void:
 	var difficulty: float = config.get("starting_difficulty", 0.0)
 	var net_source: String = config.get("network_source", "best")
 
-	main_scene.score = difficulty * main_scene.DIFFICULTY_SCALE_SCORE
-	main_scene.next_spawn_score = main_scene.score + main_scene.BASE_SPAWN_INTERVAL / spawn_mult
-	main_scene.next_powerup_score = main_scene.score + 80.0 / powerup_freq
-	main_scene.curriculum_config = {"enemy_types": enemy_types}
-
 	if net_source == "best":
 		var network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
 		if network:
@@ -243,6 +238,7 @@ func start_sandbox(config: Dictionary) -> void:
 		player.enable_ai_control(false)
 
 	reset_game()
+	main_scene.apply_sandbox_overrides(config)
 	status_changed.emit("Sandbox mode started")
 	print("Sandbox started: enemies=%s, spawn=%.1fx, powerups=%.1fx, difficulty=%.1f, network=%s" % [
 		enemy_types, spawn_mult, powerup_freq, difficulty, net_source
@@ -252,7 +248,7 @@ func start_sandbox(config: Dictionary) -> void:
 func stop_sandbox() -> void:
 	## Stop sandbox mode and return to human control.
 	player.enable_ai_control(false)
-	main_scene.curriculum_config = {}
+	main_scene.clear_sandbox_overrides()
 	main_scene.get_tree().paused = false
 	status_changed.emit("Sandbox stopped")
 

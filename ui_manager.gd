@@ -56,6 +56,7 @@ func setup_ui_screens() -> void:
 	main_game.sandbox_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	main_game.sandbox_panel.visible = false
 	main_game.sandbox_panel.start_requested.connect(main_game._on_sandbox_start)
+	main_game.sandbox_panel.train_requested.connect(main_game._on_sandbox_train)
 	main_game.sandbox_panel.back_requested.connect(main_game._on_sandbox_back)
 
 	# Comparison panel

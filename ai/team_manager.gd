@@ -111,11 +111,6 @@ func _configure_interaction_tools() -> void:
 	interaction_tools.reset_time()
 
 
-func _handle_tool_changed(tool: int) -> void:
-	if tool != Tool.INSPECT:
-		clear_inspection()
-
-
 func start() -> void:
 	if not main_scene or not pop_a or not pop_b:
 		push_error("TeamManager: not set up")
