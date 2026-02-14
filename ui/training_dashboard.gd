@@ -208,8 +208,10 @@ func _draw_score_bars(font: Font, x0: float, y0: float, w: float, h: float) -> v
 	var y_max := 100.0
 	for i in range(start_idx, kill.size()):
 		y_max = maxf(y_max, kill[i])
-		y_max = maxf(y_max, pwr[i])
-		y_max = maxf(y_max, surv[i])
+		if i < pwr.size():
+			y_max = maxf(y_max, pwr[i])
+		if i < surv.size():
+			y_max = maxf(y_max, surv[i])
 	y_max = _nice_ceil(y_max)
 
 	var group_w := plot_w / maxf(count, 1)
@@ -221,15 +223,18 @@ func _draw_score_bars(font: Font, x0: float, y0: float, w: float, h: float) -> v
 		var gx := plot_x + i * group_w
 
 		# Kill bar
-		var kh := plot_h * clampf(kill[idx] / y_max, 0.0, 1.0)
+		var kill_val: float = kill[idx]
+		var kh := plot_h * clampf(kill_val / y_max, 0.0, 1.0)
 		draw_rect(Rect2(gx, plot_y + plot_h - kh, bar_w, kh), COLOR_KILL)
 
 		# Powerup bar
-		var ph2 := plot_h * clampf(pwr[idx] / y_max, 0.0, 1.0)
+		var pwr_val: float = pwr[idx] if idx < pwr.size() else 0.0
+		var ph2 := plot_h * clampf(pwr_val / y_max, 0.0, 1.0)
 		draw_rect(Rect2(gx + bar_w + gap, plot_y + plot_h - ph2, bar_w, ph2), COLOR_POWERUP)
 
 		# Survival bar
-		var sh := plot_h * clampf(surv[idx] / y_max, 0.0, 1.0)
+		var surv_val: float = surv[idx] if idx < surv.size() else 0.0
+		var sh := plot_h * clampf(surv_val / y_max, 0.0, 1.0)
 		draw_rect(Rect2(gx + 2 * (bar_w + gap), plot_y + plot_h - sh, bar_w, sh), COLOR_SURVIVAL)
 
 	# Baseline

@@ -1,4 +1,4 @@
-extends RefCounted
+extends Node
 
 ## Centralized constants shared across multiple files.
 

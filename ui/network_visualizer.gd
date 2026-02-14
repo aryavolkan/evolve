@@ -88,7 +88,7 @@ func _compute_layout() -> void:
 	_node_positions.clear()
 	_node_types.clear()
 
-	if not _neat_genome:
+	if not _neat_genome and not _neat_network:
 		return
 
 	var plot_rect := _get_plot_rect()
@@ -98,12 +98,25 @@ func _compute_layout() -> void:
 	var hidden: Array = []
 	var outputs: Array = []
 
-	for node in _neat_genome.node_genes:
-		_node_types[node.id] = node.type
-		match node.type:
-			0: inputs.append(node.id)
-			1: hidden.append(node.id)
-			2: outputs.append(node.id)
+	if _neat_genome:
+		for node in _neat_genome.node_genes:
+			_node_types[node.id] = node.type
+			match node.type:
+				0: inputs.append(node.id)
+				1: hidden.append(node.id)
+				2: outputs.append(node.id)
+	elif _neat_network:
+		for node_id in _neat_network._input_ids:
+			inputs.append(node_id)
+			_node_types[node_id] = 0
+		for node_id in _neat_network._output_ids:
+			outputs.append(node_id)
+			_node_types[node_id] = 2
+		for node_id in _neat_network._node_order:
+			if _node_types.has(node_id):
+				continue
+			hidden.append(node_id)
+			_node_types[node_id] = 1
 
 	# Assign x positions by layer
 	var num_layers: int = 2 + (1 if hidden.size() > 0 else 0)
@@ -115,6 +128,12 @@ func _compute_layout() -> void:
 	for id in outputs:
 		node_depths[id] = 1.0
 
+	var connections: Array = []
+	if _neat_genome:
+		connections = _neat_genome.connection_genes
+	elif _neat_network:
+		connections = _neat_network._connections
+
 	if hidden.size() > 0:
 		# Simple depth assignment: average of connected inputs/outputs
 		# Do multiple passes for convergence
@@ -125,14 +144,16 @@ func _compute_layout() -> void:
 			for h_id in hidden:
 				var total_depth: float = 0.0
 				var count: int = 0
-				for conn in _neat_genome.connection_genes:
-					if not conn.enabled:
+				for conn in connections:
+					if _neat_genome and not conn.enabled:
 						continue
-					if conn.out_id == h_id and node_depths.has(conn.in_id):
-						total_depth += node_depths[conn.in_id]
+					var in_id: int = conn.in_id if _neat_genome else int(conn.get("in_id", -1))
+					var out_id: int = conn.out_id if _neat_genome else int(conn.get("out_id", -1))
+					if out_id == h_id and node_depths.has(in_id):
+						total_depth += node_depths[in_id]
 						count += 1
-					if conn.in_id == h_id and node_depths.has(conn.out_id):
-						total_depth += node_depths[conn.out_id]
+					if in_id == h_id and node_depths.has(out_id):
+						total_depth += node_depths[out_id]
 						count += 1
 				if count > 0:
 					node_depths[h_id] = clampf(total_depth / count, 0.1, 0.9)
@@ -251,21 +272,24 @@ func _draw_neat_network(font: Font) -> void:
 		activations = _neat_network._activations
 
 	# Draw connections first (behind nodes)
-	for conn in _neat_genome.connection_genes:
-		if not _node_positions.has(conn.in_id) or not _node_positions.has(conn.out_id):
+	var connections: Array = _neat_genome.connection_genes if _neat_genome else _neat_network._connections
+	for conn in connections:
+		var in_id: int = conn.in_id if _neat_genome else int(conn.get("in_id", -1))
+		var out_id: int = conn.out_id if _neat_genome else int(conn.get("out_id", -1))
+		if not _node_positions.has(in_id) or not _node_positions.has(out_id):
 			continue
 
-		var from_pos: Vector2 = _node_positions[conn.in_id]
-		var to_pos: Vector2 = _node_positions[conn.out_id]
+		var from_pos: Vector2 = _node_positions[in_id]
+		var to_pos: Vector2 = _node_positions[out_id]
 
 		var color: Color
 		var width: float
 
-		if not conn.enabled:
+		if _neat_genome and not conn.enabled:
 			color = CONN_DISABLED
 			width = MIN_CONNECTION_WIDTH
 		else:
-			var w: float = conn.weight
+			var w: float = conn.weight if _neat_genome else float(conn.get("weight", 0.0))
 			width = clampf(absf(w) * 1.5, MIN_CONNECTION_WIDTH, MAX_CONNECTION_WIDTH)
 			color = CONN_POSITIVE if w >= 0 else CONN_NEGATIVE
 			color.a = clampf(0.2 + absf(w) * 0.4, 0.1, 0.7)
@@ -273,17 +297,25 @@ func _draw_neat_network(font: Font) -> void:
 		draw_line(from_pos, to_pos, color, width, true)
 
 	# Draw nodes
-	for node in _neat_genome.node_genes:
-		if not _node_positions.has(node.id):
+	var node_ids: Array = []
+	if _neat_genome:
+		for node in _neat_genome.node_genes:
+			node_ids.append(node.id)
+	else:
+		for node_id in _node_positions.keys():
+			node_ids.append(node_id)
+
+	for node_id in node_ids:
+		if not _node_positions.has(node_id):
 			continue
 
-		var pos: Vector2 = _node_positions[node.id]
+		var pos: Vector2 = _node_positions[node_id]
 		var radius: float = NODE_RADIUS
-		match node.type:
+		match _node_types.get(node_id, 1):
 			0: radius = NODE_RADIUS_INPUT
 			2: radius = NODE_RADIUS_OUTPUT
 
-		var activation: float = activations.get(node.id, 0.0)
+		var activation: float = activations.get(node_id, 0.0)
 		var color: Color = _activation_color(activation)
 
 		draw_circle(pos, radius, color)

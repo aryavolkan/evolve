@@ -104,10 +104,13 @@ func apply_type_config() -> void:
 	$CollisionShape2D.shape = new_shape
 
 	# Update sprite texture and scale
-	$Sprite2D.texture = PIECE_TEXTURES[type]
-	var texture_size = $Sprite2D.texture.get_size()
-	var target_scale = config["size"] / texture_size.x
-	$Sprite2D.scale = Vector2(target_scale, target_scale)
+	var texture: Texture2D = PIECE_TEXTURES.get(type)
+	if texture:
+		$Sprite2D.texture = texture
+		var texture_size = texture.get_size()
+		if texture_size.x > 0.0:
+			var target_scale = config["size"] / texture_size.x
+			$Sprite2D.scale = Vector2(target_scale, target_scale)
 
 func _physics_process(delta: float) -> void:
 	if not player:

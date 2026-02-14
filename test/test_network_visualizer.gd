@@ -70,6 +70,22 @@ func _run_tests() -> void:
 		assert_true(viz._node_positions.size() > 0, "Should compute node positions")
 	)
 
+	_test("set_neat_network_without_genome", func():
+		var viz = NetworkVisualizerScript.new()
+		var config := NeatConfig.new()
+		config.input_count = 3
+		config.output_count = 2
+		var tracker := NeatInnovation.new()
+		var genome := NeatGenome.create(config, tracker)
+		genome.create_basic()
+		var network := NeatNetwork.from_genome(genome)
+
+		viz.set_neat_data(null, network)
+		assert_true(viz._neat_genome == null, "Genome should remain null")
+		assert_true(viz._neat_network != null, "NEAT network should be set")
+		assert_true(viz._node_positions.size() > 0, "Should compute layout from network only")
+	)
+
 	_test("activation_color_zero", func():
 		var viz = NetworkVisualizerScript.new()
 		var color = viz._activation_color(0.0)
