@@ -599,7 +599,7 @@ func _process(delta: float) -> void:
 			return
 		if entering_name:
 			if Input.is_action_just_pressed("ui_accept") and name_entry.text.strip_edges() != "":
-				submit_high_score(name_entry.text.strip_edges())
+				_submit_high_score(name_entry.text.strip_edges())
 		else:
 			if Input.is_action_just_pressed("ui_accept"):
 				get_tree().reload_current_scene()
