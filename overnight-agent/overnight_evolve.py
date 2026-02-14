@@ -46,9 +46,10 @@ sweep_config = {
 # Paths — configurable via environment variables for cross-platform support
 # macOS:   GODOT_PATH=/Applications/Godot.app/Contents/MacOS/Godot
 # Linux:   GODOT_PATH=/usr/bin/godot
+# macOS:   GODOT_PATH=/Applications/Godot.app/Contents/MacOS/Godot or /opt/homebrew/bin/godot
 # Windows: GODOT_PATH=C:/Godot/Godot.exe
-# Default to Linux path for this worker machine
-GODOT_PATH = os.environ.get("GODOT_PATH", "/usr/bin/godot")
+# Default to macOS homebrew path
+GODOT_PATH = os.environ.get("GODOT_PATH", "/opt/homebrew/bin/godot")
 PROJECT_PATH = os.environ.get("EVOLVE_PROJECT_PATH", os.path.expanduser("~/Projects/evolve"))
 
 

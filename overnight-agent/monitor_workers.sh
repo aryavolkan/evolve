@@ -7,7 +7,7 @@ source venv/bin/activate
 # Set Godot path for macOS
 export GODOT_PATH="/Applications/Godot.app/Contents/MacOS/Godot"
 
-SWEEP_ID="32g71hrl"
+SWEEP_ID="lfnnj12v"
 PROJECT="evolve-neuroevolution"
 TARGET_WORKERS=4
 
