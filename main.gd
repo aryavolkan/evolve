@@ -218,8 +218,11 @@ func _ready() -> void:
 			return
 
 	# Show title screen on startup (only for root viewport / human play)
-	if get_viewport() == get_tree().root:
+	if get_viewport() == get_tree().root and not training_mode:
 		show_title_screen()
+	else:
+		# Training/test mode: start immediately
+		game_started = true
 
 func show_title_screen() -> void:
 	## Show title screen and pause game.
