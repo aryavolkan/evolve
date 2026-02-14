@@ -395,7 +395,6 @@ func reset_game() -> void:
 	main_scene.entering_name = false
 	main_scene.next_spawn_score = 50.0
 	main_scene.next_powerup_score = 30.0
-	main_scene.slow_active = false
 	main_scene.survival_time = 0.0
 	main_scene.last_milestone = 0
 

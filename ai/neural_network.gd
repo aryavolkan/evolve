@@ -252,7 +252,8 @@ func save_to_file(path: String) -> void:
 
 
 static func load_from_file(path: String):
-	## Load network from a file. Supports legacy (no memory flag) and new format.
+	## Load network from a file. Supports binary format, legacy binary, and
+	## JSON NEAT genome format (saved by rtNEAT/NEAT evolution).
 	## Falls back to res://models/<basename> for packaged .pck demos.
 	var file := FileAccess.open(path, FileAccess.READ)
 	if not file:
@@ -261,9 +262,25 @@ static func load_from_file(path: String):
 		if not file:
 			return null
 
+	# Detect JSON format by peeking at first byte
+	var first_byte := file.get_8()
+	file.seek(0)
+
+	if first_byte == 0x7B:  # '{' — JSON NEAT genome
+		var json_text := file.get_as_text()
+		file.close()
+		return _load_from_json(json_text)
+
+	# Binary format
 	var in_size := file.get_32()
 	var hid_size := file.get_32()
 	var out_size := file.get_32()
+
+	# Sanity check sizes to catch corrupt files
+	if in_size > 10000 or hid_size > 10000 or out_size > 10000:
+		push_error("Network file appears corrupt (unreasonable sizes: in=%d hid=%d out=%d)" % [in_size, hid_size, out_size])
+		file.close()
+		return null
 
 	# Format detection: 4th u32 is use_memory flag (0 or 1) or legacy weight_count (>1)
 	var fourth := file.get_32()
@@ -279,6 +296,13 @@ static func load_from_file(path: String):
 		has_memory = (fourth == 1)
 		weight_count = file.get_32()
 
+	# Sanity check weight count
+	var max_expected: int = (in_size * hid_size + hid_size + hid_size * out_size + out_size + hid_size * hid_size) * 2
+	if weight_count > max_expected or weight_count > 1000000:
+		push_error("Network file appears corrupt (weight_count=%d, max_expected=%d)" % [weight_count, max_expected])
+		file.close()
+		return null
+
 	var weights := PackedFloat32Array()
 	weights.resize(weight_count)
 	for i in weight_count:
@@ -292,3 +316,41 @@ static func load_from_file(path: String):
 		network.enable_memory()
 	network.set_weights(weights)
 	return network
+
+
+static func _load_from_json(json_text: String):
+	## Load a NEAT genome from JSON and return a NeatNetwork for playback.
+	var json := JSON.new()
+	var err := json.parse(json_text)
+	if err != OK:
+		push_error("Failed to parse network JSON: " + json.get_error_message())
+		return null
+
+	var data: Dictionary = json.data
+	if not data.has("connections") or not data.has("nodes"):
+		push_error("JSON file missing 'connections' or 'nodes' — not a valid NEAT genome")
+		return null
+
+	# Build a NeatNetwork directly from the serialized data without needing
+	# NeatConfig/NeatInnovation (which are only needed for evolution, not playback).
+	var NeatNetworkScript = load("res://ai/neat_network.gd")
+	var NeatGenomeScript = load("res://ai/neat_genome.gd")
+
+	# Reconstruct a minimal genome for network building
+	var genome = NeatGenomeScript.new()
+	for node_data in data.get("nodes", []):
+		var node = NeatGenomeScript.NodeGene.new(int(node_data.id), int(node_data.type))
+		node.bias = float(node_data.bias)
+		genome.node_genes.append(node)
+
+	for conn_data in data.get("connections", []):
+		var conn = NeatGenomeScript.ConnectionGene.new(
+			int(conn_data["in"]),
+			int(conn_data.out),
+			float(conn_data.weight),
+			int(conn_data.innovation),
+		)
+		conn.enabled = bool(conn_data.enabled)
+		genome.connection_genes.append(conn)
+
+	return NeatNetworkScript.from_genome(genome)
