@@ -50,6 +50,8 @@ var migration_mgr: RefCounted = preload("res://ai/migration_manager.gd").new()
 var metrics_writer: RefCounted = preload("res://ai/metrics_writer.gd").new()
 var playback_mgr: RefCounted = preload("res://ai/playback_manager.gd").new()
 var training_ui: RefCounted = preload("res://ai/training_ui.gd").new()
+var training_overrides: Dictionary = {}
+const SandboxTrainingModeScript = preload("res://modes/sandbox_training_mode.gd")
 
 # Multi-objective tracking (NSGA-II)
 var use_nsga2: bool:
@@ -385,6 +387,17 @@ func stop_sandbox() -> void:
 	_change_mode(Mode.HUMAN)
 
 
+func start_sandbox_training(config: Dictionary) -> void:
+	if not main_scene:
+		push_error("Training manager not initialized")
+		return
+	var mode = SandboxTrainingModeScript.new()
+	mode.sandbox_cfg = config
+	mode.pop_size = config.get("population_size", population_size)
+	mode.max_generations = config.get("max_generations", max_generations)
+	_change_mode(Mode.TRAINING, mode)
+
+
 func start_comparison(strategies: Array) -> void:
 	var mode = ComparisonMode.new()
 	mode.strategies = strategies
@@ -420,7 +433,7 @@ func generate_all_seed_events() -> void:
 	var curr_config = get_current_curriculum_config()
 	for seed_idx in evals_per_individual:
 		var seed_val = generation * 1000 + seed_idx
-		var events = MainScene.generate_random_events(seed_val, curr_config)
+		var events = MainScene.generate_random_events(seed_val, curr_config, training_overrides)
 		generation_events_by_seed.append(events)
 
 
@@ -458,11 +471,40 @@ func reset_game() -> void:
 	playback_mgr.reset_game()
 
 
+func set_training_overrides(overrides: Dictionary) -> void:
+	training_overrides = overrides.duplicate(true) if overrides else {}
+
+
+func clear_training_overrides() -> void:
+	training_overrides.clear()
+
+
+func get_training_overrides() -> Dictionary:
+	return training_overrides
+
+
+func apply_training_overrides_to_scene(scene: Node2D) -> void:
+	if training_overrides.is_empty():
+		return
+	if scene.has_method("apply_sandbox_overrides"):
+		scene.apply_sandbox_overrides(training_overrides)
+
+
 # ============================================================
 # Curriculum learning
 # ============================================================
 
 func get_current_curriculum_config() -> Dictionary:
+	if not training_overrides.is_empty():
+		var override_config: Dictionary = {}
+		if training_overrides.has("enemy_types"):
+			override_config["enemy_types"] = training_overrides.get("enemy_types", [])
+		if training_overrides.has("powerup_types"):
+			override_config["powerup_types"] = training_overrides.get("powerup_types", [])
+		if training_overrides.has("arena_scale"):
+			override_config["arena_scale"] = training_overrides.get("arena_scale", 1.0)
+		if not override_config.is_empty():
+			return override_config
 	return curriculum.get_current_config()
 
 

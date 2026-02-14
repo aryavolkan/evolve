@@ -70,6 +70,7 @@ func _run_all_tests() -> void:
 		preload("res://test/test_game_over_screen.gd"),
 		preload("res://test/test_sensor_visualizer.gd"),
 		preload("res://test/test_sandbox_panel.gd"),
+		preload("res://test/test_sandbox_training.gd"),
 		preload("res://test/test_comparison_panel.gd"),
 		preload("res://test/test_network_visualizer.gd"),
 		preload("res://test/test_pr_gatekeeper.gd"),

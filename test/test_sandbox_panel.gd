@@ -17,6 +17,7 @@ func _run_tests() -> void:
 		var panel = SandboxPanelScript.new()
 		assert_true(panel.has_signal("config_changed"), "Should have config_changed signal")
 		assert_true(panel.has_signal("start_requested"), "Should have start_requested signal")
+		assert_true(panel.has_signal("train_requested"), "Should have train_requested signal")
 		assert_true(panel.has_signal("back_requested"), "Should have back_requested signal")
 	)
 
@@ -28,6 +29,8 @@ func _run_tests() -> void:
 		assert_true(config.has("powerup_frequency"), "Config should have powerup_frequency")
 		assert_true(config.has("starting_difficulty"), "Config should have starting_difficulty")
 		assert_true(config.has("network_source"), "Config should have network_source")
+		assert_true(config.has("training_network_source"), "Config should have training_network_source")
+		assert_true(config.has("training_generation"), "Config should have training_generation")
 	)
 
 	_test("default_enemy_types", func():
@@ -51,6 +54,13 @@ func _run_tests() -> void:
 		var panel = SandboxPanelScript.new()
 		var config = panel.get_config()
 		assert_eq(config.network_source, "best", "Default network source should be 'best'")
+	)
+
+	_test("default_training_seed_config", func():
+		var panel = SandboxPanelScript.new()
+		var config = panel.get_config()
+		assert_eq(config.training_network_source, "best", "Default training network source should be 'best'")
+		assert_eq(config.training_generation, 1, "Default training generation should start at 1")
 	)
 
 	_test("enemy_type_toggle", func():
