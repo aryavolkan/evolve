@@ -104,6 +104,8 @@ func set_training_mode(enabled: bool, p_curriculum_config: Dictionary = {}) -> v
 	## Enable simplified game mode for AI training.
 	## p_curriculum_config: curriculum stage config with arena_scale, enemy_types, powerup_types
 	training_mode = enabled
+	if enabled:
+		game_started = true
 	curriculum_config = p_curriculum_config
 	if not curriculum_config.is_empty():
 		var scale: float = curriculum_config.get("arena_scale", 1.0)
