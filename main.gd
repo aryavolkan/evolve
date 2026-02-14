@@ -161,8 +161,10 @@ func set_preset_events(obstacles: Array, enemy_spawns: Array, powerup_spawns: Ar
 	preset_powerup_spawns = powerup_spawns.duplicate()
 	use_preset_events = true
 
+static var _EventGenerator = load("res://scripts/event_generator.gd")
+
 static func generate_random_events(seed_value: int, p_curriculum_config: Dictionary = {}, sandbox_overrides: Dictionary = {}) -> Dictionary:
-	return EventGenerator.generate(seed_value, p_curriculum_config, sandbox_overrides)
+	return _EventGenerator.generate(seed_value, p_curriculum_config, sandbox_overrides)
 
 func _ready() -> void:
 	if not rng:

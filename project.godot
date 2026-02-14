@@ -21,8 +21,6 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-GameConstants="*res://constants.gd"
-
 [debug]
 
 settings/stdout/verbose_stdout=true

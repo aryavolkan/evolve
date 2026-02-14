@@ -19,3 +19,5 @@ export_presets.cfg
 
 # Web export build output
 build/
+worker.log
+wandb/
