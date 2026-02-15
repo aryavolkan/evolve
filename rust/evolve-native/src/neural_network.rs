@@ -255,6 +255,12 @@ impl RustNeuralNetwork {
         })
     }
 
+    /// Alias for clone_network() for API compatibility with GDScript NeuralNetwork.
+    #[func]
+    fn clone(&self) -> Gd<Self> {
+        self.clone_network()
+    }
+
     /// Apply Gaussian mutations to weights.
     /// mutation_rate: probability of mutating each weight
     /// mutation_strength: standard deviation of mutation noise

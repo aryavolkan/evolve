@@ -71,11 +71,11 @@ func _init() -> void:
 	var rust_check := RustNeuralNetwork.create(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE)
 
 	# Copy GDScript weights to Rust
-	var weights := gd_check.get_weights()
+	var weights: PackedFloat32Array = gd_check.get_weights()
 	rust_check.set_weights(weights)
 
-	var gd_out := gd_check.forward(inputs)
-	var rust_out := rust_check.forward(inputs)
+	var gd_out: PackedFloat32Array = gd_check.forward(inputs)
+	var rust_out: PackedFloat32Array = rust_check.forward(inputs)
 
 	var max_diff := 0.0
 	for i in OUTPUT_SIZE:

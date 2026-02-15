@@ -1,0 +1,12 @@
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = 4.4
+reloadable = true
+
+[libraries]
+linux.debug.x86_64 = "res://rust/evolve-native/target/release/libevolve_native.so"
+linux.release.x86_64 = "res://rust/evolve-native/target/release/libevolve_native.so"
+windows.debug.x86_64 = "res://rust/evolve-native/target/release/evolve_native.dll"
+windows.release.x86_64 = "res://rust/evolve-native/target/release/evolve_native.dll"
+macos.debug = "res://rust/evolve-native/target/release/libevolve_native.dylib"
+macos.release = "res://rust/evolve-native/target/release/libevolve_native.dylib"
