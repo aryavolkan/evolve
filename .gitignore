@@ -21,3 +21,5 @@ export_presets.cfg
 build/
 worker.log
 wandb/
+rust/evolve-native/target/
+rust/evolve-native/target/
