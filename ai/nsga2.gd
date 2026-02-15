@@ -164,12 +164,27 @@ static func select(objectives: Array, target_size: int) -> Array:
 	return selected
 
 
-static func tournament_select(objectives: Array, fronts: Array, crowding: Dictionary, rng: RandomNumberGenerator = null) -> int:
+static func build_rank_map(fronts: Array, pop_size: int) -> PackedInt32Array:
+	## Build a flat lookup array: individual index → front rank.
+	## Call once after non_dominated_sort, then pass to tournament_select.
+	var ranks := PackedInt32Array()
+	ranks.resize(pop_size)
+	ranks.fill(fronts.size())  # Default: worst rank
+	for rank in fronts.size():
+		for idx in fronts[rank]:
+			if idx < pop_size:
+				ranks[idx] = rank
+	return ranks
+
+
+static func tournament_select(objectives: Array, fronts: Array, crowding: Dictionary, rng: RandomNumberGenerator = null, rank_map: PackedInt32Array = PackedInt32Array()) -> int:
 	## Binary tournament selection using NSGA-II crowded comparison.
 	## Input:
 	##   objectives — Array of Vector3
 	##   fronts — result of non_dominated_sort (for rank lookup)
 	##   crowding — Dictionary {individual_index: crowding_distance}
+	##   rng — optional RNG
+	##   rank_map — optional precomputed rank lookup (from build_rank_map)
 	## Output: index of selected individual.
 	
 	var n := objectives.size()
@@ -182,8 +197,14 @@ static func tournament_select(objectives: Array, fronts: Array, crowding: Dictio
 		a = randi() % n
 		b = randi() % n
 	
-	var rank_a := _get_front_rank(a, fronts)
-	var rank_b := _get_front_rank(b, fronts)
+	var rank_a: int
+	var rank_b: int
+	if rank_map.size() > 0:
+		rank_a = rank_map[a] if a < rank_map.size() else fronts.size()
+		rank_b = rank_map[b] if b < rank_map.size() else fronts.size()
+	else:
+		rank_a = _get_front_rank(a, fronts)
+		rank_b = _get_front_rank(b, fronts)
 	
 	# Prefer lower rank (better front)
 	if rank_a < rank_b:
@@ -199,6 +220,7 @@ static func tournament_select(objectives: Array, fronts: Array, crowding: Dictio
 
 static func _get_front_rank(individual: int, fronts: Array) -> int:
 	## Find which front rank an individual belongs to.
+	## Note: Prefer using build_rank_map() + rank_map parameter for hot loops.
 	for rank in fronts.size():
 		if individual in fronts[rank]:
 			return rank

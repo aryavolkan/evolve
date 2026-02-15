@@ -56,20 +56,21 @@ func get_action() -> Dictionary:
 	elif move_dir.length() > 1.0:
 		move_dir = move_dir.normalized()
 
-	# Shooting direction (pick strongest above threshold)
+	# Shooting direction (pick strongest above threshold — no allocation)
 	var shoot_dir := Vector2.ZERO
-	var shoot_outputs := [
-		{"dir": Vector2.UP, "val": outputs[OUT_SHOOT_UP]},
-		{"dir": Vector2.DOWN, "val": outputs[OUT_SHOOT_DOWN]},
-		{"dir": Vector2.LEFT, "val": outputs[OUT_SHOOT_LEFT]},
-		{"dir": Vector2.RIGHT, "val": outputs[OUT_SHOOT_RIGHT]}
-	]
-
 	var best_shoot := SHOOT_THRESHOLD
-	for s in shoot_outputs:
-		if s.val > best_shoot:
-			best_shoot = s.val
-			shoot_dir = s.dir
+	if outputs[OUT_SHOOT_UP] > best_shoot:
+		best_shoot = outputs[OUT_SHOOT_UP]
+		shoot_dir = Vector2.UP
+	if outputs[OUT_SHOOT_DOWN] > best_shoot:
+		best_shoot = outputs[OUT_SHOOT_DOWN]
+		shoot_dir = Vector2.DOWN
+	if outputs[OUT_SHOOT_LEFT] > best_shoot:
+		best_shoot = outputs[OUT_SHOOT_LEFT]
+		shoot_dir = Vector2.LEFT
+	if outputs[OUT_SHOOT_RIGHT] > best_shoot:
+		best_shoot = outputs[OUT_SHOOT_RIGHT]
+		shoot_dir = Vector2.RIGHT
 
 	return {
 		"move_direction": move_dir,
