@@ -244,12 +244,15 @@ func _evolve_nsga2() -> void:
 
 	apply_adaptive_mutation()
 
-	# Build crowding distance map for tournament selection
+	# Build crowding distance map and rank lookup for tournament selection
 	var crowding_map: Dictionary = {}
 	for front in fronts:
 		var distances := NSGA2.crowding_distance(front, objective_scores)
 		for i in front.size():
 			crowding_map[front[i]] = distances[i]
+
+	# Precompute rank map for O(1) rank lookup in tournament selection
+	var rank_map := NSGA2.build_rank_map(fronts, population_size)
 
 	# NSGA-II selection: fill new population front by front
 	var selected_indices := NSGA2.select(objective_scores, population_size)
@@ -282,11 +285,11 @@ func _evolve_nsga2() -> void:
 
 	# Fill rest with offspring via NSGA-II tournament selection
 	while new_population.size() < population_size:
-		var parent_a_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map)
+		var parent_a_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map, null, rank_map)
 		var child
 
 		if randf() < crossover_rate:
-			var parent_b_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map)
+			var parent_b_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map, null, rank_map)
 			child = NNFactory.crossover(population[parent_a_idx], population[parent_b_idx])
 			if lineage:
 				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1

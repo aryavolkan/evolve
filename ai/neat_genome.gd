@@ -203,53 +203,54 @@ func compatibility(other: NeatGenome, p_config: NeatConfig) -> float:
 	## Used to group genomes into species.
 	## Formula: d = (c1 * E / N) + (c2 * D / N) + (c3 * W)
 	## where E=excess, D=disjoint, W=avg weight diff, N=normalizing gene count.
+	##
+	## Optimized: builds innovation→weight maps without sorting, avoids
+	## third "all_innovations" dict by iterating each map once.
 	var genes_a := connection_genes
 	var genes_b := other.connection_genes
 
 	if genes_a.is_empty() and genes_b.is_empty():
 		return 0.0
 
-	# Sort by innovation number
-	var sorted_a := genes_a.duplicate()
-	sorted_a.sort_custom(func(a, b): return a.innovation < b.innovation)
-	var sorted_b := genes_b.duplicate()
-	sorted_b.sort_custom(func(a, b): return a.innovation < b.innovation)
-
-	var max_innov_a: int = sorted_a.back().innovation if not sorted_a.is_empty() else 0
-	var max_innov_b: int = sorted_b.back().innovation if not sorted_b.is_empty() else 0
-	var smaller_max: int = mini(max_innov_a, max_innov_b)
-
-	# Build innovation → gene maps
+	# Build innovation → weight maps (no sorting needed)
 	var map_a: Dictionary = {}
-	for g in sorted_a:
-		map_a[g.innovation] = g
-	var map_b: Dictionary = {}
-	for g in sorted_b:
-		map_b[g.innovation] = g
+	var max_innov_a: int = 0
+	for g in genes_a:
+		map_a[g.innovation] = g.weight
+		if g.innovation > max_innov_a:
+			max_innov_a = g.innovation
 
-	var all_innovations: Dictionary = {}
-	for key in map_a:
-		all_innovations[key] = true
-	for key in map_b:
-		all_innovations[key] = true
+	var map_b: Dictionary = {}
+	var max_innov_b: int = 0
+	for g in genes_b:
+		map_b[g.innovation] = g.weight
+		if g.innovation > max_innov_b:
+			max_innov_b = g.innovation
+
+	var smaller_max: int = mini(max_innov_a, max_innov_b)
 
 	var excess: int = 0
 	var disjoint: int = 0
 	var weight_diff_sum: float = 0.0
 	var matching_count: int = 0
 
-	for innov in all_innovations:
-		var in_a: bool = map_a.has(innov)
-		var in_b: bool = map_b.has(innov)
-
-		if in_a and in_b:
-			# Matching gene — accumulate weight difference
-			weight_diff_sum += absf(map_a[innov].weight - map_b[innov].weight)
+	# Iterate map_a: check for matching or disjoint/excess vs map_b
+	for innov in map_a:
+		if map_b.has(innov):
+			weight_diff_sum += absf(map_a[innov] - map_b[innov])
 			matching_count += 1
 		elif innov > smaller_max:
 			excess += 1
 		else:
 			disjoint += 1
+
+	# Iterate map_b: only count genes NOT in map_a (skip matching, already counted)
+	for innov in map_b:
+		if not map_a.has(innov):
+			if innov > smaller_max:
+				excess += 1
+			else:
+				disjoint += 1
 
 	# Normalizing factor N (use 1 if both genomes are small)
 	var n: float = maxf(genes_a.size(), genes_b.size())

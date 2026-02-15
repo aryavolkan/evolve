@@ -196,9 +196,18 @@ func get_inputs() -> PackedFloat32Array:
 	return inputs
 
 
+# Reusable result dict to avoid per-call allocation (16 rays × 3-5 casts = 48-80 dicts/frame/agent)
+var _ray_result: Dictionary = {"hit": false, "distance": RAY_LENGTH, "type_value": 0.0}
+
+
 func cast_ray_to_entities(origin: Vector2, direction: Vector2, entities: Array, hit_radius: float) -> Dictionary:
 	## Cast a ray and find the closest entity.
-	var result := {"hit": false, "distance": RAY_LENGTH, "type_value": 0.0}
+	## Returns a reusable dict — caller must read values before next call.
+	_ray_result.hit = false
+	_ray_result.distance = RAY_LENGTH
+	_ray_result.type_value = 0.0
+
+	var hit_radius_sq := hit_radius * hit_radius
 
 	for entity in entities:
 		if not is_instance_valid(entity):
@@ -210,21 +219,23 @@ func cast_ray_to_entities(origin: Vector2, direction: Vector2, entities: Array, 
 		if projection < 0 or projection > RAY_LENGTH:
 			continue
 
-		var closest_point: Vector2 = origin + direction * projection
-		var dist_to_ray: float = closest_point.distance_to(entity.global_position)
+		# Use squared distance to avoid sqrt (closest_point.distance_to)
+		var perp_x: float = to_entity.x - direction.x * projection
+		var perp_y: float = to_entity.y - direction.y * projection
+		var dist_sq: float = perp_x * perp_x + perp_y * perp_y
 
-		if dist_to_ray < hit_radius and projection < result.distance:
-			result.hit = true
-			result.distance = projection
+		if dist_sq < hit_radius_sq and projection < _ray_result.distance:
+			_ray_result.hit = true
+			_ray_result.distance = projection
 			if entity.has_method("get_point_value"):
 				var points: int = entity.get_point_value()
 				match points:
-					1: result.type_value = 0.2
-					3: result.type_value = 0.5
-					5: result.type_value = 0.8
-					9: result.type_value = 1.0
+					1: _ray_result.type_value = 0.2
+					3: _ray_result.type_value = 0.5
+					5: _ray_result.type_value = 0.8
+					9: _ray_result.type_value = 1.0
 
-	return result
+	return _ray_result
 
 
 func get_wall_distance(origin: Vector2, direction: Vector2) -> float:

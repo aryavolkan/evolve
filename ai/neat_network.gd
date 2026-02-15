@@ -12,6 +12,14 @@ var _biases: Dictionary = {}  ## node_id → bias
 var _connections: Array = []  ## [{in_id, out_id, weight}] — only enabled connections
 var _activations: Dictionary = {}  ## node_id → current activation value
 
+# Precomputed adjacency: node_id → Array of {in_id: int, weight: float}
+# Avoids O(connections) scan per node in forward pass.
+var _incoming: Dictionary = {}  ## node_id → [{in_id, weight}]
+var _is_input: Dictionary = {}  ## node_id → true (for fast skip in forward)
+
+# Cached output array (avoid allocation per forward call)
+var _cached_outputs: PackedFloat32Array
+
 
 static func from_genome(genome: NeatGenome) -> NeatNetwork:
 	## Build a phenotype network from a genome.
@@ -20,12 +28,14 @@ static func from_genome(genome: NeatGenome) -> NeatNetwork:
 	# Collect node IDs by type
 	for node in genome.node_genes:
 		net._biases[node.id] = node.bias
+		net._incoming[node.id] = []
 		if node.type == 0:
 			net._input_ids.append(node.id)
+			net._is_input[node.id] = true
 		elif node.type == 2:
 			net._output_ids.append(node.id)
 
-	# Collect enabled connections
+	# Collect enabled connections and build adjacency lists
 	for conn in genome.connection_genes:
 		if conn.enabled:
 			net._connections.append({
@@ -33,6 +43,9 @@ static func from_genome(genome: NeatGenome) -> NeatNetwork:
 				"out_id": conn.out_id,
 				"weight": conn.weight,
 			})
+			# Build incoming adjacency for O(1) lookup per node
+			if net._incoming.has(conn.out_id):
+				net._incoming[conn.out_id].append({"in_id": conn.in_id, "weight": conn.weight})
 
 	# Topological sort
 	net._node_order = net._topological_sort(genome)
@@ -40,6 +53,9 @@ static func from_genome(genome: NeatGenome) -> NeatNetwork:
 	# Initialize activations
 	for node in genome.node_genes:
 		net._activations[node.id] = 0.0
+
+	# Pre-allocate output array
+	net._cached_outputs.resize(net._output_ids.size())
 
 	return net
 
@@ -56,30 +72,24 @@ func forward(inputs: PackedFloat32Array) -> PackedFloat32Array:
 			_activations[_input_ids[i]] = 0.0
 
 	# Process nodes in topological order (skip inputs, they're already set)
-	var input_set: Dictionary = {}
-	for id in _input_ids:
-		input_set[id] = true
-
 	for node_id in _node_order:
-		if input_set.has(node_id):
+		if _is_input.has(node_id):
 			continue
 
-		# Sum weighted inputs + bias
+		# Sum weighted inputs + bias using precomputed adjacency
 		var sum: float = _biases.get(node_id, 0.0)
-		for conn in _connections:
-			if conn.out_id == node_id:
-				sum += _activations.get(conn.in_id, 0.0) * conn.weight
+		var incoming: Array = _incoming.get(node_id, [])
+		for edge in incoming:
+			sum += _activations.get(edge.in_id, 0.0) * edge.weight
 
 		# tanh activation for hidden and output nodes
 		_activations[node_id] = tanh(sum)
 
-	# Collect outputs
-	var outputs := PackedFloat32Array()
-	outputs.resize(_output_ids.size())
+	# Collect outputs into cached array
 	for i in _output_ids.size():
-		outputs[i] = _activations.get(_output_ids[i], 0.0)
+		_cached_outputs[i] = _activations.get(_output_ids[i], 0.0)
 
-	return outputs
+	return _cached_outputs
 
 
 func get_input_count() -> int:
@@ -126,13 +136,15 @@ func _topological_sort(genome: NeatGenome) -> PackedInt32Array:
 
 	# Start with nodes that have no incoming edges
 	var queue: Array[int] = []
+	var queue_head: int = 0  # Use index instead of pop_front to avoid O(n) shift
 	for node_id in in_degree:
 		if in_degree[node_id] == 0:
 			queue.append(node_id)
 
 	var order := PackedInt32Array()
-	while not queue.is_empty():
-		var node_id: int = queue.pop_front()
+	while queue_head < queue.size():
+		var node_id: int = queue[queue_head]
+		queue_head += 1
 		order.append(node_id)
 		for downstream in adjacency.get(node_id, []):
 			in_degree[downstream] -= 1
