@@ -159,14 +159,13 @@ func _physics_process(delta: float) -> void:
 			return
 
 	# Backup: distance-based collision check (handles high time scales and tunneling)
-	# Retarget to nearest player each check
-	var nearest = find_nearest_target()
-	if nearest and is_instance_valid(nearest):
+	# Use cached player reference instead of find_nearest_target() every frame
+	if player and is_instance_valid(player):
 		var my_size: float = TYPE_CONFIG[type]["size"] * 0.5
 		var player_size: float = 20.0  # Player half-size
 		var collision_dist: float = my_size + player_size
-		if global_position.distance_to(nearest.global_position) < collision_dist:
-			nearest.on_enemy_collision(self)
+		if global_position.distance_to(player.global_position) < collision_dist:
+			player.on_enemy_collision(self)
 			return
 
 func setup_ai(network) -> void:

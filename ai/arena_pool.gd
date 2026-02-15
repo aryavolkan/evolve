@@ -81,7 +81,7 @@ func create_slot() -> Dictionary:
 	svc.size = Vector2(arena_w, arena_h)
 
 	var viewport = SubViewport.new()
-	viewport.size = Vector2(1280, 720)
+	viewport.size = Vector2(640, 360)  # Reduced from 1280×720 — training grid renders tiny
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport.handle_input_locally = false
 	svc.add_child(viewport)
@@ -135,7 +135,7 @@ func replace_slot(slot_index: int) -> Dictionary:
 	svc.size = Vector2(arena_w, arena_h)
 
 	var viewport = SubViewport.new()
-	viewport.size = Vector2(1280, 720)
+	viewport.size = Vector2(640, 360)  # Reduced from 1280×720 — training grid renders tiny
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport.handle_input_locally = false
 	svc.add_child(viewport)

@@ -5,6 +5,7 @@ extends "res://ai/evolution_base.gd"
 ## multi-objective NSGA-II selection (3 objectives: survival, kills, powerups).
 
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
+const NNFactory = preload("res://ai/neural_network_factory.gd")
 const NSGA2 = preload("res://ai/nsga2.gd")
 
 # NSGA-II multi-objective mode
@@ -56,14 +57,15 @@ func enable_population_memory() -> void:
 	## Enable Elman memory on all networks in the population.
 	use_memory = true
 	for net in population:
-		net.enable_memory()
+		NNFactory.enable_memory(net)
 
 
 func initialize_population() -> void:
 	## Create initial random population.
+	## Uses RustNeuralNetwork when available for ~5-15× faster forward passes.
 	population.clear()
 	for i in population_size:
-		var net = NeuralNetworkScript.new(input_size, hidden_size, output_size)
+		var net = NNFactory.create(input_size, hidden_size, output_size)
 		population.append(net)
 	generation = 0
 	seed_lineage(population_size)
@@ -116,11 +118,11 @@ func _evolve_single_objective() -> void:
 
 	# Track best
 	best_fitness = indexed_fitness[0].fitness
-	best_network = population[indexed_fitness[0].index].clone()
+	best_network = NNFactory.clone_network(population[indexed_fitness[0].index])
 
 	if best_fitness > all_time_best_fitness:
 		all_time_best_fitness = best_fitness
-		all_time_best_network = best_network.clone()
+		all_time_best_network = NNFactory.clone_network(best_network)
 
 	# Calculate average and min fitness
 	var total_fitness := 0.0
@@ -147,7 +149,7 @@ func _evolve_single_objective() -> void:
 	var elite_indices := get_elite_indices(indexed_fitness, elite_count)
 	for i in elite_indices.size():
 		var elite_idx: int = elite_indices[i]
-		var elite = population[elite_idx].clone()
+		var elite = NNFactory.clone_network(population[elite_idx])
 		new_population.append(elite)
 		if lineage:
 			var src_idx: int = elite_idx
@@ -170,18 +172,18 @@ func _evolve_single_objective() -> void:
 			var parent_b_idx: int = tournament_select(indexed_fitness)
 			if parent_b_idx == -1:
 				parent_b_idx = parent_a_idx
-			child = population[parent_a_idx].crossover_with(population[parent_b_idx])
+			child = NNFactory.crossover(population[parent_a_idx], population[parent_b_idx])
 			if lineage:
 				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
 				var lid_b: int = old_lid[parent_b_idx] if parent_b_idx < old_lid.size() else -1
 				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
 		else:
-			child = population[parent_a_idx].clone()
+			child = NNFactory.clone_network(population[parent_a_idx])
 			if lineage:
 				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
 				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
 
-		child.mutate(mutation_rate, mutation_strength)
+		NNFactory.mutate_network(child, mutation_rate, mutation_strength)
 		new_population.append(child)
 
 	population = new_population
@@ -220,11 +222,11 @@ func _evolve_nsga2() -> void:
 			best_idx = i
 
 	best_fitness = best_sum
-	best_network = population[best_idx].clone()
+	best_network = NNFactory.clone_network(population[best_idx])
 
 	if best_fitness > all_time_best_fitness:
 		all_time_best_fitness = best_fitness
-		all_time_best_network = best_network.clone()
+		all_time_best_network = NNFactory.clone_network(best_network)
 
 	var avg_fitness := total_fitness / population_size
 
@@ -268,7 +270,7 @@ func _evolve_nsga2() -> void:
 			elite_indices.append(idx)
 
 	for idx in elite_indices:
-		new_population.append(population[idx].clone())
+		new_population.append(NNFactory.clone_network(population[idx]))
 		if lineage:
 			new_lineage_ids[new_population.size() - 1] = lineage.record_birth(
 				generation + 1,
@@ -285,18 +287,18 @@ func _evolve_nsga2() -> void:
 
 		if randf() < crossover_rate:
 			var parent_b_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map)
-			child = population[parent_a_idx].crossover_with(population[parent_b_idx])
+			child = NNFactory.crossover(population[parent_a_idx], population[parent_b_idx])
 			if lineage:
 				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
 				var lid_b: int = old_lid[parent_b_idx] if parent_b_idx < old_lid.size() else -1
 				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
 		else:
-			child = population[parent_a_idx].clone()
+			child = NNFactory.clone_network(population[parent_a_idx])
 			if lineage:
 				var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
 				new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
 
-		child.mutate(mutation_rate, mutation_strength)
+		NNFactory.mutate_network(child, mutation_rate, mutation_strength)
 		new_population.append(child)
 
 	population = new_population
@@ -361,7 +363,7 @@ func _reset_scores() -> void:
 
 
 func _clone_individual(individual):
-	return individual.clone()
+	return NNFactory.clone_network(individual)
 
 
 func _get_all_time_best_entity():
@@ -377,8 +379,7 @@ func _save_entity(path: String, entity) -> void:
 
 
 func _load_entity(path: String):
-	var net = NeuralNetworkScript.load_from_file(path)
-	return net
+	return NNFactory.load_from_file(path)
 
 
 func _save_population_impl(path: String) -> void:
@@ -435,15 +436,15 @@ func _load_population_impl(path: String) -> bool:
 	# Load all-time best
 	var has_best := file.get_8()
 	if has_best:
-		all_time_best_network = NeuralNetworkScript.new(input_size, hidden_size, output_size)
+		all_time_best_network = NNFactory.create(input_size, hidden_size, output_size)
 		if use_memory:
-			all_time_best_network.enable_memory()
+			NNFactory.enable_memory(all_time_best_network)
 		var weights := PackedFloat32Array()
 		weights.resize(weight_count)
 		for j in weight_count:
 			weights[j] = file.get_float()
 		all_time_best_network.set_weights(weights)
-		best_network = all_time_best_network.clone()
+		best_network = NNFactory.clone_network(all_time_best_network)
 
 	file.close()
 	return true
