@@ -59,7 +59,8 @@ if metrics_files:
             avg = data.get('avg_fitness', '?')
             atb = data.get('all_time_best', '?')
             stag = data.get('generations_without_improvement', '?')
-            stage = data.get('curriculum_stage', '?')
+            curriculum_on = data.get('curriculum_enabled', True)
+            stage = data.get('curriculum_stage', '?') if curriculum_on else 'off'
             complete = data.get('training_complete', False)
             status = 'COMPLETE' if complete else 'TRAINING'
             best_str = f'{best:,.0f}' if isinstance(best, (int, float)) else best

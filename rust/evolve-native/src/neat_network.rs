@@ -35,6 +35,12 @@ pub struct RustNeatNetwork {
 
     /// Current activation values
     activations: Vec<f32>,
+
+    /// Cached input membership for skipping in forward pass
+    is_input: Vec<bool>,
+
+    /// Cached output array (avoid allocation per forward call)
+    cached_outputs: PackedFloat32Array,
 }
 
 impl RustNeatNetwork {
@@ -170,6 +176,16 @@ impl RustNeatNetwork {
 
         let activations = vec![0.0f32; num_nodes];
 
+        // Precompute input membership
+        let mut is_input = vec![false; num_nodes];
+        for &idx in &input_indices {
+            is_input[idx] = true;
+        }
+
+        // Pre-allocate output array
+        let mut cached_outputs = PackedFloat32Array::new();
+        cached_outputs.resize(output_indices.len());
+
         Gd::from_init_fn(|base| Self {
             base,
             node_order,
@@ -180,6 +196,8 @@ impl RustNeatNetwork {
             connections,
             incoming,
             activations,
+            is_input,
+            cached_outputs,
         })
     }
 
@@ -193,15 +211,9 @@ impl RustNeatNetwork {
             self.activations[idx] = if i < inp.len() { inp[i] } else { 0.0 };
         }
 
-        // Build input set for skipping
-        let mut is_input = vec![false; self.activations.len()];
-        for &idx in &self.input_indices {
-            is_input[idx] = true;
-        }
-
-        // Process in topological order
+        // Process in topological order (skip inputs via cached bitmap)
         for &node_idx in &self.node_order {
-            if is_input[node_idx] {
+            if self.is_input[node_idx] {
                 continue;
             }
 
@@ -212,14 +224,12 @@ impl RustNeatNetwork {
             self.activations[node_idx] = sum.tanh();
         }
 
-        // Collect outputs
-        let mut outputs = PackedFloat32Array::new();
-        outputs.resize(self.output_indices.len());
-        let out_slice = outputs.as_mut_slice();
+        // Collect outputs into cached array
+        let out_slice = self.cached_outputs.as_mut_slice();
         for (i, &idx) in self.output_indices.iter().enumerate() {
             out_slice[i] = self.activations[idx];
         }
-        outputs
+        self.cached_outputs.clone()
     }
 
     #[func]

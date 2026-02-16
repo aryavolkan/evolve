@@ -80,6 +80,135 @@ impl RustNsga2 {
 
         fronts
     }
+
+    /// Build a flat rank lookup: individual index → front rank.
+    /// Call once after non_dominated_sort, then use for O(1) rank lookups.
+    #[func]
+    fn build_rank_map(fronts: VarArray, pop_size: i32) -> PackedInt32Array {
+        let n = pop_size as usize;
+        let mut ranks = PackedInt32Array::new();
+        ranks.resize(n);
+        let default_rank = fronts.len() as i32;
+        let ranks_slice = ranks.as_mut_slice();
+        for r in ranks_slice.iter_mut() {
+            *r = default_rank;
+        }
+
+        for rank in 0..fronts.len() {
+            let front: PackedInt32Array = fronts.at(rank).to();
+            for idx in front.as_slice() {
+                let i = *idx as usize;
+                if i < n {
+                    ranks_slice[i] = rank as i32;
+                }
+            }
+        }
+        ranks
+    }
+
+    /// Crowding distance calculation for a single front.
+    /// Input: objectives (Array of Vector3), front (PackedInt32Array of indices)
+    /// Output: Dictionary {index: crowding_distance}
+    #[func]
+    fn crowding_distance(objectives: VarArray, front: PackedInt32Array) -> VarDictionary {
+        let indices = front.as_slice();
+        let n = indices.len();
+        let mut result = VarDictionary::new();
+
+        if n <= 2 {
+            for &idx in indices {
+                result.set(idx, f64::INFINITY);
+            }
+            return result;
+        }
+
+        // Extract objectives for front members
+        let mut objs: Vec<(i32, [f32; 3])> = Vec::with_capacity(n);
+        for &idx in indices {
+            let v: Vector3 = objectives.at(idx as usize).to();
+            objs.push((idx, [v.x, v.y, v.z]));
+        }
+
+        let mut distances = vec![0.0f64; n];
+
+        // For each objective dimension
+        for m in 0..3 {
+            // Sort by this objective
+            let mut sorted_indices: Vec<usize> = (0..n).collect();
+            sorted_indices.sort_by(|&a, &b| objs[a].1[m].partial_cmp(&objs[b].1[m]).unwrap_or(std::cmp::Ordering::Equal));
+
+            // Boundary points get infinity
+            distances[sorted_indices[0]] = f64::INFINITY;
+            distances[sorted_indices[n - 1]] = f64::INFINITY;
+
+            let obj_min = objs[sorted_indices[0]].1[m];
+            let obj_max = objs[sorted_indices[n - 1]].1[m];
+            let range = obj_max - obj_min;
+
+            if range > 0.0 {
+                for i in 1..(n - 1) {
+                    let prev = sorted_indices[i - 1];
+                    let next = sorted_indices[i + 1];
+                    distances[sorted_indices[i]] += ((objs[next].1[m] - objs[prev].1[m]) / range) as f64;
+                }
+            }
+        }
+
+        for (i, &idx) in indices.iter().enumerate() {
+            result.set(idx, distances[i]);
+        }
+        result
+    }
+
+    /// Binary tournament selection using NSGA-II crowded comparison.
+    /// rank_map: from build_rank_map, crowding: from crowding_distance
+    #[func]
+    fn tournament_select(pop_size: i32, rank_map: PackedInt32Array, crowding: VarDictionary) -> i32 {
+        let n = pop_size as usize;
+        if n == 0 {
+            return 0;
+        }
+
+        // Use simple random (Godot's randi isn't easily accessible, use a basic approach)
+        let a = fastrand_usize(n);
+        let mut b = fastrand_usize(n);
+        while b == a && n > 1 {
+            b = fastrand_usize(n);
+        }
+
+        let ranks = rank_map.as_slice();
+        let rank_a = if a < ranks.len() { ranks[a] } else { i32::MAX };
+        let rank_b = if b < ranks.len() { ranks[b] } else { i32::MAX };
+
+        if rank_a < rank_b {
+            return a as i32;
+        }
+        if rank_b < rank_a {
+            return b as i32;
+        }
+
+        // Same rank — prefer higher crowding distance
+        let cd_a: f64 = crowding.get_or_nil(a as i32).to();
+        let cd_b: f64 = crowding.get_or_nil(b as i32).to();
+
+        if cd_a >= cd_b { a as i32 } else { b as i32 }
+    }
+}
+
+/// Simple fast pseudo-random using thread-local state
+fn fastrand_usize(max: usize) -> usize {
+    use std::cell::Cell;
+    thread_local! {
+        static STATE: Cell<u64> = Cell::new(0x12345678_9abcdef0);
+    }
+    STATE.with(|s| {
+        let mut x = s.get();
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        s.set(x);
+        (x as usize) % max
+    })
 }
 
 #[cfg(test)]
