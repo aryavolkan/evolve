@@ -32,8 +32,8 @@ impl RustGeneticOps {
         for _ in 0..t_size {
             let rand_idx = rng.gen_range(0..n);
             let entry: VarDictionary = indexed_fitness.at(rand_idx).to();
-            let idx: i32 = entry.get("index").to();
-            let fitness: f32 = entry.get("fitness").to();
+            let idx: i32 = entry.get_or_nil("index").to();
+            let fitness: f32 = entry.get_or_nil("fitness").to();
             
             if fitness > best_fitness {
                 best_fitness = fitness;
@@ -57,8 +57,8 @@ impl RustGeneticOps {
         let mut fitness_vec: Vec<(i32, f32)> = Vec::with_capacity(n);
         for i in 0..n {
             let entry: VarDictionary = indexed_fitness.at(i).to();
-            let idx: i32 = entry.get("index").to();
-            let fitness: f32 = entry.get("fitness").to();
+            let idx: i32 = entry.get_or_nil("index").to();
+            let fitness: f32 = entry.get_or_nil("fitness").to();
             fitness_vec.push((idx, fitness));
         }
 
@@ -208,8 +208,8 @@ impl RustGeneticOps {
         
         for i in 0..n {
             let entry: VarDictionary = indexed_fitness.at(i).to();
-            let idx: i32 = entry.get("index").to();
-            let fitness: f32 = entry.get("fitness").to();
+            let idx: i32 = entry.get_or_nil("index").to();
+            let fitness: f32 = entry.get_or_nil("fitness").to();
             items.push((idx, fitness));
         }
         
