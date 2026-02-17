@@ -50,6 +50,7 @@ var migration_mgr: RefCounted = preload("res://ai/migration_manager.gd").new()
 var metrics_writer: RefCounted = preload("res://ai/metrics_writer.gd").new()
 var playback_mgr: RefCounted = preload("res://ai/playback_manager.gd").new()
 var training_ui: RefCounted = preload("res://ai/training_ui.gd").new()
+var tui_bridge: RefCounted = preload("res://ai/tui_bridge.gd").new()
 var training_overrides: Dictionary = {}
 const SandboxTrainingModeScript = preload("res://modes/sandbox_training_mode.gd")
 
@@ -234,6 +235,7 @@ func _ready() -> void:
 	training_ui.heatmap_cell_clicked.connect(_on_heatmap_cell_clicked)
 	training_ui.replay_best_requested.connect(_start_best_replay)
 	training_ui.training_exited.connect(_on_training_exited)
+	tui_bridge.setup()
 
 
 func _input(event: InputEvent) -> void:
@@ -422,6 +424,37 @@ func _physics_process(delta: float) -> void:
 		return
 	if _active_mode:
 		_active_mode.process(delta)
+	# TUI bridge: write arena states, poll commands
+	var eval_states: Array = _active_mode.get_eval_states() if _active_mode else []
+	var cmd = tui_bridge.tick(delta, self, eval_states)
+	if cmd and cmd.get("action"):
+		_handle_tui_command(cmd)
+
+
+# ============================================================
+# TUI command handler
+# ============================================================
+
+func _handle_tui_command(cmd: Dictionary) -> void:
+	var action: String = cmd.get("action", "")
+	match action:
+		"start_training":
+			if current_mode != Mode.TRAINING:
+				start_training()
+		"stop_training":
+			stop_training()
+		"play_best":
+			_start_best_replay()
+		"speed_up":
+			adjust_speed(1.0)
+		"speed_down":
+			adjust_speed(-1.0)
+		"focus_arena":
+			if arena_pool:
+				arena_pool.enter_fullscreen(cmd.get("index", 0))
+		"exit_focus":
+			if arena_pool:
+				arena_pool.exit_fullscreen()
 
 
 # ============================================================

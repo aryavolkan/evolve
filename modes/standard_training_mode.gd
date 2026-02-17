@@ -568,3 +568,35 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 		ctx._show_training_complete("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
 		ctx._write_metrics_for_wandb()
 		return
+
+
+# ============================================================
+# TUI bridge — per-frame eval state snapshot
+# ============================================================
+
+func get_eval_states() -> Array:
+	if not ctx:
+		return []
+	var states: Array = []
+	for eval in ctx.eval_instances:
+		var slot_id: int = eval.get("slot_index", -1)
+		var individual: int = eval.get("index", -1)
+		var done: bool = eval.get("done", false)
+		var t: float = eval.get("time", 0.0)
+		var score: float = 0.0
+		var alive: bool = true
+		var scene = eval.get("scene")
+		if scene != null and is_instance_valid(scene):
+			if "score" in scene:
+				score = scene.score
+			if "game_over" in scene:
+				alive = not scene.game_over
+		states.append({
+			"id": slot_id,
+			"individual": individual,
+			"score": score,
+			"alive": alive,
+			"time": t,
+			"done": done,
+		})
+	return states

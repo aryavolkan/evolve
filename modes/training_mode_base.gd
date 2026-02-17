@@ -22,3 +22,7 @@ func process(_delta: float) -> void:
 
 func handle_input(_event: InputEvent) -> void:
 	pass
+
+
+func get_eval_states() -> Array:
+	return []
