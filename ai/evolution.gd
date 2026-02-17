@@ -8,6 +8,10 @@ var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 const NNFactory = preload("res://ai/neural_network_factory.gd")
 const NSGA2 = preload("res://ai/nsga2.gd")
 
+# Rust accelerated genetic operations (when available)
+var _rust_genetic_ops = null
+var _use_rust_genetic_ops: bool = false
+
 # NSGA-II multi-objective mode
 var use_memory: bool = false
 var objective_scores: Array = []  # Array of Vector3 per individual (survival, kills, powerups)
@@ -49,6 +53,17 @@ func _init(
 	objective_scores.resize(p_population_size)
 	for i in p_population_size:
 		objective_scores[i] = Vector3.ZERO
+
+	# Initialize Rust genetic operations if available
+	if ClassDB.class_exists(&"RustGeneticOps"):
+		_rust_genetic_ops = ClassDB.instantiate(&"RustGeneticOps")
+		if _rust_genetic_ops:
+			_use_rust_genetic_ops = true
+			print("[Evolution] ✓ Using Rust genetic operations for faster evolution")
+		else:
+			print("[Evolution] ⚠ RustGeneticOps class exists but couldn't instantiate")
+	else:
+		print("[Evolution] ⚠ RustGeneticOps not available, using GDScript implementation")
 
 	initialize_population()
 

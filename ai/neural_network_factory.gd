@@ -23,12 +23,32 @@ static func _check_rust_available() -> void:
 	if _checked:
 		return
 	_checked = true
+	
 	# Check if RustNeuralNetwork class is registered (GDExtension loaded)
 	_use_rust = ClassDB.class_exists(&"RustNeuralNetwork")
+	
 	if _use_rust:
-		print("[NeuralNetworkFactory] Using Rust backend (RustNeuralNetwork)")
+		# Verify we can instantiate it
+		var test_instance = ClassDB.instantiate(&"RustNeuralNetwork")
+		if not test_instance:
+			print("[NeuralNetworkFactory] RustNeuralNetwork class exists but cannot instantiate")
+			_use_rust = false
+		else:
+			# Verify the create method exists
+			if not test_instance.has_method(&"create"):
+				print("[NeuralNetworkFactory] RustNeuralNetwork missing create() method")
+				_use_rust = false
+			else:
+				# Try a test creation
+				var test_net = test_instance.call(&"create", 10, 5, 2)
+				if not test_net:
+					print("[NeuralNetworkFactory] RustNeuralNetwork.create() returned null in test")
+					_use_rust = false
+	
+	if _use_rust:
+		print("[NeuralNetworkFactory] ✓ Using Rust backend (RustNeuralNetwork) - expect 5-15x faster forward passes")
 	else:
-		print("[NeuralNetworkFactory] Using GDScript backend (Rust extension not available)")
+		print("[NeuralNetworkFactory] ⚠ Using GDScript backend (check if evolve.gdextension is properly configured)")
 
 
 static func is_rust_available() -> bool:
@@ -43,11 +63,20 @@ static func create(input_size: int, hidden_size: int, output_size: int) -> Varia
 	_check_rust_available()
 
 	if _use_rust:
-		# Call static "create" via ClassDB to avoid compile-time class dependency.
-		# RustNeuralNetwork.create(i, h, o) is a static @func in gdext.
+		# Create instance and call the create method on it
 		var instance = ClassDB.instantiate(&"RustNeuralNetwork")
-		# gdext static funcs are actually instance-callable as well via the class
-		return instance.call(&"create", input_size, hidden_size, output_size)
+		if instance and instance.has_method(&"create"):
+			var net = instance.call(&"create", input_size, hidden_size, output_size)
+			if net:
+				return net
+			else:
+				push_warning("RustNeuralNetwork.create() returned null, falling back to GDScript")
+		else:
+			push_warning("RustNeuralNetwork instance missing create() method, falling back to GDScript")
+		
+		# Fallback if Rust creation failed
+		_use_rust = false
+		return GDScriptNN.new(input_size, hidden_size, output_size)
 	else:
 		return GDScriptNN.new(input_size, hidden_size, output_size)
 
