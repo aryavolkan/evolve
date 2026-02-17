@@ -58,8 +58,8 @@ SWEEP_CONFIG = {
 
 # Paths - auto-detect OS
 import platform as _platform
-GODOT_PATH = "/usr/local/bin/godot" if _platform.system() == "Linux" else "/Applications/Godot.app/Contents/MacOS/Godot"
-PROJECT_PATH = Path.home() / "Projects/evolve"
+GODOT_PATH = os.getenv("GODOT_PATH", "/home/aryasen/.local/bin/godot") if _platform.system() == "Linux" else "/Applications/Godot.app/Contents/MacOS/Godot"
+PROJECT_PATH = Path.home() / "evolve"
 if _platform.system() == "Linux":
     GODOT_USER_DATA = Path.home() / ".local/share/godot/app_userdata/Evolve"
 else:

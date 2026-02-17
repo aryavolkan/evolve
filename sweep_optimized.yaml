@@ -1,0 +1,57 @@
+program: overnight_evolve.py
+method: bayes
+metric:
+  name: best_fitness
+  goal: maximize
+
+parameters:
+  # Fixed based on top runs
+  use_neat:
+    value: true
+  use_nsga2:
+    value: false
+  curriculum_enabled:
+    value: true
+  time_scale:
+    value: 16
+  max_generations:
+    value: 50
+  parallel_count:
+    value: 10
+  evals_per_individual:
+    value: 2
+
+  # Optimized ranges from top 3 runs
+  population_size:
+    values: [100, 120, 150]
+  
+  hidden_size:
+    values: [80, 88, 96]
+  
+  elite_count:
+    values: [15, 18, 20]
+  
+  mutation_rate:
+    distribution: uniform
+    min: 0.24
+    max: 0.34
+  
+  mutation_strength:
+    distribution: uniform
+    min: 0.08
+    max: 0.12
+  
+  crossover_rate:
+    distribution: uniform
+    min: 0.68
+    max: 0.78
+  
+  # Mixed in top runs - keep exploring
+  use_memory:
+    values: [true, false]
+  
+  use_map_elites:
+    values: [true, false]
+  
+  map_elites_grid_size:
+    values: [15, 20, 25]
