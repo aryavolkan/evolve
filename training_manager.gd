@@ -146,6 +146,7 @@ var CURRICULUM_STAGES: Array[Dictionary]:
 # Generation rollback
 var previous_avg_fitness: float = 0.0
 var rerun_count: int = 0
+var generation_current_best: float = 0.0
 const MAX_RERUNS: int = 0
 
 # Backward-compatible playback accessors
