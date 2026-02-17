@@ -135,7 +135,8 @@ func evolve() -> void:
 			new_population.append(sorted_members[i].copy())
 			if lineage:
 				var src_lid: int = genome_lid.get(sorted_members[i], -1)
-				new_lineage_ids[new_population.size() - 1] = lineage.record_birth(generation + 1, src_lid, -1, sorted_members[i].fitness, "elite")
+				if new_population.size() - 1 < new_lineage_ids.size():
+					new_lineage_ids[new_population.size() - 1] = lineage.record_birth(generation + 1, src_lid, -1, sorted_members[i].fitness, "elite")
 
 		# Breeding pool: top survival_fraction
 		var pool_size: int = maxi(1, int(sorted_members.size() * config.survival_fraction))
@@ -161,13 +162,15 @@ func evolve() -> void:
 				if lineage:
 					var lid_a: int = genome_lid.get(parent_a, -1)
 					var lid_b: int = genome_lid.get(parent_b, -1)
-					new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
+					if new_population.size() < new_lineage_ids.size():
+						new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
 			else:
 				var parent: NeatGenome = pool[randi() % pool.size()]
 				child = parent.copy()
 				if lineage:
 					var lid_a: int = genome_lid.get(parent, -1)
-					new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
+					if new_population.size() < new_lineage_ids.size():
+						new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
 
 			child.mutate(config)
 			new_population.append(child)
