@@ -2,6 +2,8 @@
 
 A 2D arcade survival game built with Godot 4.5+ where you dodge chess-piece enemies, collect power-ups, and compete for high scores — or train AI agents through neuroevolution to play for you.
 
+![Title Screen](assets/title_screen.png)
+
 ![Gameplay](assets/gameplay.png)
 
 ## Features
