@@ -128,7 +128,8 @@ func _on_start_pressed() -> void:
 		if slot.enabled:
 			strategies.append(slot.duplicate())
 	if strategies.size() < 2:
-		# Need at least 2
+		# Need at least 2 - show feedback
+		push_warning("Comparison requires at least 2 enabled strategies")
 		return
 	start_requested.emit(strategies)
 

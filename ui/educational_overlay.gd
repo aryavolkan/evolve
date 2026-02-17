@@ -241,7 +241,9 @@ func _direction_name(vec: Vector2) -> String:
 	# 8 cardinal directions (each 45 degrees = PI/4)
 	var sector: int = int(round(angle / (TAU / 8))) % 8
 	var names: PackedStringArray = ["RIGHT", "DOWN-RIGHT", "DOWN", "DOWN-LEFT", "LEFT", "UP-LEFT", "UP", "UP-RIGHT"]
-	return names[sector]
+	if sector >= 0 and sector < names.size():
+		return names[sector]
+	return "RIGHT"  # Fallback
 
 
 # ============================================================

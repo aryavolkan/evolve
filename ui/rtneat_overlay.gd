@@ -67,8 +67,8 @@ func _draw() -> void:
 	if _current_tool != 0:
 		var tool_names := ["INSPECT", "PLACE", "REMOVE", "SPAWN", "BLESS", "CURSE"]
 		var tool_colors := [Color.WHITE, Color(0.3, 0.9, 0.3), Color(0.9, 0.5, 0.2), Color(0.4, 0.6, 1.0), Color(1.0, 0.85, 0.2), Color(1.0, 0.3, 0.3)]
-		var tool_name: String = tool_names[_current_tool] if _current_tool < tool_names.size() else "?"
-		var tool_color: Color = tool_colors[_current_tool] if _current_tool < tool_colors.size() else Color.WHITE
+		var tool_name: String = tool_names[_current_tool] if _current_tool >= 0 and _current_tool < tool_names.size() else "?"
+		var tool_color: Color = tool_colors[_current_tool] if _current_tool >= 0 and _current_tool < tool_colors.size() else Color.WHITE
 		var tool_text := "Tool: %s" % tool_name
 		var tw: float = 120.0
 		var tx: float = 15.0

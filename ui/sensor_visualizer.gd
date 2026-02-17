@@ -29,6 +29,9 @@ const REDRAW_INTERVAL: float = 0.1
 
 func setup(p_player: CharacterBody2D) -> void:
 	player = p_player
+	if not player:
+		push_error("SensorVisualizer: Cannot setup with null player")
+		return
 	var SensorScript = preload("res://ai/sensor.gd")
 	sensor = SensorScript.new()
 	sensor.set_player(player)
@@ -54,8 +57,12 @@ func _draw() -> void:
 	if not enabled or not sensor or not player or not is_instance_valid(player):
 		return
 
+	if not sensor.has_method("get_inputs"):
+		push_error("SensorVisualizer: sensor missing get_inputs() method")
+		return
+
 	var inputs: PackedFloat32Array = sensor.get_inputs()
-	if inputs.size() < sensor.TOTAL_INPUTS:
+	if not sensor.has("TOTAL_INPUTS") or inputs.size() < sensor.TOTAL_INPUTS:
 		return
 
 	var player_pos: Vector2 = player.global_position

@@ -90,7 +90,9 @@ func _draw() -> void:
 			var py: float = plot_rect.position.y + (_grid_size - 1 - y) * (cell_h + CELL_GAP)
 			var rect := Rect2(px, py, cell_w, cell_h)
 
-			var cell_data = _grid[x][y] if x < _grid.size() and y < _grid[x].size() else null
+			var cell_data = null
+			if x < _grid.size() and y < _grid[x].size():
+				cell_data = _grid[x][y]
 
 			if cell_data == null:
 				draw_rect(rect, COLOR_EMPTY)
@@ -128,7 +130,9 @@ func _draw() -> void:
 
 	# Hover tooltip
 	if _hover_cell.x >= 0 and _hover_cell.x < _grid_size and _hover_cell.y >= 0 and _hover_cell.y < _grid_size:
-		var hcell = _grid[_hover_cell.x][_hover_cell.y] if _hover_cell.x < _grid.size() and _hover_cell.y < _grid[_hover_cell.x].size() else null
+		var hcell = null
+		if _hover_cell.x < _grid.size() and _hover_cell.y < _grid[_hover_cell.x].size():
+			hcell = _grid[_hover_cell.x][_hover_cell.y]
 		var tooltip_text: String
 		if hcell == null:
 			tooltip_text = "(%d, %d) — empty" % [_hover_cell.x, _hover_cell.y]

@@ -145,10 +145,13 @@ func _compute_layout() -> void:
 				var total_depth: float = 0.0
 				var count: int = 0
 				for conn in connections:
-					if _neat_genome and not conn.enabled:
+					if conn == null:
 						continue
-					var in_id: int = conn.in_id if _neat_genome else int(conn.get("in_id", -1))
-					var out_id: int = conn.out_id if _neat_genome else int(conn.get("out_id", -1))
+					var is_enabled: bool = conn.get("enabled", true) if conn.has("enabled") else true
+					if _neat_genome and not is_enabled:
+						continue
+					var in_id: int = int(conn.get("in_id", -1)) if conn.has("in_id") else -1
+					var out_id: int = int(conn.get("out_id", -1)) if conn.has("out_id") else -1
 					if out_id == h_id and node_depths.has(in_id):
 						total_depth += node_depths[in_id]
 						count += 1
@@ -274,8 +277,10 @@ func _draw_neat_network(font: Font) -> void:
 	# Draw connections first (behind nodes)
 	var connections: Array = _neat_genome.connection_genes if _neat_genome else _neat_network._connections
 	for conn in connections:
-		var in_id: int = conn.in_id if _neat_genome else int(conn.get("in_id", -1))
-		var out_id: int = conn.out_id if _neat_genome else int(conn.get("out_id", -1))
+		if conn == null:
+			continue
+		var in_id: int = conn.get("in_id", -1) if conn.has("in_id") else -1
+		var out_id: int = conn.get("out_id", -1) if conn.has("out_id") else -1
 		if not _node_positions.has(in_id) or not _node_positions.has(out_id):
 			continue
 
@@ -285,11 +290,12 @@ func _draw_neat_network(font: Font) -> void:
 		var color: Color
 		var width: float
 
-		if _neat_genome and not conn.enabled:
+		var is_enabled: bool = conn.get("enabled", true) if conn.has("enabled") else true
+		if _neat_genome and not is_enabled:
 			color = CONN_DISABLED
 			width = MIN_CONNECTION_WIDTH
 		else:
-			var w: float = conn.weight if _neat_genome else float(conn.get("weight", 0.0))
+			var w: float = float(conn.get("weight", 0.0)) if conn.has("weight") else 0.0
 			width = clampf(absf(w) * 1.5, MIN_CONNECTION_WIDTH, MAX_CONNECTION_WIDTH)
 			color = CONN_POSITIVE if w >= 0 else CONN_NEGATIVE
 			color.a = clampf(0.2 + absf(w) * 0.4, 0.1, 0.7)

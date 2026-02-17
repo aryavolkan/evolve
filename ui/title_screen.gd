@@ -145,6 +145,6 @@ func _draw() -> void:
 
 func _get_button_at(pos: Vector2) -> int:
 	for i in _buttons.size():
-		if _buttons[i].rect.has_point(pos):
+		if i < _buttons.size() and _buttons[i] != null and _buttons[i].has("rect") and _buttons[i].rect.has_point(pos):
 			return i
 	return -1

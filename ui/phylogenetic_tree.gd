@@ -182,8 +182,10 @@ func _draw() -> void:
 
 	# Stats
 	var best_fit: float = 0.0
-	var rec: Dictionary = _tracker.get_record(_best_id) if _tracker else {}
-	if not rec.is_empty():
+	var rec: Dictionary = {}
+	if _tracker and _tracker.has_method("get_record"):
+		rec = _tracker.get_record(_best_id)
+	if not rec.is_empty() and rec.has("fitness"):
 		best_fit = rec.fitness
 	var stats_text := "Best: %d  Ancestors: %d" % [int(best_fit), _ancestry.nodes.size()]
 	draw_string(header_font, panel_pos + Vector2(210, foot_y + 10), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, small_size, Color(0.6, 0.7, 0.8))

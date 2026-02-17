@@ -272,7 +272,7 @@ func _on_enemy_type_toggled(type_id: int, pressed: bool) -> void:
 			break
 	if not any_enabled:
 		enemy_types_enabled[0] = true  # Force pawn on
-		if _checkboxes.has(0):
+		if _checkboxes.has(0) and _checkboxes[0] != null:
 			_checkboxes[0].button_pressed = true
 	config_changed.emit(get_config())
 
