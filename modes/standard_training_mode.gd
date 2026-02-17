@@ -359,7 +359,7 @@ func _process_parallel_training(delta: float) -> void:
 		active_evals.append(eval)
 
 	# Batch process neural networks if we have multiple active evaluations
-	if active_count > 1 and not ctx.use_memory:
+	if active_count > 1 and not ctx.use_memory and not ctx.use_neat:
 		# Batch processing for stateless networks (all share same weights)
 		_batch_processor.begin_batch()
 		

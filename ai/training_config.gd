@@ -70,6 +70,18 @@ func get_metrics_path() -> String:
 	return METRICS_PATH
 
 
+func get_population_path() -> String:
+	if worker_id != "":
+		return "user://population_%s.evo" % worker_id
+	return POPULATION_PATH
+
+
+func get_best_network_path() -> String:
+	if worker_id != "":
+		return "user://best_network_%s.nn" % worker_id
+	return BEST_NETWORK_PATH
+
+
 func get_raw(key: String, default = null):
 	## Access raw sweep config for any custom keys.
 	return _raw.get(key, default)

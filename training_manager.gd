@@ -104,9 +104,9 @@ var generation_events_by_seed: Array = []
 
 # Path aliases
 var BEST_NETWORK_PATH: String:
-	get: return config.BEST_NETWORK_PATH
+	get: return config.get_best_network_path()
 var POPULATION_PATH: String:
-	get: return config.POPULATION_PATH
+	get: return config.get_population_path()
 var MIGRATION_POOL_DIR: String:
 	get: return config.MIGRATION_POOL_DIR
 

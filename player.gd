@@ -316,7 +316,8 @@ func update_fitness_milestone(fitness: float) -> void:
 
 func _on_milestone_tier_changed(new_tier: int, tier_name: String) -> void:
 	## Handle milestone tier changes.
-	print("Milestone tier changed to: %s (Tier %d)" % [tier_name, new_tier])
+	if not is_training_mode:
+		print("Milestone tier changed to: %s (Tier %d)" % [tier_name, new_tier])
 	
 	# Apply size scaling
 	if sprite and DisplayServer.get_screen_count() > 0:
