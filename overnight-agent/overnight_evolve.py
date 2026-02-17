@@ -242,8 +242,15 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
 
         except (json.JSONDecodeError, FileNotFoundError):
             pass
+        except KeyboardInterrupt:
+            print("Worker interrupted during training loop, shutting down cleanly...")
+            break
 
-        time.sleep(2)
+        try:
+            time.sleep(2)
+        except (KeyboardInterrupt, SystemExit):
+            print("Worker interrupted during sleep, shutting down cleanly...")
+            break
 
     # Check why loop ended
     elapsed = time.time() - start_time
