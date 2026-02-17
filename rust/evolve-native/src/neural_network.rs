@@ -265,7 +265,99 @@ impl RustNeuralNetwork {
     /// mutation_rate: probability of mutating each weight
     /// mutation_strength: standard deviation of mutation noise
     #[func]
-    fn mutate(&mut self, mutation_rate: f64, mutation_strength: f64) {
+    /// Batch forward pass for multiple agents sharing the same network weights.
+    /// Useful for parallel evaluation during evolution where all agents use the same genome.
+    /// inputs_array: Array of PackedFloat32Array (one per agent)
+    /// Returns: Array of PackedFloat32Array (outputs for each agent)
+    #[func]
+    fn batch_forward(&self, inputs_array: Array<PackedFloat32Array>) -> Array<PackedFloat32Array> {
+        let batch_size = inputs_array.len();
+        let input_size = self.input_size as usize;
+        let hidden_size = self.hidden_size as usize;
+        let output_size = self.output_size as usize;
+        
+        let mut outputs = Array::<PackedFloat32Array>::new();
+        
+        // Pre-allocate buffers for the entire batch to minimize allocations
+        let mut hidden_states = vec![0.0f32; batch_size * hidden_size];
+        let mut output_states = vec![0.0f32; batch_size * output_size];
+        
+        // Process each agent
+        for idx in 0..batch_size {
+            let Some(inputs) = inputs_array.get(idx) else { continue; };
+            let inp = inputs.as_slice();
+            debug_assert_eq!(inp.len(), input_size, "Input size mismatch");
+            
+            let hidden_offset = idx * hidden_size;
+            let output_offset = idx * output_size;
+            
+            // Hidden layer computation
+            for h in 0..hidden_size {
+                let mut sum = self.bias_h[h];
+                let weight_offset = h * input_size;
+                
+                // Input -> Hidden
+                for i in 0..input_size {
+                    sum += unsafe {
+                        self.weights_ih.get_unchecked(weight_offset + i)
+                            * inp.get_unchecked(i)
+                    };
+                }
+                
+                // Note: In batch mode, we don't use recurrent memory as each agent
+                // would need its own memory state. For stateful batch processing,
+                // use individual forward() calls with persistent network instances.
+                
+                hidden_states[hidden_offset + h] = sum.tanh();
+            }
+            
+            // Output layer computation
+            for o in 0..output_size {
+                let mut sum = self.bias_o[o];
+                let weight_offset = o * hidden_size;
+                
+                // Hidden -> Output
+                for h in 0..hidden_size {
+                    sum += unsafe {
+                        self.weights_ho.get_unchecked(weight_offset + h)
+                            * hidden_states.get_unchecked(hidden_offset + h)
+                    };
+                }
+                
+                output_states[output_offset + o] = sum.tanh();
+            }
+            
+            // Pack this agent's output
+            let agent_output = &output_states[output_offset..output_offset + output_size];
+            outputs.push(&PackedFloat32Array::from(agent_output));
+        }
+        
+        outputs
+    }
+
+    /// Batch forward pass for multiple networks with individual states.
+    /// This is useful when agents have memory (Elman networks) and need persistent state.
+    /// networks: Array of RustNeuralNetwork instances
+    /// inputs_array: Array of PackedFloat32Array (one per network)
+    /// Returns: Array of PackedFloat32Array (outputs for each network)
+    #[func]
+    fn batch_forward_stateful(networks: Array<Gd<RustNeuralNetwork>>, inputs_array: Array<PackedFloat32Array>) -> Array<PackedFloat32Array> {
+        debug_assert_eq!(networks.len(), inputs_array.len(), "Networks and inputs array length mismatch");
+        
+        let mut outputs = Array::<PackedFloat32Array>::new();
+        
+        // Process each network-input pair
+        for idx in 0..networks.len() {
+            if let Some(mut network) = networks.get(idx) {
+                if let Some(inputs) = inputs_array.get(idx) {
+                    let output = network.bind_mut().forward(inputs);
+                    outputs.push(&output);
+                }
+            }
+        }
+        
+        outputs
+    }    fn mutate(&mut self, mutation_rate: f64, mutation_strength: f64) {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, mutation_strength).unwrap();
         let rate = mutation_rate;

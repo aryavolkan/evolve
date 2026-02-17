@@ -322,9 +322,13 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
 # Parallel training processing
 # ============================================================
 
+var _batch_processor = preload("res://ai/batch_nn_processor.gd").new()
+
 func _process_parallel_training(delta: float) -> void:
 	var active_count := 0
+	var active_evals := []
 
+	# Collect active evaluations
 	for i in ctx.eval_instances.size():
 		var eval = ctx.eval_instances[i]
 		if eval.done:
@@ -332,11 +336,34 @@ func _process_parallel_training(delta: float) -> void:
 
 		active_count += 1
 		eval.time += delta
+		eval.slot_index = i  # Store the index for later use
+		active_evals.append(eval)
 
-		# Drive AI controller
-		var action: Dictionary = eval.controller.get_action()
-		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
+	# Batch process neural networks if we have multiple active evaluations
+	if active_count > 1 and not ctx.use_memory:
+		# Batch processing for stateless networks (all share same weights)
+		_batch_processor.begin_batch()
 		
+		for eval in active_evals:
+			var inputs: PackedFloat32Array = eval.controller.sensor.get_inputs()
+			_batch_processor.add_to_batch(eval.controller, inputs)
+		
+		# Process batch using first controller's network (all share same weights)
+		_batch_processor.process_batch(active_evals[0].controller.network)
+		
+		# Apply results
+		for eval in active_evals:
+			var outputs: PackedFloat32Array = _batch_processor.get_result(eval.controller)
+			var action: Dictionary = eval.controller._process_outputs(outputs)
+			eval.player.set_ai_action(action.move_direction, action.shoot_direction)
+	else:
+		# Fallback to individual processing (for memory networks or single eval)
+		for eval in active_evals:
+			var action: Dictionary = eval.controller.get_action()
+			eval.player.set_ai_action(action.move_direction, action.shoot_direction)
+	
+	# Update milestone tracking for all active evals
+	for eval in active_evals:
 		# Update milestone in real-time based on generation's current best
 		if eval.scene.score > ctx.generation_current_best:
 			ctx.generation_current_best = eval.scene.score
@@ -360,7 +387,7 @@ func _process_parallel_training(delta: float) -> void:
 			active_count -= 1
 
 			if ctx.next_individual < ctx.population_size:
-				_replace_eval_instance(i, ctx.next_individual)
+				_replace_eval_instance(eval.slot_index, ctx.next_individual)
 				ctx.next_individual += 1
 
 	# Check if all individuals complete for current seed

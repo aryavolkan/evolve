@@ -52,7 +52,14 @@ func get_action() -> Dictionary:
 	## Optimized to reduce allocations in hot path (runs 600+ times/sec)
 
 	var inputs: PackedFloat32Array = sensor.get_inputs()
-	_cached_outputs = network.forward(inputs)
+	var outputs: PackedFloat32Array = network.forward(inputs)
+	return _process_outputs(outputs)
+
+
+func _process_outputs(outputs: PackedFloat32Array) -> Dictionary:
+	## Process network outputs into actions. Exposed for batch processing.
+	## Returns: {move_direction: Vector2, shoot_direction: Vector2}
+	_cached_outputs = outputs
 
 	# Movement direction (direct mapping from network outputs)
 	var move_x: float = _cached_outputs[OUT_MOVE_X]
