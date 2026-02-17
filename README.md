@@ -2,9 +2,13 @@
 
 A 2D arcade survival game built with Godot 4.5+ where you dodge chess-piece enemies, collect power-ups, and compete for high scores — or train AI agents through neuroevolution to play for you.
 
-![Title Screen](assets/title_screen.png)
+## Screenshots
 
-![Gameplay](assets/gameplay.png)
+| Gameplay | AI Training |
+|----------|-------------|
+| ![Gameplay](assets/gameplay.png) | ![AI Training](assets/training.png) |
+
+*Dodge chess-piece enemies and collect power-ups (left) — or watch evolved NEAT agents train across 10 parallel arenas (right).*
 
 ## Features
 
@@ -93,8 +97,6 @@ flowchart LR
 **Data flow:** Each generation, `training_manager` assigns neural networks from the evolution system to AI controllers in parallel arenas. Sensors feed 86 inputs (16 raycasts × 5 values + 6 player state) into the network, which outputs 6 actions (movement + shooting). Fitness scores flow back to the evolution system for selection and mutation.
 
 ## AI Training
-
-![AI Training](assets/training.png)
 
 Neural networks learn to play through neuroevolution — a population of agents evolves over generations using tournament selection, crossover, and mutation.
 
