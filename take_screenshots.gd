@@ -18,10 +18,20 @@ func _process(delta):
 				_stage = 1
 				_frame = 0
 		1:
+			# Start play mode
 			if _frame == 5:
-				# Directly call the mode selection handler
+				var ts = _main.get("title_screen")
+				if ts:
+					ts.call("hide_menu")
 				_main.call("_on_title_mode_selected", "play")
-			if _frame == 120:
+			# Early game: ~5s in
+			if _frame == 300:
+				_save("assets/gameplay_early.png")
+			# Mid game: ~30s in
+			if _frame == 1800:
+				_save("assets/gameplay_mid.png")
+			# Chaos: ~90s in
+			if _frame == 5400:
 				_save("assets/gameplay.png")
 				_stage = 2
 				_frame = 0
@@ -32,9 +42,12 @@ func _process(delta):
 				var ts = _main.get("title_screen")
 				if ts:
 					ts.show()
-			if _frame == 30:
+			if _frame == 60:
+				var ts2 = _main.get("title_screen")
+				if ts2:
+					ts2.call("hide_menu")
 				_main.call("_on_title_mode_selected", "train")
-			if _frame == 240:
+			if _frame == 360:
 				_save("assets/training.png")
 				_stage = 3
 		3:

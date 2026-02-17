@@ -4,6 +4,10 @@ A 2D arcade survival game built with Godot 4.5+ where you dodge chess-piece enem
 
 ## Screenshots
 
+| Title Screen |
+|-------------|
+| ![Title Screen](assets/title_screen.png) |
+
 | Early Game | Mid Game | Chaos |
 |------------|----------|-------|
 | ![Early Game](assets/gameplay_early.png) | ![Mid Game](assets/gameplay_mid.png) | ![Chaos](assets/gameplay.png) |
@@ -12,7 +16,7 @@ A 2D arcade survival game built with Godot 4.5+ where you dodge chess-piece enem
 |-------------|
 | ![AI Training](assets/training.png) |
 
-*Top row: gameplay ramps from sparse early enemies to full-screen chaos with score overlays. Bottom: NEAT agents training across 20 parallel arenas simultaneously.*
+*Gameplay ramps from sparse early enemies to full-screen chaos. Bottom: NEAT agents training across 20 parallel arenas simultaneously.*
 
 ## Features
 
