@@ -167,7 +167,10 @@ func _draw_standard() -> void:
 	var legend_x: float = x
 	for sid in species_counts:
 		var count: int = species_counts[sid]
-		var color: Color = _RtNeatPop.SPECIES_COLORS[int(sid) % _RtNeatPop.SPECIES_COLORS.size()]
+		var color_index: int = 0
+		if _RtNeatPop.SPECIES_COLORS.size() > 0:
+			color_index = int(sid) % _RtNeatPop.SPECIES_COLORS.size()
+		var color: Color = _RtNeatPop.SPECIES_COLORS[color_index] if color_index < _RtNeatPop.SPECIES_COLORS.size() else Color.WHITE
 		draw_rect(Rect2(legend_x, y3 - 10, 12, 12), color)
 		draw_string(_font, Vector2(legend_x + 15, y3), "%d" % count, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 0.6, 0.6))
 		legend_x += 40

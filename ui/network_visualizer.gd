@@ -147,11 +147,21 @@ func _compute_layout() -> void:
 				for conn in connections:
 					if conn == null:
 						continue
-					var is_enabled: bool = conn.get("enabled", true) if conn.has("enabled") else true
+					var is_enabled: bool = true
+					var in_id: int = -1
+					var out_id: int = -1
+					
+					if conn is Dictionary:
+						is_enabled = conn.get("enabled", true)
+						in_id = int(conn.get("in_id", -1))
+						out_id = int(conn.get("out_id", -1))
+					else:
+						is_enabled = conn.enabled if "enabled" in conn else true
+						in_id = conn.in_id if "in_id" in conn else -1
+						out_id = conn.out_id if "out_id" in conn else -1
+					
 					if _neat_genome and not is_enabled:
 						continue
-					var in_id: int = int(conn.get("in_id", -1)) if conn.has("in_id") else -1
-					var out_id: int = int(conn.get("out_id", -1)) if conn.has("out_id") else -1
 					if out_id == h_id and node_depths.has(in_id):
 						total_depth += node_depths[in_id]
 						count += 1
@@ -279,8 +289,14 @@ func _draw_neat_network(font: Font) -> void:
 	for conn in connections:
 		if conn == null:
 			continue
-		var in_id: int = conn.get("in_id", -1) if conn.has("in_id") else -1
-		var out_id: int = conn.get("out_id", -1) if conn.has("out_id") else -1
+		var in_id: int = -1
+		var out_id: int = -1
+		if conn is Dictionary:
+			in_id = conn.get("in_id", -1)
+			out_id = conn.get("out_id", -1)
+		else:
+			in_id = conn.in_id if "in_id" in conn else -1
+			out_id = conn.out_id if "out_id" in conn else -1
 		if not _node_positions.has(in_id) or not _node_positions.has(out_id):
 			continue
 
@@ -290,12 +306,19 @@ func _draw_neat_network(font: Font) -> void:
 		var color: Color
 		var width: float
 
-		var is_enabled: bool = conn.get("enabled", true) if conn.has("enabled") else true
+		var is_enabled: bool = true
+		var w: float = 0.0
+		if conn is Dictionary:
+			is_enabled = conn.get("enabled", true)
+			w = float(conn.get("weight", 0.0))
+		else:
+			is_enabled = conn.enabled if "enabled" in conn else true
+			w = conn.weight if "weight" in conn else 0.0
+		
 		if _neat_genome and not is_enabled:
 			color = CONN_DISABLED
 			width = MIN_CONNECTION_WIDTH
 		else:
-			var w: float = float(conn.get("weight", 0.0)) if conn.has("weight") else 0.0
 			width = clampf(absf(w) * 1.5, MIN_CONNECTION_WIDTH, MAX_CONNECTION_WIDTH)
 			color = CONN_POSITIVE if w >= 0 else CONN_NEGATIVE
 			color.a = clampf(0.2 + absf(w) * 0.4, 0.1, 0.7)

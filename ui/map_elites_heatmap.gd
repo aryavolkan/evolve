@@ -79,8 +79,8 @@ func _draw() -> void:
 		_draw_empty()
 		return
 
-	var cell_w: float = (plot_rect.size.x - CELL_GAP * (_grid_size - 1)) / _grid_size
-	var cell_h: float = (plot_rect.size.y - CELL_GAP * (_grid_size - 1)) / _grid_size
+	var cell_w: float = (plot_rect.size.x - CELL_GAP * maxf(_grid_size - 1, 0)) / maxf(_grid_size, 1)
+	var cell_h: float = (plot_rect.size.y - CELL_GAP * maxf(_grid_size - 1, 0)) / maxf(_grid_size, 1)
 
 	# Draw cells
 	for x in _grid_size:
@@ -121,7 +121,9 @@ func _draw() -> void:
 		for cell in col:
 			if cell != null:
 				occupied += 1
-	var stats_text := "%d/%d cells  (%.0f%%)" % [occupied, _grid_size * _grid_size, float(occupied) / (_grid_size * _grid_size) * 100]
+	var total_cells := _grid_size * _grid_size
+	var percentage := 0.0 if total_cells == 0 else float(occupied) / total_cells * 100
+	var stats_text := "%d/%d cells  (%.0f%%)" % [occupied, total_cells, percentage]
 	draw_string(
 		ThemeDB.fallback_font,
 		Vector2(size.x - 180, MARGIN_TOP - 8),
@@ -215,7 +217,7 @@ func _get_plot_rect() -> Rect2:
 func _screen_to_cell(screen_pos: Vector2) -> Vector2i:
 	## Convert a screen position to a grid cell coordinate.
 	var plot_rect := _get_plot_rect()
-	if not plot_rect.has_point(screen_pos):
+	if not plot_rect.has_point(screen_pos) or _grid_size <= 0:
 		return Vector2i(-1, -1)
 
 	var rel_x: float = (screen_pos.x - plot_rect.position.x) / plot_rect.size.x

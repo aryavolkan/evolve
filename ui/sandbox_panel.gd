@@ -57,6 +57,14 @@ func _ready() -> void:
 	_build_ui()
 
 
+func _exit_tree() -> void:
+	# Clean up references to avoid potential issues
+	_checkboxes.clear()
+	_sliders.clear()
+	_training_generation_input = null
+	_training_source_option = null
+
+
 func _build_ui() -> void:
 	if _built:
 		return

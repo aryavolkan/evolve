@@ -103,9 +103,9 @@ func _draw_stats_text(font: Font, x: float, y: float) -> void:
 	var stage_label := ""
 
 	if training_manager:
-		gen = training_manager.get("generation", 0) if training_manager.has("generation") else 0
-		pop = training_manager.get("population_size", 0) if training_manager.has("population_size") else 0
-		best = training_manager.get("all_time_best", 0.0) if training_manager.has("all_time_best") else 0.0
+		gen = training_manager.get("generation") if training_manager.has("generation") else 0
+		pop = training_manager.get("population_size") if training_manager.has("population_size") else 0
+		best = training_manager.get("all_time_best") if training_manager.has("all_time_best") else 0.0
 		if training_manager.has_method("get_curriculum_label"):
 			stage_label = training_manager.get_curriculum_label()
 

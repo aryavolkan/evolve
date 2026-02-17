@@ -124,9 +124,9 @@ func _draw_score_bar(cx: float, y: float) -> void:
 	draw_rect(Rect2(bar_x, y, bar_w, bar_h), Color(0.1, 0.1, 0.15, 1.0))
 
 	# Segments
-	var kill_w: float = (kill_score / total_score) * bar_w
-	var powerup_w: float = (powerup_score / total_score) * bar_w
-	var surv_w: float = bar_w - kill_w - powerup_w
+	var kill_w: float = clampf((kill_score / total_score) * bar_w, 0.0, bar_w)
+	var powerup_w: float = clampf((powerup_score / total_score) * bar_w, 0.0, bar_w - kill_w)
+	var surv_w: float = maxf(0.0, bar_w - kill_w - powerup_w)
 
 	if kill_w > 0:
 		draw_rect(Rect2(bar_x, y, kill_w, bar_h), Color(0.2, 0.7, 0.9, 1.0))

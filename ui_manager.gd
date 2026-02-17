@@ -134,9 +134,9 @@ func update_ai_status_display() -> void:
 		ai_status_label.add_theme_color_override("font_color", Color.GREEN)
 	elif mode_str == "RTNEAT":
 		var rtneat_stats = {}
-		if training_manager.has("rtneat_mgr") and training_manager.rtneat_mgr:
+		if training_manager.get("rtneat_mgr"):
 			var rtneat_mgr = training_manager.rtneat_mgr
-			if rtneat_mgr.has("population") and rtneat_mgr.population:
+			if rtneat_mgr and rtneat_mgr.get("population"):
 				rtneat_stats = rtneat_mgr.population.get_stats()
 		ai_status_label.text = "LIVE EVOLUTION | Agents: %d | Species: %d | Best: %.0f\n[H]=Stop [-/+]=Speed" % [
 			rtneat_stats.get("alive_count", 0),
@@ -146,7 +146,7 @@ func update_ai_status_display() -> void:
 		ai_status_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
 	elif mode_str == "TEAMS":
 		var team_stats = {}
-		if training_manager.has("team_mgr") and training_manager.team_mgr:
+		if training_manager.get("team_mgr"):
 			team_stats = training_manager.team_mgr.get_stats()
 		ai_status_label.text = "TEAM BATTLE | Agents: %d | PvP: A=%d B=%d\n[H]=Stop [-/+]=Speed" % [
 			team_stats.get("total_agents", 0),
