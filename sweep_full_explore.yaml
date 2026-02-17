@@ -1,0 +1,70 @@
+program: overnight_evolve.py
+method: bayes
+metric:
+  name: best_fitness
+  goal: maximize
+
+parameters:
+  # Core evolution
+  population_size:
+    distribution: int_uniform
+    min: 50
+    max: 200
+
+  hidden_size:
+    values: [16, 32, 48, 64, 80, 96]
+
+  elite_count:
+    distribution: int_uniform
+    min: 5
+    max: 25
+
+  mutation_rate:
+    distribution: uniform
+    min: 0.05
+    max: 0.35
+
+  mutation_strength:
+    distribution: uniform
+    min: 0.05
+    max: 0.5
+
+  crossover_rate:
+    distribution: uniform
+    min: 0.5
+    max: 0.9
+
+  evals_per_individual:
+    values: [1, 2, 3]
+
+  # Fixed
+  max_generations:
+    value: 50
+  parallel_count:
+    value: 10
+  time_scale:
+    value: 16
+
+  # Curriculum
+  curriculum_enabled:
+    values: [true, false]
+
+  # NEAT (mutually exclusive with NSGA2 — NeatEvolution has no set_objectives())
+  # We explore NEAT=true and NEAT=false separately; when NEAT=true, NSGA2 is forced off in GDScript.
+  use_neat:
+    values: [true, false]
+
+  # NSGA2 multi-objective (only meaningful when use_neat=false)
+  use_nsga2:
+    values: [true, false]
+
+  # Memory
+  use_memory:
+    values: [true, false]
+
+  # MAP-Elites
+  use_map_elites:
+    values: [true, false]
+
+  map_elites_grid_size:
+    values: [10, 15, 20, 25]
