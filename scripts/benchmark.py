@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import math
+import platform as _platform
 import signal
 import subprocess
 import sys
@@ -25,8 +26,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, stdev
-
-import platform as _platform
 
 # ---------------------------------------------------------------------------
 # Paths — auto-detect OS (same pattern as overnight_sweep.py)
@@ -176,7 +175,7 @@ def run_single_trial(
 
                 try:
                     if metrics_path.exists():
-                        with open(metrics_path, "r") as f:
+                        with open(metrics_path) as f:
                             data = json.load(f)
 
                         gen = data.get("generation", 0)

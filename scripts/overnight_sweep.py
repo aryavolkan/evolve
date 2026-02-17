@@ -14,17 +14,18 @@ This will:
 3. Log results to W&B for analysis
 """
 
-import wandb
-import subprocess
-import json
-import time
-from pathlib import Path
-import os
 import argparse
-import signal
-import sys
-import uuid
+import json
 import math
+import os
+import signal
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+
+import wandb
 
 # Sweep configuration - hyperparameters to search
 SWEEP_CONFIG = {
@@ -58,6 +59,7 @@ SWEEP_CONFIG = {
 
 # Paths - auto-detect OS
 import platform as _platform
+
 GODOT_PATH = os.getenv("GODOT_PATH", "/home/aryasen/.local/bin/godot") if _platform.system() == "Linux" else "/Applications/Godot.app/Contents/MacOS/Godot"
 PROJECT_PATH = Path.home() / "evolve"
 if _platform.system() == "Linux":
@@ -151,7 +153,7 @@ def run_godot_training(timeout_minutes: int = 20) -> float:
             # Read metrics
             try:
                 if metrics_path.exists():
-                    with open(metrics_path, 'r') as f:
+                    with open(metrics_path) as f:
                         data = json.load(f)
 
                     gen = data.get('generation', 0)
@@ -294,7 +296,7 @@ def main():
         print(f"Error: Project not found at {PROJECT_PATH}")
         sys.exit(1)
 
-    print(f"Starting W&B sweep")
+    print("Starting W&B sweep")
     print(f"  Worker ID: {WORKER_ID}")
     print(f"  Project: {args.project}")
     print(f"  Duration: {args.hours} hours")

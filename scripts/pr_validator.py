@@ -21,10 +21,8 @@ Exit codes:
   4 = unresolvable merge conflicts
 """
 import argparse
-import json
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
@@ -345,7 +343,7 @@ def phase_merge_conflicts(target_branch: str = "main") -> MergeReport:
 
     # We have conflicts — identify conflicted files
     merge_output = merge_result.stdout + merge_result.stderr
-    print(f"  ⚠ Merge conflicts detected")
+    print("  ⚠ Merge conflicts detected")
 
     # Get list of conflicted files
     diff_result = _git(["diff", "--name-only", "--diff-filter=U"])
@@ -399,7 +397,7 @@ def phase_merge_conflicts(target_branch: str = "main") -> MergeReport:
               f"Merge {target_branch} into {pr_branch} (auto-resolved conflicts)\n\n"
               f"Auto-resolved files:\n" +
               "\n".join(f"  - {f}" for f in report.auto_resolved_files)])
-        print(f"\n  ✓ All conflicts auto-resolved and committed")
+        print("\n  ✓ All conflicts auto-resolved and committed")
     else:
         # Abort the merge so we don't leave dirty state
         _git(["merge", "--abort"])

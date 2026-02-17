@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Check status of W&B sweep worker processes and Godot training instances."""
 
-import subprocess, json, time, re
+import json
+import re
+import subprocess
+import time
 from pathlib import Path
 
 GODOT_DATA = Path.home() / '.local/share/godot/app_userdata/Evolve'
