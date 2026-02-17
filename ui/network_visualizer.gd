@@ -81,6 +81,7 @@ func _gui_input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE or event.keycode == KEY_N:
 			closed.emit()
 			visible = false
+			get_viewport().set_input_as_handled()
 
 
 func _compute_layout() -> void:

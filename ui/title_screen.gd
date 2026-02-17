@@ -61,8 +61,10 @@ func _gui_input(event: InputEvent) -> void:
 		var idx := _get_button_at(event.position)
 		if idx >= 0 and idx < MENU_ITEMS.size():
 			_select_mode(MENU_ITEMS[idx].mode)
+			get_viewport().set_input_as_handled()
 
 	if event is InputEventKey and event.pressed and not event.echo:
+		var handled: bool = true
 		match event.keycode:
 			KEY_1:
 				_select_mode("play")
@@ -80,6 +82,10 @@ func _gui_input(event: InputEvent) -> void:
 				_select_mode("rtneat")
 			KEY_8:
 				_select_mode("teams")
+			_:
+				handled = false
+		if handled:
+			get_viewport().set_input_as_handled()
 
 
 func _select_mode(mode: String) -> void:

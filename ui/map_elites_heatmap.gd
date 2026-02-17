@@ -59,6 +59,7 @@ func _gui_input(event: InputEvent) -> void:
 		var cell := _screen_to_cell(event.position)
 		if cell.x >= 0 and cell.x < _grid_size and cell.y >= 0 and cell.y < _grid_size:
 			cell_clicked.emit(cell)
+			get_viewport().set_input_as_handled()
 
 
 func _notification(what: int) -> void:

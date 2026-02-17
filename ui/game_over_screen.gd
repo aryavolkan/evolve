@@ -39,9 +39,11 @@ func _gui_input(event: InputEvent) -> void:
 			KEY_SPACE:
 				hide_screen()
 				restart_requested.emit()
+				get_viewport().set_input_as_handled()
 			KEY_ESCAPE:
 				hide_screen()
 				menu_requested.emit()
+				get_viewport().set_input_as_handled()
 
 
 func _draw() -> void:
