@@ -152,6 +152,7 @@ func _start_training() -> void:
 	ctx.best_avg_fitness = 0.0
 	ctx.previous_avg_fitness = 0.0
 	ctx.rerun_count = 0
+	ctx.generation_current_best = 0.0
 	ctx.current_eval_seed = 0
 	ctx.curriculum.reset()
 	ctx.curriculum.enabled = ctx.config.curriculum_enabled
@@ -193,6 +194,7 @@ func _start_next_batch() -> void:
 
 	ctx.next_individual = mini(ctx.parallel_count, ctx.population_size)
 	ctx.evaluated_count = 0
+	ctx.generation_current_best = 0.0
 
 	var seed_label = "seed %d/%d" % [ctx.current_eval_seed + 1, ctx.evals_per_individual]
 	print("Gen %d (%s): Evaluating %d individuals..." % [ctx.generation, seed_label, ctx.population_size])
@@ -228,7 +230,7 @@ func _create_eval_instance(individual_index: int) -> Dictionary:
 	
 	# Update milestone rewards based on all-time best fitness
 	if scene_player.has_method("update_fitness_milestone"):
-		scene_player.update_fitness_milestone(ctx.all_time_best)
+		scene_player.update_fitness_milestone(ctx.generation_current_best)
 
 	var controller = ctx.AIControllerScript.new()
 	controller.set_player(scene_player)
@@ -282,7 +284,7 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
 	
 	# Update milestone rewards based on all-time best fitness
 	if scene_player.has_method("update_fitness_milestone"):
-		scene_player.update_fitness_milestone(ctx.all_time_best)
+		scene_player.update_fitness_milestone(ctx.generation_current_best)
 
 	var controller = ctx.AIControllerScript.new()
 	controller.set_player(scene_player)
@@ -335,9 +337,11 @@ func _process_parallel_training(delta: float) -> void:
 		var action: Dictionary = eval.controller.get_action()
 		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
 		
-		# Update milestone in real-time for the best performing entity
-		if eval.scene.score > ctx.all_time_best and eval.player.has_method("update_fitness_milestone"):
-			eval.player.update_fitness_milestone(eval.scene.score)
+		# Update milestone in real-time based on generation's current best
+		if eval.scene.score > ctx.generation_current_best:
+			ctx.generation_current_best = eval.scene.score
+		if eval.player.has_method("update_fitness_milestone"):
+			eval.player.update_fitness_milestone(ctx.generation_current_best)
 
 		# Check if game over OR timeout (60 second max)
 		var timed_out = eval.time >= 60.0
