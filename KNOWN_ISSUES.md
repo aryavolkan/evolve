@@ -26,14 +26,34 @@ Fundamental incompatibility between Godot 4.5's rendering pipeline and Cinnamon'
 7. Xvfb + x11vnc passthrough — VNC showed blank window
 8. `xdotool windowraise` + focus forcing — no change
 
-### Workaround
+### Investigation Findings (2026-02-16)
 
-Use **headless mode** for all training (already default):
+- X11 window IS created and renders correctly (captured screenshots confirm game renders fine)
+- Both Vulkan (Forward+) and OpenGL3 (Compatibility) renderers show the same issue
+- `import -window <id>` can capture the window content — GPU output is correct
+- Window has `Colormap: not installed` in xwininfo (not root cause, but a symptom)
+- **Xephyr nested X server works** — bypasses Muffin compositor entirely
+- Root cause: NVIDIA 590.x / RTX 5070 (Blackwell) Vulkan WSI incompatibility with Muffin compositor
+
+### Workaround (Working ✅)
+
+Use `launch_gui.sh` — runs the game in a Xephyr nested X server window:
+
 ```bash
-godot --headless --rendering-driver dummy -- --auto-train
+./launch_gui.sh           # Title screen (click to select mode)
+./launch_gui.sh play      # Jump straight to human play mode
+./launch_gui.sh watch     # Watch AI
+./launch_gui.sh train     # Train AI
 ```
 
-GUI mode works on macOS and Windows. Sandbox/playback modes intended for non-Cinnamon Linux or other platforms.
+This opens a 1280×720 window inside your Cinnamon desktop with the game fully working.
+
+### Potential Real Fixes (untested)
+
+- Install `openbox`, use `openbox --replace` → play → `cinnamon --replace` (requires `sudo apt install openbox`)
+- Install `picom` as a compositor replacement
+- Upgrade NVIDIA driver to a version with fixed Vulkan WSI on Blackwell
+- Headless training still works fine: `godot --headless --rendering-driver dummy -- --auto-train`
 
 ---
 
