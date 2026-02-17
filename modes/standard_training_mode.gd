@@ -357,25 +357,34 @@ func _process_parallel_training(delta: float) -> void:
 		eval.slot_index = i  # Store the index for later use
 		active_evals.append(eval)
 
-	# Batch process neural networks if we have multiple active evaluations
-	if active_count > 1 and not ctx.use_memory and not ctx.use_neat:
-		# Batch processing for stateless networks (all share same weights)
-		_batch_processor.begin_batch()
-		
-		for eval in active_evals:
-			var inputs: PackedFloat32Array = eval.controller.sensor.get_inputs()
-			_batch_processor.add_to_batch(eval.controller, inputs)
-		
-		# Process batch using first controller's network (all share same weights)
-		_batch_processor.process_batch(active_evals[0].controller.network)
-		
-		# Apply results
-		for eval in active_evals:
-			var outputs: PackedFloat32Array = _batch_processor.get_result(eval.controller)
-			var action: Dictionary = eval.controller._process_outputs(outputs)
-			eval.player.set_ai_action(action.move_direction, action.shoot_direction)
+	# Process neural networks — each eval has its own individual network
+	if active_count > 1 and not ctx.use_neat:
+		# Each eval has a DIFFERENT individual's network. Use Rust batch_forward_stateful
+		# when available (fewer GDScript→Rust FFI crossings = less overhead).
+		if NeuralNetworkFactory.is_rust_available() and not ctx.use_memory:
+			# Collect inputs and networks for batch Rust dispatch (VarArray — untyped)
+			var networks_arr: Array = []
+			var inputs_arr: Array = []
+			for eval in active_evals:
+				networks_arr.append(eval.controller.network)
+				inputs_arr.append(eval.controller.sensor.get_inputs())
+			# batch_forward_stateful accepts VarArray (untyped Array) for compatibility
+			var all_outputs: Array = active_evals[0].controller.network.batch_forward_stateful(networks_arr, inputs_arr)
+			for i in active_evals.size():
+				if i < all_outputs.size():
+					var action: Dictionary = active_evals[i].controller._process_outputs(all_outputs[i])
+					active_evals[i].player.set_ai_action(action.move_direction, action.shoot_direction)
+				else:
+					# fallback
+					var action: Dictionary = active_evals[i].controller.get_action()
+					active_evals[i].player.set_ai_action(action.move_direction, action.shoot_direction)
+		else:
+			# GDScript fallback or memory networks: individual forward passes
+			for eval in active_evals:
+				var action: Dictionary = eval.controller.get_action()
+				eval.player.set_ai_action(action.move_direction, action.shoot_direction)
 	else:
-		# Fallback to individual processing (for memory networks or single eval)
+		# Single eval or NEAT: individual forward passes
 		for eval in active_evals:
 			var action: Dictionary = eval.controller.get_action()
 			eval.player.set_ai_action(action.move_direction, action.shoot_direction)

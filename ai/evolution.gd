@@ -12,6 +12,10 @@ const NSGA2 = preload("res://ai/nsga2.gd")
 var _rust_genetic_ops = null
 var _use_rust_genetic_ops: bool = false
 
+# Rust accelerated NSGA-II (when available)
+var _rust_nsga2 = null
+var _use_rust_nsga2: bool = false
+
 # NSGA-II multi-objective mode
 var use_memory: bool = false
 var objective_scores: Array = []  # Array of Vector3 per individual (survival, kills, powerups)
@@ -64,6 +68,17 @@ func _init(
 			print("[Evolution] ⚠ RustGeneticOps class exists but couldn't instantiate")
 	else:
 		print("[Evolution] ⚠ RustGeneticOps not available, using GDScript implementation")
+
+	# Initialize Rust NSGA-II if available
+	if ClassDB.class_exists(&"RustNsga2"):
+		_rust_nsga2 = ClassDB.instantiate(&"RustNsga2")
+		if _rust_nsga2:
+			_use_rust_nsga2 = true
+			print("[Evolution] ✓ Using Rust NSGA-II for faster multi-objective sorting")
+		else:
+			print("[Evolution] ⚠ RustNsga2 class exists but couldn't instantiate")
+	else:
+		print("[Evolution] ⚠ RustNsga2 not available, using GDScript NSGA-II")
 
 	initialize_population()
 
@@ -124,28 +139,43 @@ func _evolve_single_objective() -> void:
 	if population_size == 0:
 		return
 
-	# Find best performers
-	var indexed_fitness: Array = []
-	for i in population_size:
-		indexed_fitness.append({"index": i, "fitness": fitness_scores[i]})
-
-	indexed_fitness.sort_custom(func(a, b): return a.fitness > b.fitness)
+	# --- Sort: use Rust argsort (packed array, no dict overhead) when available ---
+	var sorted_indices: PackedInt32Array
+	if _use_rust_genetic_ops:
+		sorted_indices = _rust_genetic_ops.argsort_fitness(fitness_scores)
+	else:
+		# GDScript fallback: build dict array and sort
+		var indexed_fitness: Array = []
+		for i in population_size:
+			indexed_fitness.append({"index": i, "fitness": fitness_scores[i]})
+		indexed_fitness.sort_custom(func(a, b): return a.fitness > b.fitness)
+		sorted_indices.resize(indexed_fitness.size())
+		for i in indexed_fitness.size():
+			sorted_indices[i] = indexed_fitness[i].index
 
 	# Track best
-	best_fitness = indexed_fitness[0].fitness
-	best_network = NNFactory.clone_network(population[indexed_fitness[0].index])
+	best_fitness = fitness_scores[sorted_indices[0]]
+	best_network = NNFactory.clone_network(population[sorted_indices[0]])
 
 	if best_fitness > all_time_best_fitness:
 		all_time_best_fitness = best_fitness
 		all_time_best_network = NNFactory.clone_network(best_network)
 
-	# Calculate average and min fitness
-	var total_fitness := 0.0
-	var min_fitness := INF
-	for i in population_size:
-		total_fitness += fitness_scores[i]
-		min_fitness = minf(min_fitness, fitness_scores[i])
-	var avg_fitness := total_fitness / population_size if population_size > 0 else 0.0
+	# --- Stats: single-pass via Rust when available ---
+	var min_fitness: float
+	var avg_fitness: float
+	if _use_rust_genetic_ops:
+		var stats: Vector3 = _rust_genetic_ops.fitness_stats(fitness_scores)
+		# stats.x = sum, stats.y = min, stats.z = max
+		avg_fitness = stats.x / population_size if population_size > 0 else 0.0
+		min_fitness = stats.y
+	else:
+		var total_fitness := 0.0
+		min_fitness = INF
+		for i in population_size:
+			total_fitness += fitness_scores[i]
+			min_fitness = minf(min_fitness, fitness_scores[i])
+		avg_fitness = total_fitness / population_size if population_size > 0 else 0.0
 
 	cache_stats(min_fitness, avg_fitness, best_fitness)
 	track_stagnation(best_fitness)
@@ -160,31 +190,50 @@ func _evolve_single_objective() -> void:
 	# Save old lineage ID mapping before building new population
 	var old_lid := _lineage_ids.duplicate() if lineage else PackedInt32Array()
 
-	# Elitism: keep top performers unchanged
-	var elite_indices := get_elite_indices(indexed_fitness, elite_count)
-	for i in elite_indices.size():
-		var elite_idx: int = elite_indices[i]
+	# Elitism: keep top performers unchanged (sorted_indices already sorted desc)
+	var actual_elite := mini(elite_count, sorted_indices.size())
+	for i in actual_elite:
+		var elite_idx: int = sorted_indices[i]
 		var elite = NNFactory.clone_network(population[elite_idx])
 		new_population.append(elite)
 		if lineage:
-			var src_idx: int = elite_idx
 			new_lineage_ids[i] = lineage.record_birth(
 				generation + 1,
-				old_lid[src_idx] if src_idx < old_lid.size() else -1,
+				old_lid[elite_idx] if elite_idx < old_lid.size() else -1,
 				-1,
-				indexed_fitness[i].fitness,
+				fitness_scores[elite_idx],
 				"elite"
 			)
 
+	# --- Parent selection: batch pre-select all parents with Rust when available ---
+	var num_offspring := population_size - actual_elite
+	var parent_a_indices: PackedInt32Array
+	var parent_b_indices: PackedInt32Array
+	if _use_rust_genetic_ops and num_offspring > 0:
+		parent_a_indices = _rust_genetic_ops.batch_tournament_select_packed(fitness_scores, num_offspring, 3)
+		parent_b_indices = _rust_genetic_ops.batch_tournament_select_packed(fitness_scores, num_offspring, 3)
+	else:
+		# Fallback: build indexed_fitness for GDScript tournament_select
+		var indexed_fitness: Array = []
+		for i in population_size:
+			indexed_fitness.append({"index": i, "fitness": fitness_scores[i]})
+		parent_a_indices.resize(num_offspring)
+		parent_b_indices.resize(num_offspring)
+		for i in num_offspring:
+			parent_a_indices[i] = tournament_select(indexed_fitness)
+			parent_b_indices[i] = tournament_select(indexed_fitness)
+
 	# Fill rest with offspring
-	while new_population.size() < population_size:
-		var parent_a_idx: int = tournament_select(indexed_fitness)
+	for i in num_offspring:
+		if new_population.size() >= population_size:
+			break
+		var parent_a_idx: int = parent_a_indices[i]
 		if parent_a_idx == -1:
 			break
 		var child
 
 		if randf() < crossover_rate:
-			var parent_b_idx: int = tournament_select(indexed_fitness)
+			var parent_b_idx: int = parent_b_indices[i]
 			if parent_b_idx == -1:
 				parent_b_idx = parent_a_idx
 			child = NNFactory.crossover(population[parent_a_idx], population[parent_b_idx])
@@ -218,8 +267,20 @@ func _evolve_nsga2() -> void:
 	if population_size == 0:
 		return
 
-	# Non-dominated sorting
-	var fronts := NSGA2.non_dominated_sort(objective_scores)
+	# Non-dominated sorting — use Rust O(MN²) impl when available (same algo, much faster)
+	var fronts: Array
+	if _use_rust_nsga2:
+		# RustNsga2.non_dominated_sort returns Array of PackedInt32Array (fronts)
+		var raw_fronts: Array = _rust_nsga2.non_dominated_sort(objective_scores)
+		# Convert PackedInt32Array fronts back to plain Arrays for GDScript compat
+		fronts = []
+		for front_packed in raw_fronts:
+			var front_arr: Array = []
+			for idx in front_packed:
+				front_arr.append(idx)
+			fronts.append(front_arr)
+	else:
+		fronts = NSGA2.non_dominated_sort(objective_scores)
 	_last_num_fronts = fronts.size()
 	pareto_front = NSGA2.get_pareto_front(objective_scores)
 
