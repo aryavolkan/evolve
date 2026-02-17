@@ -19,12 +19,19 @@ export_presets.cfg
 
 # Web export build output
 build/
-worker.log
-wandb/
-rust/evolve-native/target/
-rust/evolve-native/target/
-worker*.log
+
+# Logs
 *.log
+*.log.old
+worker*.log
+
+# Python artifacts
 __pycache__/
 *.pyc
 *.pyo
+
+# Backup files
+*_backup_*
+
+# Rust build artifacts
+rust/evolve-native/target/
