@@ -28,9 +28,13 @@ func enter(context) -> void:
 	var RtNeatOverlayScript = load("res://ui/rtneat_overlay.gd")
 	var overlay_node = RtNeatOverlayScript.new()
 	overlay_node.name = "RtNeatOverlay"
-	ctx.main_scene.get_node("CanvasLayer/UI").add_child(overlay_node)
-	overlay_node.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ctx.rtneat_mgr.overlay = overlay_node
+	var ui_node = ctx.main_scene.get_node_or_null("CanvasLayer/UI")
+	if ui_node:
+		ui_node.add_child(overlay_node)
+		overlay_node.set_anchors_preset(Control.PRESET_FULL_RECT)
+		ctx.rtneat_mgr.overlay = overlay_node
+	else:
+		push_error("Failed to find UI node for RtNeatOverlay")
 
 	ctx.rtneat_mgr.start()
 
