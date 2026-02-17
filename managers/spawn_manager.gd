@@ -140,9 +140,14 @@ func get_spawn_position() -> Vector2:
 		attempts += 1
 		
 		# Random position within arena bounds
+		var arena_width = main_scene.get("effective_arena_width")
+		var arena_height = main_scene.get("effective_arena_height")
+		if arena_width == null or arena_height == null:
+			push_error("SpawnManager: main_scene missing arena dimensions")
+			return Vector2.ZERO
 		spawn_pos = Vector2(
-			randf_range(100, main_scene.effective_arena_width - 100),
-			randf_range(100, main_scene.effective_arena_height - 100)
+			randf_range(100, arena_width - 100),
+			randf_range(100, arena_height - 100)
 		)
 		
 		# Check distance from player

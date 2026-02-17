@@ -92,7 +92,7 @@ func _draw() -> void:
 			var rect := Rect2(px, py, cell_w, cell_h)
 
 			var cell_data = null
-			if x < _grid.size() and y < _grid[x].size():
+			if x < _grid.size() and _grid[x] is Array and y < _grid[x].size():
 				cell_data = _grid[x][y]
 
 			if cell_data == null:

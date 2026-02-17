@@ -67,8 +67,9 @@ func _draw() -> void:
 	if _current_tool != 0:
 		var tool_names := ["INSPECT", "PLACE", "REMOVE", "SPAWN", "BLESS", "CURSE"]
 		var tool_colors := [Color.WHITE, Color(0.3, 0.9, 0.3), Color(0.9, 0.5, 0.2), Color(0.4, 0.6, 1.0), Color(1.0, 0.85, 0.2), Color(1.0, 0.3, 0.3)]
-		var tool_name: String = tool_names[_current_tool] if _current_tool >= 0 and _current_tool < tool_names.size() else "?"
-		var tool_color: Color = tool_colors[_current_tool] if _current_tool >= 0 and _current_tool < tool_colors.size() else Color.WHITE
+		var tool_index = clampi(_current_tool, 0, tool_names.size() - 1)
+		var tool_name: String = tool_names[tool_index] if tool_names.size() > 0 else "?"
+		var tool_color: Color = tool_colors[tool_index] if tool_index < tool_colors.size() else Color.WHITE
 		var tool_text := "Tool: %s" % tool_name
 		var tw: float = 120.0
 		var tx: float = 15.0
@@ -83,9 +84,12 @@ func _draw() -> void:
 		var log_bg_height: float = _log.size() * 18.0 + 10.0
 		draw_rect(Rect2(0, log_y - 15, 500, log_bg_height), Color(0.0, 0.0, 0.0, 0.5))
 		for i in _log.size():
+			if i >= _log.size():  # Safety check in case log changed during iteration
+				break
 			var entry: Dictionary = _log[i]
 			var alpha: float = 1.0 - i * 0.15
-			draw_string(_font, Vector2(10, log_y + i * 18.0), entry.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.8, 0.8, 0.6, alpha))
+			var text: String = entry.get("text", "")
+			draw_string(_font, Vector2(10, log_y + i * 18.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.8, 0.8, 0.6, alpha))
 
 	# Inspect panel (bottom right)
 	if not _inspect_data.is_empty():
