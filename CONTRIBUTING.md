@@ -76,12 +76,12 @@ Tests use a lightweight custom framework in `test/test_base.gd`:
 extends "res://test/test_base.gd"
 
 func _run_tests() -> void:
-    _test("descriptive_test_name", _test_my_feature)
+	_test("descriptive_test_name", _test_my_feature)
 
 func _test_my_feature() -> void:
-    assert_true(condition, "message if false")
-    assert_eq(actual, expected, "optional message")
-    assert_approx(float_val, expected, 0.001)
+	assert_true(condition, "message if false")
+	assert_eq(actual, expected, "optional message")
+	assert_approx(float_val, expected, 0.001)
 ```
 
 ### Available Assertions
@@ -124,39 +124,39 @@ extends RefCounted
 signal generation_complete(gen: int, best: float, avg: float, min_fit: float)
 
 func _init(population_size: int, input_size: int, output_size: int) -> void:
-    # Initialize population
-    pass
+	# Initialize population
+	pass
 
 func get_individual(index: int):
-    # Return the neural network for individual at index
-    pass
+	# Return the neural network for individual at index
+	pass
 
 func get_network(index: int):
-    # For NEAT-style: return executable network from genome
-    pass
+	# For NEAT-style: return executable network from genome
+	pass
 
 func set_fitness(index: int, fitness: float) -> void:
-    # Set fitness score for individual
-    pass
+	# Set fitness score for individual
+	pass
 
 func evolve() -> void:
-    # Run selection, crossover, mutation → emit generation_complete
-    pass
+	# Run selection, crossover, mutation → emit generation_complete
+	pass
 
 func get_generation() -> int:
-    pass
+	pass
 
 func get_stats() -> Dictionary:
-    return {"current_max": 0.0, "current_avg": 0.0, "current_min": 0.0, "all_time_best": 0.0}
+	return {"current_max": 0.0, "current_avg": 0.0, "current_min": 0.0, "all_time_best": 0.0}
 
 func get_all_time_best_fitness() -> float:
-    pass
+	pass
 
 func save_best(path: String) -> void:
-    pass
+	pass
 
 func save_population(path: String) -> void:
-    pass
+	pass
 ```
 
 ### 2. Wire It Into training_manager.gd
@@ -168,7 +168,7 @@ var use_my_algorithm: bool = false
 
 # In start_training():
 if use_my_algorithm:
-    evolution = MyAlgorithmScript.new(population_size, input_size, 6)
+	evolution = MyAlgorithmScript.new(population_size, input_size, 6)
 ```
 
 ### 3. Add Tests
