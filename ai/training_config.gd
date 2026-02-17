@@ -46,22 +46,22 @@ func load_from_sweep(fallback_pop_size: int = 150, fallback_max_gen: int = 100) 
 	_parse_worker_id()
 	_raw = _load_json()
 
-	population_size = int(_raw.get("population_size", fallback_pop_size))
-	max_generations = int(_raw.get("max_generations", fallback_max_gen))
-	evals_per_individual = int(_raw.get("evals_per_individual", evals_per_individual))
-	time_scale = float(_raw.get("time_scale", 16.0))
-	parallel_count = int(_raw.get("parallel_count", parallel_count))
-	hidden_size = int(_raw.get("hidden_size", hidden_size))
-	elite_count = int(_raw.get("elite_count", elite_count))
-	mutation_rate = float(_raw.get("mutation_rate", mutation_rate))
-	mutation_strength = float(_raw.get("mutation_strength", mutation_strength))
-	crossover_rate = float(_raw.get("crossover_rate", crossover_rate))
+	population_size = maxi(1, int(_raw.get("population_size", fallback_pop_size)))
+	max_generations = maxi(1, int(_raw.get("max_generations", fallback_max_gen)))
+	evals_per_individual = maxi(1, int(_raw.get("evals_per_individual", evals_per_individual)))
+	time_scale = maxf(0.1, float(_raw.get("time_scale", 16.0)))
+	parallel_count = maxi(1, int(_raw.get("parallel_count", parallel_count)))
+	hidden_size = maxi(1, int(_raw.get("hidden_size", hidden_size)))
+	elite_count = maxi(0, int(_raw.get("elite_count", elite_count)))
+	mutation_rate = clampf(float(_raw.get("mutation_rate", mutation_rate)), 0.0, 1.0)
+	mutation_strength = maxf(0.0, float(_raw.get("mutation_strength", mutation_strength)))
+	crossover_rate = clampf(float(_raw.get("crossover_rate", crossover_rate)), 0.0, 1.0)
 	use_neat = bool(_raw.get("use_neat", use_neat))
 	use_nsga2 = bool(_raw.get("use_nsga2", use_nsga2))
 	use_memory = bool(_raw.get("use_memory", use_memory))
 	use_map_elites = bool(_raw.get("use_map_elites", use_map_elites))
 	curriculum_enabled = bool(_raw.get("curriculum_enabled", curriculum_enabled))
-	map_elites_grid_size = int(_raw.get("map_elites_grid_size", map_elites_grid_size))
+	map_elites_grid_size = maxi(1, int(_raw.get("map_elites_grid_size", map_elites_grid_size)))
 
 
 func get_metrics_path() -> String:
@@ -97,6 +97,12 @@ func _load_json() -> Dictionary:
 	var error = json.parse(file.get_as_text())
 	file.close()
 	if error != OK:
+		push_error("Failed to parse JSON from %s" % config_path)
 		return {}
-	print("Loaded sweep config from %s: %s" % [config_path, json.data])
-	return json.data
+	# Ensure json.data is a Dictionary
+	if json.data is Dictionary:
+		print("Loaded sweep config from %s: %s" % [config_path, json.data])
+		return json.data
+	else:
+		push_error("Invalid JSON data type in %s: expected Dictionary" % config_path)
+		return {}

@@ -99,7 +99,7 @@ func _compute_layout() -> void:
 	var draw_area_x: float = PANEL_WIDTH - 80.0  # Left/right padding
 	var draw_area_y: float = PANEL_HEIGHT - HEADER_HEIGHT - FOOTER_HEIGHT - 20.0
 	var gen_span: int = max_gen - min_gen
-	var x_step: float = draw_area_x / maxf(gen_span, 1)
+	var x_step: float = draw_area_x / maxf(gen_span, 1.0)  # Prevent division by zero
 
 	for gen in gen_groups:
 		var group: Array = gen_groups[gen]

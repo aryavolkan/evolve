@@ -14,7 +14,7 @@ func enter(context) -> void:
 
 func exit() -> void:
 	# Clean up pause state first
-	if ctx.training_ui.is_paused:
+	if ctx and ctx.training_ui and ctx.training_ui.is_paused:
 		ctx.training_ui.destroy_pause_overlay()
 		ctx.training_ui.is_paused = false
 
@@ -24,19 +24,24 @@ func exit() -> void:
 
 	Engine.time_scale = 1.0
 
-	# Cleanup training instances and visual layer
-	ctx.eval_instances.clear()
-	ctx.arena_pool.destroy()
+	if ctx:
+		# Cleanup training instances and visual layer
+		if ctx.eval_instances:
+			ctx.eval_instances.clear()
+		if ctx.arena_pool:
+			ctx.arena_pool.destroy()
 
-	# Show main game again
-	ctx.show_main_game()
+		# Show main game again
+		if ctx.has_method("show_main_game"):
+			ctx.show_main_game()
 
-	if ctx.evolution:
-		ctx.evolution.save_best(ctx.BEST_NETWORK_PATH)
-		ctx.evolution.save_population(ctx.POPULATION_PATH)
-		print("Saved best network (fitness: %.1f)" % ctx.evolution.get_all_time_best_fitness())
+		if ctx.evolution:
+			ctx.evolution.save_best(ctx.BEST_NETWORK_PATH)
+			ctx.evolution.save_population(ctx.POPULATION_PATH)
+			print("Saved best network (fitness: %.1f)" % ctx.evolution.get_all_time_best_fitness())
 
-	ctx.training_status_changed.emit("Training stopped")
+		if ctx.training_status_changed:
+			ctx.training_status_changed.emit("Training stopped")
 
 
 func process(delta: float) -> void:
@@ -47,9 +52,13 @@ var _dashboard: TrainingDashboard = null
 
 
 func handle_input(event: InputEvent) -> void:
+	if not ctx:
+		return
+		
 	# SPACE toggles pause
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_SPACE:
-		ctx.toggle_pause()
+		if ctx.has_method("toggle_pause"):
+			ctx.toggle_pause()
 		ctx.get_viewport().set_input_as_handled()
 		return
 
@@ -59,34 +68,40 @@ func handle_input(event: InputEvent) -> void:
 		return
 
 	# ESC exits fullscreen
-	if event.is_action_pressed("ui_cancel") and ctx.arena_pool.fullscreen_index >= 0:
+	if event.is_action_pressed("ui_cancel") and ctx.arena_pool and ctx.arena_pool.fullscreen_index >= 0:
 		ctx.arena_pool.exit_fullscreen()
 		ctx.get_viewport().set_input_as_handled()
 		return
 
 	# Mouse click toggles fullscreen
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var clicked_index = ctx.arena_pool.get_slot_at_position(event.position)
-		if ctx.arena_pool.fullscreen_index >= 0:
-			if clicked_index != ctx.arena_pool.fullscreen_index:
-				ctx.arena_pool.exit_fullscreen()
-				ctx.get_viewport().set_input_as_handled()
-		else:
-			if clicked_index >= 0:
-				ctx.arena_pool.enter_fullscreen(clicked_index)
-				ctx.get_viewport().set_input_as_handled()
+		if ctx.arena_pool:
+			var clicked_index = ctx.arena_pool.get_slot_at_position(event.position)
+			if ctx.arena_pool.fullscreen_index >= 0:
+				if clicked_index != ctx.arena_pool.fullscreen_index:
+					ctx.arena_pool.exit_fullscreen()
+					ctx.get_viewport().set_input_as_handled()
+			else:
+				if clicked_index >= 0:
+					ctx.arena_pool.enter_fullscreen(clicked_index)
+					ctx.get_viewport().set_input_as_handled()
 
 
 func _toggle_dashboard() -> void:
+	if not ctx:
+		return
+		
 	if _dashboard:
 		_dashboard.visible = not _dashboard.visible
 	else:
 		_dashboard = TrainingDashboard.new()
 		_dashboard.name = "TrainingDashboard"
 		_dashboard.setup(ctx)
-		_dashboard.size = ctx.get_viewport().get_visible_rect().size
+		if ctx.get_viewport():
+			_dashboard.size = ctx.get_viewport().get_visible_rect().size
 		_dashboard.anchors_preset = Control.PRESET_FULL_RECT
-		ctx.get_tree().root.add_child(_dashboard)
+		if ctx.get_tree() and ctx.get_tree().root:
+			ctx.get_tree().root.add_child(_dashboard)
 
 
 # ============================================================

@@ -11,7 +11,8 @@ func enter(context) -> void:
 
 
 func exit() -> void:
-	ctx.clear_training_overrides()
+	if ctx and ctx.has_method("clear_training_overrides"):
+		ctx.clear_training_overrides()
 	super.exit()
 
 
@@ -60,14 +61,21 @@ func _load_seed_network(source: String):
 
 
 func _seed_population_from_network(network) -> void:
-	if not ctx.evolution:
+	if not ctx or not ctx.evolution:
 		return
+	if not network or not network.has_method("get_weights"):
+		return
+		
 	var base_weights = network.get_weights()
-	for i in ctx.population_size:
+	var pop_size = ctx.population_size if ctx.get("population_size") != null else 0
+	
+	for i in pop_size:
 		var individual = ctx.evolution.get_individual(i)
 		if individual == null:
 			continue
-		individual.set_weights(base_weights)
-		individual.reset_memory()
-		if i > 0:
+		if individual.has_method("set_weights"):
+			individual.set_weights(base_weights)
+		if individual.has_method("reset_memory"):
+			individual.reset_memory()
+		if i > 0 and individual.has_method("mutate"):
 			individual.mutate(ctx.config.mutation_rate, ctx.config.mutation_strength)

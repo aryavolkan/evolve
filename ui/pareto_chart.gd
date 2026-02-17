@@ -54,7 +54,8 @@ func set_data(objectives: Array, pareto_indices: Array = []) -> void:
 	_objectives = objectives
 	_pareto_indices.clear()
 	for idx in pareto_indices:
-		_pareto_indices.append(idx)
+		if idx is int and idx >= 0:  # Validate index type and range
+			_pareto_indices.append(idx)
 	queue_redraw()
 
 
@@ -153,33 +154,36 @@ func _draw() -> void:
 		var xy := _get_xy(_objectives[i])
 		var c := _get_color_value(_objectives[i])
 		var screen_pos := _data_to_screen(xy, plot_rect, x_range, y_range)
-		var t := (c - c_range.x) / (c_range.y - c_range.x)
-		var color := COLOR_POINT_LOW.lerp(COLOR_POINT_HIGH, t)
+		var t_denom := c_range.y - c_range.x
+		var t := 0.5 if t_denom == 0.0 else (c - c_range.x) / t_denom  # Division by zero guard
+		var color := COLOR_POINT_LOW.lerp(COLOR_POINT_HIGH, clampf(t, 0.0, 1.0))
 		draw_circle(screen_pos, POINT_RADIUS, color)
 
 	# Draw Pareto front line (connecting sorted front points)
 	if _pareto_indices.size() > 1:
 		var pareto_screen_points: Array[Vector2] = []
 		for idx in _pareto_indices:
-			if idx < _objectives.size():
+			if idx >= 0 and idx < _objectives.size():  # Proper bounds check
 				var xy := _get_xy(_objectives[idx])
 				pareto_screen_points.append(_data_to_screen(xy, plot_rect, x_range, y_range))
 
 		# Sort by x position for line drawing
-		pareto_screen_points.sort_custom(func(a, b): return a.x < b.x)
+		if pareto_screen_points.size() > 1:  # Only draw if we have points
+			pareto_screen_points.sort_custom(func(a, b): return a.x < b.x)
 
-		for i in range(pareto_screen_points.size() - 1):
-			draw_line(pareto_screen_points[i], pareto_screen_points[i + 1], COLOR_PARETO_LINE, 2.0, true)
+			for i in range(pareto_screen_points.size() - 1):
+				draw_line(pareto_screen_points[i], pareto_screen_points[i + 1], COLOR_PARETO_LINE, 2.0, true)
 
 	# Draw Pareto points on top
 	for idx in _pareto_indices:
-		if idx >= _objectives.size():
+		if idx < 0 or idx >= _objectives.size():  # Proper bounds check
 			continue
 		var xy := _get_xy(_objectives[idx])
 		var c := _get_color_value(_objectives[idx])
 		var screen_pos := _data_to_screen(xy, plot_rect, x_range, y_range)
-		var t := (c - c_range.x) / (c_range.y - c_range.x)
-		var color := COLOR_POINT_LOW.lerp(COLOR_POINT_HIGH, t)
+		var t_denom := c_range.y - c_range.x
+		var t := 0.5 if t_denom == 0.0 else (c - c_range.x) / t_denom  # Division by zero guard
+		var color := COLOR_POINT_LOW.lerp(COLOR_POINT_HIGH, clampf(t, 0.0, 1.0))
 		draw_circle(screen_pos, PARETO_POINT_RADIUS, color)
 		draw_arc(screen_pos, PARETO_POINT_RADIUS + 1.0, 0, TAU, 24, COLOR_PARETO_OUTLINE, 1.5, true)
 
@@ -223,8 +227,10 @@ func _get_plot_rect() -> Rect2:
 
 func _data_to_screen(data_point: Vector2, plot_rect: Rect2, x_range: Vector2, y_range: Vector2) -> Vector2:
 	## Convert data coordinates to screen pixel position within the plot area.
-	var nx := (data_point.x - x_range.x) / (x_range.y - x_range.x)
-	var ny := (data_point.y - y_range.x) / (y_range.y - y_range.x)
+	var x_span := x_range.y - x_range.x
+	var y_span := y_range.y - y_range.x
+	var nx := 0.5 if x_span == 0.0 else clampf((data_point.x - x_range.x) / x_span, 0.0, 1.0)
+	var ny := 0.5 if y_span == 0.0 else clampf((data_point.y - y_range.x) / y_span, 0.0, 1.0)
 	return Vector2(
 		plot_rect.position.x + nx * plot_rect.size.x,
 		plot_rect.position.y + (1.0 - ny) * plot_rect.size.y  # Y inverted

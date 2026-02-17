@@ -362,9 +362,12 @@ func _process_coevolution_training(delta: float) -> void:
 				for eidx in ctx.population_size:
 					var scores: Array = ctx.coevo_enemy_fitness.get(eidx, [0.0])
 					var avg_ef: float = 0.0
-					for s in scores:
-						avg_ef += s
-					avg_ef /= scores.size()
+					if scores.size() > 0:
+						for s in scores:
+							avg_ef += s
+						avg_ef /= scores.size()
+					else:
+						avg_ef = 0.0  # Default if no scores
 					ctx.coevolution.set_enemy_fitness(eidx, avg_ef)
 
 			var p_stats = ctx.coevolution.player_evolution.get_stats()
