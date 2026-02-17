@@ -103,9 +103,9 @@ func _draw_stats_text(font: Font, x: float, y: float) -> void:
 	var stage_label := ""
 
 	if training_manager:
-		gen = training_manager.get("generation") if training_manager.has("generation") else 0
-		pop = training_manager.get("population_size") if training_manager.has("population_size") else 0
-		best = training_manager.get("all_time_best") if training_manager.has("all_time_best") else 0.0
+		gen = training_manager.get("generation", 0)
+		pop = training_manager.get("population_size", 0)
+		best = training_manager.get("all_time_best", 0.0)
 		if training_manager.has_method("get_curriculum_label"):
 			stage_label = training_manager.get_curriculum_label()
 
@@ -182,8 +182,9 @@ func _draw_line_series(data: Array[float], px: float, py: float, pw: float, ph: 
 	for i in range(count - 1):
 		var x1 := px + i * x_step
 		var x2 := px + (i + 1) * x_step
-		var y1 := py + ph * (1.0 - clampf(data[i] / y_max, 0.0, 1.0))
-		var y2 := py + ph * (1.0 - clampf(data[i + 1] / y_max, 0.0, 1.0))
+		var safe_y_max = maxf(y_max, 1.0)  # Prevent division by zero
+		var y1 := py + ph * (1.0 - clampf(data[i] / safe_y_max, 0.0, 1.0))
+		var y2 := py + ph * (1.0 - clampf(data[i + 1] / safe_y_max, 0.0, 1.0))
 		draw_line(Vector2(x1, y1), Vector2(x2, y2), color, 1.5, true)
 
 
@@ -269,13 +270,15 @@ func _draw_species_chart(font: Font, x0: float, y0: float, w: float, h: float) -
 	for i in range(count - 1):
 		var x1 := plot_x + i * x_step
 		var x2 := plot_x + (i + 1) * x_step
-		var y1 := chart_top + chart_h * (1.0 - float(_species_history[i]) / y_max)
-		var y2 := chart_top + chart_h * (1.0 - float(_species_history[i + 1]) / y_max)
+		var safe_y_max = maxf(float(y_max), 1.0)  # Prevent division by zero
+		var y1 := chart_top + chart_h * (1.0 - float(_species_history[i]) / safe_y_max)
+		var y2 := chart_top + chart_h * (1.0 - float(_species_history[i + 1]) / safe_y_max)
 		draw_line(Vector2(x1, y1), Vector2(x2, y2), COLOR_SPECIES, 1.5, true)
 
 	# Current count label
-	var current := _species_history[-1]
-	draw_string(font, Vector2(plot_x + plot_w - 20, chart_top + 10), str(current), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COLOR_SPECIES)
+	if _species_history.size() > 0:
+		var current := _species_history[-1]
+		draw_string(font, Vector2(plot_x + plot_w - 20, chart_top + 10), str(current), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, COLOR_SPECIES)
 
 
 static func _nice_ceil(v: float) -> float:
