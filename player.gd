@@ -14,7 +14,8 @@ var double_points_time: float = 0.0
 var death_effect_scene: PackedScene = preload("res://death_effect.tscn")
 
 # Milestone rewards system
-var milestone_rewards: MilestoneRewards = null
+const MilestoneRewardsScript = preload("res://milestone_rewards.gd")
+var milestone_rewards = null  # MilestoneRewardsScript instance
 var is_training_mode: bool = false
 
 @onready var speed_particles: CPUParticles2D = $SpeedParticles
@@ -32,7 +33,7 @@ func _ready() -> void:
 	
 	# Initialize milestone rewards if not already set
 	if not milestone_rewards:
-		milestone_rewards = preload("res://milestone_rewards.gd").new()
+		milestone_rewards = MilestoneRewardsScript.new()
 		milestone_rewards.tier_changed.connect(_on_milestone_tier_changed)
 
 
@@ -307,7 +308,7 @@ func update_sprite_color() -> void:
 func update_fitness_milestone(fitness: float) -> void:
 	## Update the milestone rewards based on current fitness.
 	if not milestone_rewards:
-		milestone_rewards = preload("res://milestone_rewards.gd").new()
+		milestone_rewards = MilestoneRewardsScript.new()
 		milestone_rewards.tier_changed.connect(_on_milestone_tier_changed)
 	
 	milestone_rewards.update_fitness(fitness)
