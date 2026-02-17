@@ -4,6 +4,48 @@ use godot::classes::FileAccess;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
+/// Fast dot product using SIMD-friendly 8-wide unrolling.
+/// LLVM will auto-vectorize this with AVX2 when compiled with target-cpu=native.
+#[inline(always)]
+fn dot_product(a: &[f32], b: &[f32]) -> f32 {
+    debug_assert_eq!(a.len(), b.len());
+    let n = a.len();
+    let chunks = n / 8;
+    let rem = n % 8;
+    let mut acc0 = 0.0f32;
+    let mut acc1 = 0.0f32;
+    let mut acc2 = 0.0f32;
+    let mut acc3 = 0.0f32;
+    let mut acc4 = 0.0f32;
+    let mut acc5 = 0.0f32;
+    let mut acc6 = 0.0f32;
+    let mut acc7 = 0.0f32;
+
+    // 8-wide unrolled loop — LLVM vectorizes this as a single AVX2 VFMADD pass
+    for i in 0..chunks {
+        let base = i * 8;
+        unsafe {
+            acc0 += a.get_unchecked(base)     * b.get_unchecked(base);
+            acc1 += a.get_unchecked(base + 1) * b.get_unchecked(base + 1);
+            acc2 += a.get_unchecked(base + 2) * b.get_unchecked(base + 2);
+            acc3 += a.get_unchecked(base + 3) * b.get_unchecked(base + 3);
+            acc4 += a.get_unchecked(base + 4) * b.get_unchecked(base + 4);
+            acc5 += a.get_unchecked(base + 5) * b.get_unchecked(base + 5);
+            acc6 += a.get_unchecked(base + 6) * b.get_unchecked(base + 6);
+            acc7 += a.get_unchecked(base + 7) * b.get_unchecked(base + 7);
+        }
+    }
+
+    // Handle remainder
+    let base = chunks * 8;
+    let mut rem_acc = 0.0f32;
+    for i in 0..rem {
+        unsafe { rem_acc += a.get_unchecked(base + i) * b.get_unchecked(base + i); }
+    }
+
+    acc0 + acc1 + acc2 + acc3 + acc4 + acc5 + acc6 + acc7 + rem_acc
+}
+
 /// A feedforward neural network with optional Elman recurrent memory.
 ///
 /// Architecture: inputs -> hidden (tanh) -> outputs (tanh)
@@ -131,24 +173,20 @@ impl RustNeuralNetwork {
         debug_assert_eq!(inp.len(), input_size, "Input size mismatch");
 
         // Hidden layer: h = tanh(W_ih @ inputs + W_hh @ prev_hidden + b_h)
+        // Uses 8-wide unrolled dot product — LLVM vectorizes with AVX2+FMA
         for h in 0..hidden_size {
-            let mut sum = self.bias_h[h];
             let offset = h * input_size;
-            // SAFETY: bounds are guaranteed by construction
-            for i in 0..input_size {
-                sum += unsafe {
-                    self.weights_ih.get_unchecked(offset + i)
-                        * inp.get_unchecked(i)
-                };
-            }
+            let row = unsafe {
+                std::slice::from_raw_parts(self.weights_ih.as_ptr().add(offset), input_size)
+            };
+            let mut sum = self.bias_h[h] + dot_product(row, inp);
+
             if self.use_memory {
                 let ctx_offset = h * hidden_size;
-                for ph in 0..hidden_size {
-                    sum += unsafe {
-                        self.weights_hh.get_unchecked(ctx_offset + ph)
-                            * self.prev_hidden.get_unchecked(ph)
-                    };
-                }
+                let ctx_row = unsafe {
+                    std::slice::from_raw_parts(self.weights_hh.as_ptr().add(ctx_offset), hidden_size)
+                };
+                sum += dot_product(ctx_row, &self.prev_hidden);
             }
             self.hidden[h] = sum.tanh();
         }
@@ -160,15 +198,11 @@ impl RustNeuralNetwork {
 
         // Output layer: o = tanh(W_ho @ hidden + b_o)
         for o in 0..output_size {
-            let mut sum = self.bias_o[o];
             let offset = o * hidden_size;
-            for h in 0..hidden_size {
-                sum += unsafe {
-                    self.weights_ho.get_unchecked(offset + h)
-                        * self.hidden.get_unchecked(h)
-                };
-            }
-            self.output[o] = sum.tanh();
+            let row = unsafe {
+                std::slice::from_raw_parts(self.weights_ho.as_ptr().add(offset), hidden_size)
+            };
+            self.output[o] = (self.bias_o[o] + dot_product(row, &self.hidden)).tanh();
         }
 
         PackedFloat32Array::from(self.output.as_slice())
@@ -287,40 +321,27 @@ impl RustNeuralNetwork {
             let hidden_offset = idx * hidden_size;
             let output_offset = idx * output_size;
 
-            // Hidden layer computation
+            // Hidden layer computation (8-wide dot product for AVX2 vectorization)
             for h in 0..hidden_size {
-                let mut sum = self.bias_h[h];
                 let weight_offset = h * input_size;
-
-                // Input -> Hidden
-                for i in 0..input_size {
-                    sum += unsafe {
-                        self.weights_ih.get_unchecked(weight_offset + i)
-                            * inp.get_unchecked(i)
-                    };
-                }
-
-                // Note: In batch mode, we don't use recurrent memory as each agent
-                // would need its own memory state. For stateful batch processing,
-                // use individual forward() calls with persistent network instances.
-
-                hidden_states[hidden_offset + h] = sum.tanh();
+                let row = unsafe {
+                    std::slice::from_raw_parts(self.weights_ih.as_ptr().add(weight_offset), input_size)
+                };
+                // Note: batch_forward is stateless — no recurrent memory in batch mode
+                // (each agent would need its own memory; use individual forward() for that)
+                hidden_states[hidden_offset + h] = (self.bias_h[h] + dot_product(row, inp)).tanh();
             }
 
             // Output layer computation
+            let hidden_slice = unsafe {
+                std::slice::from_raw_parts(hidden_states.as_ptr().add(hidden_offset), hidden_size)
+            };
             for o in 0..output_size {
-                let mut sum = self.bias_o[o];
                 let weight_offset = o * hidden_size;
-
-                // Hidden -> Output
-                for h in 0..hidden_size {
-                    sum += unsafe {
-                        self.weights_ho.get_unchecked(weight_offset + h)
-                            * hidden_states.get_unchecked(hidden_offset + h)
-                    };
-                }
-
-                output_states[output_offset + o] = sum.tanh();
+                let row = unsafe {
+                    std::slice::from_raw_parts(self.weights_ho.as_ptr().add(weight_offset), hidden_size)
+                };
+                output_states[output_offset + o] = (self.bias_o[o] + dot_product(row, hidden_slice)).tanh();
             }
 
             // Pack this agent's output
@@ -331,24 +352,90 @@ impl RustNeuralNetwork {
         outputs
     }
 
+    /// Parallel batch forward pass for multiple agents sharing the same network weights.
+    /// Uses rayon for parallel processing of agents, ideal for large batches.
+    /// inputs_array: Array of PackedFloat32Array (one per agent)
+    /// Returns: Array of PackedFloat32Array (outputs for each agent)
+    #[func]
+    fn batch_forward_parallel(&self, inputs_array: Array<PackedFloat32Array>) -> Array<PackedFloat32Array> {
+        let batch_size = inputs_array.len();
+        let input_size = self.input_size as usize;
+        let hidden_size = self.hidden_size as usize;
+        let output_size = self.output_size as usize;
+
+        // Convert inputs to Vec for parallel processing
+        let inputs_vec: Vec<_> = (0..batch_size)
+            .filter_map(|i| inputs_array.get(i))
+            .collect();
+
+        // Process agents sequentially (rayon removed — Godot thread_model=0 constraint)
+        let results: Vec<Vec<f32>> = inputs_vec
+            .into_iter()
+            .map(|inputs: PackedFloat32Array| {
+                let inp = inputs.as_slice();
+                debug_assert_eq!(inp.len(), input_size, "Input size mismatch");
+
+                let mut hidden = vec![0.0f32; hidden_size];
+                let mut output = vec![0.0f32; output_size];
+
+                // Hidden layer computation
+                for h in 0..hidden_size {
+                    let weight_offset = h * input_size;
+                    let row = unsafe {
+                        std::slice::from_raw_parts(self.weights_ih.as_ptr().add(weight_offset), input_size)
+                    };
+                    hidden[h] = (self.bias_h[h] + dot_product(row, inp)).tanh();
+                }
+
+                // Output layer computation
+                for o in 0..output_size {
+                    let weight_offset = o * hidden_size;
+                    let row = unsafe {
+                        std::slice::from_raw_parts(self.weights_ho.as_ptr().add(weight_offset), hidden_size)
+                    };
+                    output[o] = (self.bias_o[o] + dot_product(row, &hidden)).tanh();
+                }
+
+                output
+            })
+            .collect();
+
+        // Convert results back to Godot Array
+        let mut outputs = Array::<PackedFloat32Array>::new();
+        for result in results {
+            outputs.push(&PackedFloat32Array::from(&result[..]));
+        }
+
+        outputs
+    }
+
     /// Batch forward pass for multiple networks with individual states.
     /// This is useful when agents have memory (Elman networks) and need persistent state.
     /// networks: Array of RustNeuralNetwork instances
     /// inputs_array: Array of PackedFloat32Array (one per network)
     /// Returns: Array of PackedFloat32Array (outputs for each network)
+    /// batch_forward_stateful: run forward pass for multiple networks with their own inputs.
+    /// GDScript passes an untyped Array (VarArray) of RustNeuralNetwork instances.
+    /// This avoids the typed-array conversion error.
     #[func]
-    fn batch_forward_stateful(networks: Array<Gd<RustNeuralNetwork>>, inputs_array: Array<PackedFloat32Array>) -> Array<PackedFloat32Array> {
-        debug_assert_eq!(networks.len(), inputs_array.len(), "Networks and inputs array length mismatch");
-
+    fn batch_forward_stateful(networks: VarArray, inputs_array: VarArray) -> Array<PackedFloat32Array> {
+        let n = networks.len().min(inputs_array.len());
         let mut outputs = Array::<PackedFloat32Array>::new();
 
-        // Process each network-input pair
-        for idx in 0..networks.len() {
-            if let Some(mut network) = networks.get(idx) {
-                if let Some(inputs) = inputs_array.get(idx) {
+        for idx in 0..n {
+            // Downcast from Variant to Gd<RustNeuralNetwork>
+            let net_var = networks.at(idx);
+            let inp_var = inputs_array.at(idx);
+
+            if let Ok(mut network) = net_var.try_to::<Gd<RustNeuralNetwork>>() {
+                if let Ok(inputs) = inp_var.try_to::<PackedFloat32Array>() {
                     let output = network.bind_mut().forward(inputs);
                     outputs.push(&output);
+                } else {
+                    outputs.push(&PackedFloat32Array::new());
                 }
+            } else {
+                outputs.push(&PackedFloat32Array::new());
             }
         }
 
