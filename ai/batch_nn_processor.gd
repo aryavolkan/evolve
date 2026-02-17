@@ -31,7 +31,7 @@ func process_batch(network: RefCounted) -> void:
 	# Check if network supports batch processing
 	if network.has_method("batch_forward"):
 		# Use efficient batch processing
-		var inputs_array := Array()
+		var inputs_array: Array[PackedFloat32Array] = []
 		for inp in _pending_inputs:
 			inputs_array.append(inp)
 		
@@ -64,7 +64,7 @@ func process_stateful_batch(networks: Array) -> void:
 	# Check if networks support stateful batch processing
 	if networks[0].has_method("batch_forward_stateful"):
 		# Use efficient stateful batch processing
-		var inputs_array := Array()
+		var inputs_array: Array[PackedFloat32Array] = []
 		for inp in _pending_inputs:
 			inputs_array.append(inp)
 		
