@@ -171,7 +171,11 @@ func _start_training() -> void:
 	ctx.current_eval_seed = 0
 	ctx.curriculum.reset()
 	ctx.curriculum.enabled = ctx.config.curriculum_enabled
-	ctx.use_nsga2 = ctx.config.use_nsga2
+	# NEAT and NSGA2 are mutually exclusive: NEAT has its own speciation-based
+	# selection and does not support set_objectives(). Force NSGA2 off when NEAT is on.
+	ctx.use_nsga2 = ctx.config.use_nsga2 and not ctx.use_neat
+	if ctx.config.use_nsga2 and ctx.use_neat:
+		push_warning("use_nsga2 ignored because use_neat=true (incompatible)")
 	ctx.stats_tracker.reset()
 	ctx.use_map_elites = ctx.config.use_map_elites
 	if ctx.use_map_elites:
