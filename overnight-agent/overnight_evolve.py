@@ -152,7 +152,10 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
                     "crash_exit_code": exit_code,
                     "crash_elapsed_seconds": elapsed
                 }, step=last_gen if last_gen >= 0 else 0)
-                time.sleep(3)  # Brief cooldown before retry
+                try:
+                    time.sleep(3)  # Brief cooldown before retry
+                except (KeyboardInterrupt, SystemExit):
+                    break
                 # Clear stale metrics
                 if os.path.exists(metrics_path):
                     os.remove(metrics_path)
