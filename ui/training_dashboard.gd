@@ -182,7 +182,7 @@ func _draw_line_series(data: Array[float], px: float, py: float, pw: float, ph: 
 	for i in range(count - 1):
 		var x1 := px + i * x_step
 		var x2 := px + (i + 1) * x_step
-		var safe_y_max = maxf(y_max, 1.0)  # Prevent division by zero
+		var safe_y_max: float = maxf(y_max, 1.0)  # Prevent division by zero
 		var y1 := py + ph * (1.0 - clampf(data[i] / safe_y_max, 0.0, 1.0))
 		var y2 := py + ph * (1.0 - clampf(data[i + 1] / safe_y_max, 0.0, 1.0))
 		draw_line(Vector2(x1, y1), Vector2(x2, y2), color, 1.5, true)
@@ -270,7 +270,7 @@ func _draw_species_chart(font: Font, x0: float, y0: float, w: float, h: float) -
 	for i in range(count - 1):
 		var x1 := plot_x + i * x_step
 		var x2 := plot_x + (i + 1) * x_step
-		var safe_y_max = maxf(float(y_max), 1.0)  # Prevent division by zero
+		var safe_y_max: float = maxf(float(y_max), 1.0)  # Prevent division by zero
 		var y1 := chart_top + chart_h * (1.0 - float(_species_history[i]) / safe_y_max)
 		var y2 := chart_top + chart_h * (1.0 - float(_species_history[i + 1]) / safe_y_max)
 		draw_line(Vector2(x1, y1), Vector2(x2, y2), COLOR_SPECIES, 1.5, true)
