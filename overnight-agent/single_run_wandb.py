@@ -3,17 +3,17 @@
 Single W&B-tracked training run with live generation-by-generation logging.
 Polls metrics.json instead of parsing stdout for reliability.
 """
-import wandb
-import subprocess
 import json
 import os
-import time
+import subprocess
 import sys
+import time
+
+import wandb
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
-from pathlib import Path
 
 # Optimal config from sweep analysis
 DEFAULT_CONFIG = {
@@ -54,7 +54,7 @@ def read_metrics():
     try:
         if not os.path.exists(METRICS_PATH):
             return None
-        with open(METRICS_PATH, 'r') as f:
+        with open(METRICS_PATH) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return None
@@ -69,12 +69,12 @@ def launch_godot(visible=False):
 
     # Build command
     cmd = [GODOT_PATH, "--path", PROJECT_PATH]
-    
+
     if not visible:
         cmd.extend(["--headless", "--rendering-driver", "dummy"])
-    
+
     cmd.extend(["--", "--auto-train"])
-    
+
     print(f"Launching Godot: {' '.join(cmd)}")
     process = subprocess.Popen(
         cmd,
@@ -83,7 +83,7 @@ def launch_godot(visible=False):
         text=True,
         bufsize=1
     )
-    
+
     return process
 
 
@@ -91,13 +91,13 @@ def wait_for_training_start(timeout=MAX_WAIT_FOR_START):
     """Wait for metrics.json to appear (training started)"""
     print(f"Waiting for training to start (timeout: {timeout}s)...")
     start = time.time()
-    
+
     while time.time() - start < timeout:
         if os.path.exists(METRICS_PATH):
             print("✓ Training started!")
             return True
         time.sleep(1)
-    
+
     print("✗ Training didn't start in time")
     return False
 
@@ -105,25 +105,25 @@ def wait_for_training_start(timeout=MAX_WAIT_FOR_START):
 def monitor_training(wandb_run, process):
     """Poll metrics.json and log to W&B as generations complete"""
     last_gen = -1
-    
+
     while True:
         # Check if process is still running
         if process.poll() is not None:
             print(f"\nGodot process exited with code {process.returncode}")
             break
-        
+
         # Read current metrics
         metrics = read_metrics()
         if not metrics:
             time.sleep(POLL_INTERVAL)
             continue
-        
+
         current_gen = metrics.get("generation", -1)
-        
+
         # Log new generation
         if current_gen > last_gen:
             last_gen = current_gen
-            
+
             # Log all metrics for this generation
             log_data = {
                 "generation": current_gen,
@@ -143,22 +143,22 @@ def monitor_training(wandb_run, process):
                 "map_elites_best": metrics.get("map_elites_best", 0),
                 "curriculum_stage": metrics.get("curriculum_stage", 0),
             }
-            
+
             wandb_run.log(log_data)
-            
+
             # Console output
             print(f"Gen {current_gen:2d} | "
                   f"Best: {metrics.get('best_fitness', 0):8.1f} | "
                   f"Avg: {metrics.get('avg_fitness', 0):7.1f} | "
                   f"ATB: {metrics.get('all_time_best', 0):8.1f} | "
                   f"Stagnant: {metrics.get('generations_without_improvement', 0)}/{metrics.get('stagnation_limit', 20)}")
-        
+
         # Check if training is complete
         if metrics.get("training_complete", False):
             print("\n✓ Training complete!")
             # Log final metrics one more time
             wandb_run.log(metrics)
-            
+
             # Kill Godot (it doesn't exit on its own after training)
             print("Terminating Godot process...")
             process.terminate()
@@ -168,11 +168,11 @@ def monitor_training(wandb_run, process):
                 print("Force killing Godot...")
                 process.kill()
                 process.wait()
-            
+
             break
-        
+
         time.sleep(POLL_INTERVAL)
-    
+
     return metrics
 
 
@@ -184,14 +184,14 @@ def main():
     parser.add_argument("--tags", type=str, nargs="*", default=["manual", "optimal"], help="W&B tags")
     parser.add_argument("--config", type=str, help="Path to custom config JSON")
     args = parser.parse_args()
-    
+
     # Load config
     config = DEFAULT_CONFIG.copy()
     if args.config:
         with open(args.config) as f:
             custom = json.load(f)
             config.update(custom)
-    
+
     print("=" * 60)
     print("W&B-Tracked Evolve Training")
     print("=" * 60)
@@ -199,10 +199,10 @@ def main():
     print(f"Visible: {args.visible}")
     print(f"Run name: {args.name}")
     print("=" * 60)
-    
+
     # Write config for Godot
     write_config(config)
-    
+
     # Initialize W&B
     print("\nInitializing W&B...", flush=True)
     run = wandb.init(
@@ -212,29 +212,29 @@ def main():
         tags=args.tags
     )
     print(f"✓ W&B run: {run.url}", flush=True)
-    
+
     try:
         # Launch Godot
         print("\nLaunching Godot...", flush=True)
         process = launch_godot(visible=args.visible)
         print(f"✓ Godot started (PID: {process.pid})", flush=True)
-        
+
         # Wait for training to start
         if not wait_for_training_start():
             print("ERROR: Training failed to start")
             process.kill()
             return 1
-        
+
         # Monitor and log generations
         final_metrics = monitor_training(run, process)
-        
+
         # Process should already be terminated by monitor_training
         # But double-check
         if process.poll() is None:
             print("Warning: Process still running, killing...")
             process.kill()
             process.wait()
-        
+
         print("\n" + "=" * 60)
         print("FINAL RESULTS")
         print("=" * 60)
@@ -245,9 +245,9 @@ def main():
             print(f"MAP-Elites coverage: {final_metrics.get('map_elites_coverage', 0)*100:.1f}%")
             print(f"Curriculum stage: {final_metrics.get('curriculum_stage', 0)}")
         print("=" * 60)
-        
+
         return 0
-        
+
     finally:
         run.finish()
         print("\n✓ W&B run finished")
