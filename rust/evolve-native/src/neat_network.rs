@@ -133,12 +133,12 @@ impl RustNeatNetwork {
             adjacency[from].push(to);
         }
 
-        let mut queue: Vec<usize> = Vec::new();
-        for i in 0..num_nodes {
-            if in_degree[i] == 0 {
-                queue.push(i);
-            }
-        }
+        let mut queue: Vec<usize> = in_degree
+            .iter()
+            .enumerate()
+            .filter(|(_, &d)| d == 0)
+            .map(|(i, _)| i)
+            .collect();
 
         let mut node_order = Vec::with_capacity(num_nodes);
         let mut head = 0;
@@ -157,18 +157,18 @@ impl RustNeatNetwork {
         // Cycle fallback: type-based order (inputs, hidden, outputs)
         if node_order.len() < num_nodes {
             node_order.clear();
-            for i in 0..num_nodes {
-                if n_types[i] == 0 {
+            for (i, &t) in n_types.iter().enumerate() {
+                if t == 0 {
                     node_order.push(i);
                 }
             }
-            for i in 0..num_nodes {
-                if n_types[i] == 1 {
+            for (i, &t) in n_types.iter().enumerate() {
+                if t == 1 {
                     node_order.push(i);
                 }
             }
-            for i in 0..num_nodes {
-                if n_types[i] == 2 {
+            for (i, &t) in n_types.iter().enumerate() {
+                if t == 2 {
                     node_order.push(i);
                 }
             }
@@ -310,12 +310,19 @@ mod tests {
         let node_order = vec![0, 1, 2];
         let node_biases = vec![0.0, 0.0, 0.0];
         let incoming = vec![
-            vec![],             // node 0: input
-            vec![],             // node 1: input
+            vec![],                    // node 0: input
+            vec![],                    // node 1: input
             vec![(0, 1.0), (1, -1.0)], // node 2: output
         ];
 
-        let out = forward_plain(&input_indices, &output_indices, &node_order, &node_biases, &incoming, &[1.0, 0.5]);
+        let out = forward_plain(
+            &input_indices,
+            &output_indices,
+            &node_order,
+            &node_biases,
+            &incoming,
+            &[1.0, 0.5],
+        );
         // output = tanh(1.0 * 1.0 + 0.5 * -1.0) = tanh(0.5)
         let expected = 0.5_f32.tanh();
         assert!((out[0] - expected).abs() < 1e-6);
@@ -330,13 +337,16 @@ mod tests {
         let output_indices = vec![2];
         let node_order = vec![0, 1, 2];
         let node_biases = vec![0.0, 0.1, -0.2];
-        let incoming = vec![
-            vec![],
-            vec![(0, 2.0)],
-            vec![(1, 0.5)],
-        ];
+        let incoming = vec![vec![], vec![(0, 2.0)], vec![(1, 0.5)]];
 
-        let out = forward_plain(&input_indices, &output_indices, &node_order, &node_biases, &incoming, &[0.3]);
+        let out = forward_plain(
+            &input_indices,
+            &output_indices,
+            &node_order,
+            &node_biases,
+            &incoming,
+            &[0.3],
+        );
         let hidden_val = (0.3 * 2.0 + 0.1_f32).tanh();
         let expected = (hidden_val * 0.5 - 0.2_f32).tanh();
         assert!((out[0] - expected).abs() < 1e-6);
@@ -351,7 +361,14 @@ mod tests {
         let node_biases = vec![0.0, 0.5];
         let incoming = vec![vec![], vec![]];
 
-        let out = forward_plain(&input_indices, &output_indices, &node_order, &node_biases, &incoming, &[1.0]);
+        let out = forward_plain(
+            &input_indices,
+            &output_indices,
+            &node_order,
+            &node_biases,
+            &incoming,
+            &[1.0],
+        );
         assert!((out[0] - 0.5_f32.tanh()).abs() < 1e-6);
     }
 }

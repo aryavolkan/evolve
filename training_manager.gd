@@ -123,7 +123,7 @@ var best_avg_fitness: float = 0.0
 
 # Curriculum learning
 var CurriculumManagerScript = preload("res://ai/curriculum_manager.gd")
-var curriculum: RefCounted = preload("res://ai/curriculum_manager.gd").new()
+var curriculum: RefCounted = CurriculumManagerScript.new()
 
 # Backward-compatible curriculum accessors
 var curriculum_enabled: bool:

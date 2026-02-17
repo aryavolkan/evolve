@@ -213,7 +213,8 @@ func _draw_inspect_panel() -> void:
 	ly += gap
 	draw_string(_font, Vector2(lx, ly), "Age: %.1fs" % _inspect_data.get("age", 0), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.7, 0.7, 0.7))
 	ly += gap
-	draw_string(_font, Vector2(lx, ly), "Lives: %d" % _inspect_data.get("lives", 0), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.9, 0.5, 0.5) if _inspect_data.get("lives", 0) <= 1 else Color(0.7, 0.7, 0.7))
+	var lives_color := Color(0.9, 0.5, 0.5) if _inspect_data.get("lives", 0) <= 1 else Color(0.7, 0.7, 0.7)
+	draw_string(_font, Vector2(lx, ly), "Lives: %d" % _inspect_data.get("lives", 0), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lives_color)
 	ly += gap
 	var nodes: int = _inspect_data.get("nodes", 0)
 	var conns: int = _inspect_data.get("connections", 0)

@@ -1,11 +1,11 @@
 # overnight_evolve.py
-import wandb
-import subprocess
 import json
-import time
-from pathlib import Path
 import os
+import subprocess
+import time
 import uuid
+
+import wandb
 
 # Refined sweep config based on best results from x0cst76l
 # Best performer: comfy-sweep-22 (fitness 147,672)
@@ -136,7 +136,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
 
         # Read metrics
         try:
-            with open(metrics_path, 'r') as f:
+            with open(metrics_path) as f:
                 data = json.load(f)
 
             gen = data.get('generation', 0)
@@ -216,7 +216,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
             if os.path.exists(path):
                 try:
                     os.remove(path)
-                except:
+                except Exception:
                     pass
 
     # Return metrics for summary

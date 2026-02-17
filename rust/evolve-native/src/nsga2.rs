@@ -13,8 +13,7 @@ pub struct RustNsga2 {
 #[inline]
 fn dominates(a: &[f32; 3], b: &[f32; 3]) -> bool {
     // a dominates b iff a >= b on all objectives AND a > b on at least one
-    a[0] >= b[0] && a[1] >= b[1] && a[2] >= b[2]
-        && (a[0] > b[0] || a[1] > b[1] || a[2] > b[2])
+    a[0] >= b[0] && a[1] >= b[1] && a[2] >= b[2] && (a[0] > b[0] || a[1] > b[1] || a[2] > b[2])
 }
 
 #[godot_api]
@@ -56,8 +55,8 @@ impl RustNsga2 {
         let mut fronts = VarArray::new();
         let mut current_front: Vec<i32> = Vec::new();
 
-        for i in 0..n {
-            if domination_count[i] == 0 {
+        for (i, &count) in domination_count.iter().enumerate().take(n) {
+            if count == 0 {
                 current_front.push(i as i32);
             }
         }
@@ -135,7 +134,11 @@ impl RustNsga2 {
         for m in 0..3 {
             // Sort by this objective
             let mut sorted_indices: Vec<usize> = (0..n).collect();
-            sorted_indices.sort_by(|&a, &b| objs[a].1[m].partial_cmp(&objs[b].1[m]).unwrap_or(std::cmp::Ordering::Equal));
+            sorted_indices.sort_by(|&a, &b| {
+                objs[a].1[m]
+                    .partial_cmp(&objs[b].1[m])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             // Boundary points get infinity
             distances[sorted_indices[0]] = f64::INFINITY;
@@ -191,7 +194,11 @@ impl RustNsga2 {
         let cd_a: f64 = crowding.get_or_nil(a as i32).to();
         let cd_b: f64 = crowding.get_or_nil(b as i32).to();
 
-        if cd_a >= cd_b { a as i32 } else { b as i32 }
+        if cd_a >= cd_b {
+            a as i32
+        } else {
+            b as i32
+        }
     }
 }
 
@@ -199,7 +206,7 @@ impl RustNsga2 {
 fn fastrand_usize(max: usize) -> usize {
     use std::cell::Cell;
     thread_local! {
-        static STATE: Cell<u64> = Cell::new(0x12345678_9abcdef0);
+        static STATE: Cell<u64> = const { Cell::new(0x12345678_9abcdef0) };
     }
     STATE.with(|s| {
         let mut x = s.get();

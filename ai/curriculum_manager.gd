@@ -11,19 +11,19 @@ var generations_at_stage: int = 0
 const STAGES: Array[Dictionary] = [
 	# Stage 0: Tiny arena, pawns only, health powerups only
 	{"arena_scale": 0.25, "enemy_types": [0], "powerup_types": [0, 6],
-	 "advancement_threshold": 5000.0, "min_generations": 3, "label": "Nursery"},
+	"advancement_threshold": 5000.0, "min_generations": 3, "label": "Nursery"},
 	# Stage 1: Small arena, pawns + knights, basic powerups
 	{"arena_scale": 0.5, "enemy_types": [0, 1], "powerup_types": [0, 2, 6],
-	 "advancement_threshold": 10000.0, "min_generations": 3, "label": "Elementary"},
+	"advancement_threshold": 10000.0, "min_generations": 3, "label": "Elementary"},
 	# Stage 2: Medium arena, add bishops, most powerups
 	{"arena_scale": 0.75, "enemy_types": [0, 1, 2], "powerup_types": [0, 1, 2, 4, 5, 6],
-	 "advancement_threshold": 15000.0, "min_generations": 3, "label": "Intermediate"},
+	"advancement_threshold": 15000.0, "min_generations": 3, "label": "Intermediate"},
 	# Stage 3: Full arena, all except queen, all powerups
 	{"arena_scale": 1.0, "enemy_types": [0, 1, 2, 3], "powerup_types": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-	 "advancement_threshold": 12000.0, "min_generations": 3, "label": "Advanced"},
+	"advancement_threshold": 12000.0, "min_generations": 3, "label": "Advanced"},
 	# Stage 4: Full arena, all enemy types, all powerups (final)
 	{"arena_scale": 1.0, "enemy_types": [0, 1, 2, 3, 4], "powerup_types": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-	 "advancement_threshold": 0.0, "min_generations": 0, "label": "Final"},
+	"advancement_threshold": 0.0, "min_generations": 0, "label": "Final"},
 ]
 
 

@@ -5,14 +5,14 @@ Offline evolution training - runs locally without internet, syncs to W&B later.
 Runs a predefined schedule of hyperparameter configs, starting with small populations
 and progressively increasing complexity.
 """
-import wandb
-import subprocess
 import json
-import time
-from pathlib import Path
 import os
+import subprocess
+import time
 import uuid
 from datetime import datetime
+
+import wandb
 
 # Paths
 GODOT_PATH = "/Applications/Godot.app/Contents/MacOS/Godot"
@@ -140,7 +140,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
 
         # Read metrics
         try:
-            with open(metrics_path, 'r') as f:
+            with open(metrics_path) as f:
                 data = json.load(f)
 
             gen = data.get('generation', 0)
@@ -195,7 +195,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
             if os.path.exists(path):
                 try:
                     os.remove(path)
-                except:
+                except Exception:
                     pass
 
     # Return metrics for summary
@@ -222,7 +222,7 @@ def run_offline_training_schedule(visible=False, start_from=0, limit=None):
     print(f"Starting from config #{start_from}")
     print(f"Mode: {'VISIBLE' if visible else 'HEADLESS'}")
     print(f"\nRuns will be saved locally to: {os.getcwd()}/wandb/")
-    print(f"To sync later: wandb sync wandb/offline-run-*")
+    print("To sync later: wandb sync wandb/offline-run-*")
     print("="*80)
     print()
 

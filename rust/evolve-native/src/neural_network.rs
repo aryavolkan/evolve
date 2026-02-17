@@ -1,6 +1,6 @@
-use godot::prelude::*;
 use godot::classes::file_access::ModeFlags;
 use godot::classes::FileAccess;
+use godot::prelude::*;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
@@ -25,7 +25,7 @@ fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     for i in 0..chunks {
         let base = i * 8;
         unsafe {
-            acc0 += a.get_unchecked(base)     * b.get_unchecked(base);
+            acc0 += a.get_unchecked(base) * b.get_unchecked(base);
             acc1 += a.get_unchecked(base + 1) * b.get_unchecked(base + 1);
             acc2 += a.get_unchecked(base + 2) * b.get_unchecked(base + 2);
             acc3 += a.get_unchecked(base + 3) * b.get_unchecked(base + 3);
@@ -40,7 +40,9 @@ fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     let base = chunks * 8;
     let mut rem_acc = 0.0f32;
     for i in 0..rem {
-        unsafe { rem_acc += a.get_unchecked(base + i) * b.get_unchecked(base + i); }
+        unsafe {
+            rem_acc += a.get_unchecked(base + i) * b.get_unchecked(base + i);
+        }
     }
 
     acc0 + acc1 + acc2 + acc3 + acc4 + acc5 + acc6 + acc7 + rem_acc
@@ -176,16 +178,13 @@ impl RustNeuralNetwork {
         // Uses 8-wide unrolled dot product — LLVM vectorizes with AVX2+FMA
         for h in 0..hidden_size {
             let offset = h * input_size;
-            let row = unsafe {
-                std::slice::from_raw_parts(self.weights_ih.as_ptr().add(offset), input_size)
-            };
+            let row = unsafe { std::slice::from_raw_parts(self.weights_ih.as_ptr().add(offset), input_size) };
             let mut sum = self.bias_h[h] + dot_product(row, inp);
 
             if self.use_memory {
                 let ctx_offset = h * hidden_size;
-                let ctx_row = unsafe {
-                    std::slice::from_raw_parts(self.weights_hh.as_ptr().add(ctx_offset), hidden_size)
-                };
+                let ctx_row =
+                    unsafe { std::slice::from_raw_parts(self.weights_hh.as_ptr().add(ctx_offset), hidden_size) };
                 sum += dot_product(ctx_row, &self.prev_hidden);
             }
             self.hidden[h] = sum.tanh();
@@ -199,9 +198,7 @@ impl RustNeuralNetwork {
         // Output layer: o = tanh(W_ho @ hidden + b_o)
         for o in 0..output_size {
             let offset = o * hidden_size;
-            let row = unsafe {
-                std::slice::from_raw_parts(self.weights_ho.as_ptr().add(offset), hidden_size)
-            };
+            let row = unsafe { std::slice::from_raw_parts(self.weights_ho.as_ptr().add(offset), hidden_size) };
             self.output[o] = (self.bias_o[o] + dot_product(row, &self.hidden)).tanh();
         }
 
@@ -314,7 +311,9 @@ impl RustNeuralNetwork {
 
         // Process each agent
         for idx in 0..batch_size {
-            let Some(inputs) = inputs_array.get(idx) else { continue; };
+            let Some(inputs) = inputs_array.get(idx) else {
+                continue;
+            };
             let inp = inputs.as_slice();
             debug_assert_eq!(inp.len(), input_size, "Input size mismatch");
 
@@ -324,23 +323,20 @@ impl RustNeuralNetwork {
             // Hidden layer computation (8-wide dot product for AVX2 vectorization)
             for h in 0..hidden_size {
                 let weight_offset = h * input_size;
-                let row = unsafe {
-                    std::slice::from_raw_parts(self.weights_ih.as_ptr().add(weight_offset), input_size)
-                };
+                let row =
+                    unsafe { std::slice::from_raw_parts(self.weights_ih.as_ptr().add(weight_offset), input_size) };
                 // Note: batch_forward is stateless — no recurrent memory in batch mode
                 // (each agent would need its own memory; use individual forward() for that)
                 hidden_states[hidden_offset + h] = (self.bias_h[h] + dot_product(row, inp)).tanh();
             }
 
             // Output layer computation
-            let hidden_slice = unsafe {
-                std::slice::from_raw_parts(hidden_states.as_ptr().add(hidden_offset), hidden_size)
-            };
+            let hidden_slice =
+                unsafe { std::slice::from_raw_parts(hidden_states.as_ptr().add(hidden_offset), hidden_size) };
             for o in 0..output_size {
                 let weight_offset = o * hidden_size;
-                let row = unsafe {
-                    std::slice::from_raw_parts(self.weights_ho.as_ptr().add(weight_offset), hidden_size)
-                };
+                let row =
+                    unsafe { std::slice::from_raw_parts(self.weights_ho.as_ptr().add(weight_offset), hidden_size) };
                 output_states[output_offset + o] = (self.bias_o[o] + dot_product(row, hidden_slice)).tanh();
             }
 
@@ -364,9 +360,7 @@ impl RustNeuralNetwork {
         let output_size = self.output_size as usize;
 
         // Convert inputs to Vec for parallel processing
-        let inputs_vec: Vec<_> = (0..batch_size)
-            .filter_map(|i| inputs_array.get(i))
-            .collect();
+        let inputs_vec: Vec<_> = (0..batch_size).filter_map(|i| inputs_array.get(i)).collect();
 
         // Process agents sequentially (rayon removed — Godot thread_model=0 constraint)
         let results: Vec<Vec<f32>> = inputs_vec
@@ -379,21 +373,19 @@ impl RustNeuralNetwork {
                 let mut output = vec![0.0f32; output_size];
 
                 // Hidden layer computation
-                for h in 0..hidden_size {
+                for (h, h_val) in hidden.iter_mut().enumerate() {
                     let weight_offset = h * input_size;
-                    let row = unsafe {
-                        std::slice::from_raw_parts(self.weights_ih.as_ptr().add(weight_offset), input_size)
-                    };
-                    hidden[h] = (self.bias_h[h] + dot_product(row, inp)).tanh();
+                    let row =
+                        unsafe { std::slice::from_raw_parts(self.weights_ih.as_ptr().add(weight_offset), input_size) };
+                    *h_val = (self.bias_h[h] + dot_product(row, inp)).tanh();
                 }
 
                 // Output layer computation
-                for o in 0..output_size {
+                for (o, o_val) in output.iter_mut().enumerate() {
                     let weight_offset = o * hidden_size;
-                    let row = unsafe {
-                        std::slice::from_raw_parts(self.weights_ho.as_ptr().add(weight_offset), hidden_size)
-                    };
-                    output[o] = (self.bias_o[o] + dot_product(row, &hidden)).tanh();
+                    let row =
+                        unsafe { std::slice::from_raw_parts(self.weights_ho.as_ptr().add(weight_offset), hidden_size) };
+                    *o_val = (self.bias_o[o] + dot_product(row, &hidden)).tanh();
                 }
 
                 output
@@ -485,9 +477,7 @@ impl RustNeuralNetwork {
         }
 
         let mut child_weights = weights_a.clone();
-        for i in point1..point2 {
-            child_weights[i] = weights_b[i];
-        }
+        child_weights[point1..point2].copy_from_slice(&weights_b[point1..point2]);
 
         let mut child = Self::create(self.input_size, self.hidden_size, self.output_size);
         if self.use_memory {
@@ -530,8 +520,8 @@ impl RustNeuralNetwork {
         } else {
             // Fallback for packaged demos
             let fallback = format!("res://models/{}", path.to_string().rsplit('/').next().unwrap_or(""));
-            let f = FileAccess::open(&GString::from(&fallback), ModeFlags::READ)?;
-            f
+
+            FileAccess::open(&GString::from(&fallback), ModeFlags::READ)?
         };
 
         // Peek first byte — if '{' it's JSON, which we don't handle in Rust
@@ -550,7 +540,9 @@ impl RustNeuralNetwork {
         if in_size > 10000 || hid_size > 10000 || out_size > 10000 {
             godot_error!(
                 "Network file appears corrupt (unreasonable sizes: in={} hid={} out={})",
-                in_size, hid_size, out_size
+                in_size,
+                hid_size,
+                out_size
             );
             return None;
         }
@@ -566,12 +558,13 @@ impl RustNeuralNetwork {
         };
 
         // Sanity check weight count
-        let max_expected = ((in_size * hid_size + hid_size + hid_size * out_size + out_size
-            + hid_size * hid_size) * 2) as usize;
+        let max_expected =
+            ((in_size * hid_size + hid_size + hid_size * out_size + out_size + hid_size * hid_size) * 2) as usize;
         if weight_count > max_expected || weight_count > 1_000_000 {
             godot_error!(
                 "Network file appears corrupt (weight_count={}, max_expected={})",
-                weight_count, max_expected
+                weight_count,
+                max_expected
             );
             return None;
         }

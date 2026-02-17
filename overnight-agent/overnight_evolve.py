@@ -1,12 +1,12 @@
 # overnight_evolve.py
-import wandb
-import subprocess
 import json
-import time
-import sys
-from pathlib import Path
 import os
+import subprocess
+import sys
+import time
 import uuid
+
+import wandb
 
 # Enable line buffering for real-time logging (critical for nohup!)
 sys.stdout.reconfigure(line_buffering=True)
@@ -167,7 +167,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
 
         # Read metrics
         try:
-            with open(metrics_path, 'r') as f:
+            with open(metrics_path) as f:
                 data = json.load(f)
 
             gen = data.get('generation', 0)
@@ -214,7 +214,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
                     'map_elites_coverage': data.get('map_elites_coverage', 0.0),
                     'map_elites_best': data.get('map_elites_best', 0.0),
                 }
-                
+
                 # Add co-evolution metrics if present
                 if data.get('coevolution', False):
                     log_data['coevolution'] = True
@@ -224,7 +224,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
                     log_data['enemy_min_fitness'] = data.get('enemy_min_fitness', 0)
                     log_data['hof_size'] = data.get('hof_size', 0)
                     log_data['is_hof_generation'] = data.get('is_hof_generation', False)
-                
+
                 wandb.log(log_data, step=gen)
 
                 # Print progress with curriculum info if available
@@ -260,20 +260,20 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
     if elapsed >= timeout_minutes * 60:
         print(f"Training timeout reached ({timeout_minutes}m). Terminating...")
         wandb.log({"timeout_reached": True}, step=last_gen if last_gen >= 0 else 0)
-    
+
     # Clean up - terminate gracefully, then force kill if needed
     try:
         proc.terminate()
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        print(f"Godot didn't terminate gracefully, force killing...")
+        print("Godot didn't terminate gracefully, force killing...")
         proc.kill()
         proc.wait(timeout=3)
     except Exception as e:
         print(f"Error during cleanup: {e}")
         try:
             proc.kill()
-        except:
+        except Exception:
             pass
 
     # Clean up worker-specific files
@@ -282,12 +282,12 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
             if os.path.exists(path):
                 try:
                     os.remove(path)
-                except:
+                except Exception:
                     pass
 
     # Log summary
     print(f"Training complete. Generations: {last_gen}, Best fitness: {best_fitness:.1f}, Elapsed: {elapsed/60:.1f}m")
-    
+
     # Return metrics for summary
     return {
         'best_fitness': best_fitness,

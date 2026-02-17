@@ -6,6 +6,45 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python lint (ruff)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Python lint (ruff)
+        run: ruff check scripts/ overnight-agent/*.py
+
+      # GDScript lint (gdlint)
+      - name: Install gdtoolkit
+        run: pip install gdtoolkit
+
+      - name: GDScript lint (gdlint)
+        run: |
+          gdlint *.gd ai/*.gd managers/*.gd modes/*.gd ui/*.gd
+
+      # Rust lint (clippy + rustfmt)
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust format check (rustfmt)
+        run: cargo fmt --check
+        working-directory: rust/evolve-native
+
+      - name: Rust lint (clippy)
+        run: cargo clippy -- -D warnings
+        working-directory: rust/evolve-native
+
   godot-tests:
     runs-on: ubuntu-latest
     env:

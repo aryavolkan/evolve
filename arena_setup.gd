@@ -46,21 +46,21 @@ static func get_arena_bounds(arena_width: float, arena_height: float) -> Rect2:
 	## Return the playable arena bounds (inside the walls).
 	var wall_inner = ARENA_WALL_THICKNESS
 	return Rect2(wall_inner, wall_inner,
-				 arena_width - wall_inner * 2,
-				 arena_height - wall_inner * 2)
+				arena_width - wall_inner * 2,
+				arena_height - wall_inner * 2)
 
 
 func _create_arena_walls(scene: Node2D, arena_width: float, arena_height: float) -> void:
 	var wall_thickness = ARENA_WALL_THICKNESS
 	var wall_positions = [
 		{"pos": Vector2(arena_width / 2, wall_thickness / 2),
-		 "size": Vector2(arena_width, wall_thickness)},
+		"size": Vector2(arena_width, wall_thickness)},
 		{"pos": Vector2(arena_width / 2, arena_height - wall_thickness / 2),
-		 "size": Vector2(arena_width, wall_thickness)},
+		"size": Vector2(arena_width, wall_thickness)},
 		{"pos": Vector2(wall_thickness / 2, arena_height / 2),
-		 "size": Vector2(wall_thickness, arena_height - wall_thickness * 2)},
+		"size": Vector2(wall_thickness, arena_height - wall_thickness * 2)},
 		{"pos": Vector2(arena_width - wall_thickness / 2, arena_height / 2),
-		 "size": Vector2(wall_thickness, arena_height - wall_thickness * 2)}
+		"size": Vector2(wall_thickness, arena_height - wall_thickness * 2)}
 	]
 
 	for wall_data in wall_positions:

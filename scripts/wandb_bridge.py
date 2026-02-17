@@ -11,12 +11,13 @@ The script watches ~/Library/Application Support/Godot/app_userdata/Evolve/metri
 and logs each generation's metrics to W&B.
 """
 
-import wandb
+import argparse
 import json
+import os
 import time
 from pathlib import Path
-import argparse
-import os
+
+import wandb
 
 
 def _default_godot_user_dir() -> Path:
@@ -67,7 +68,7 @@ def run_bridge(project_name: str, run_name: str = None):
         while True:
             try:
                 if metrics_path.exists():
-                    with open(metrics_path, 'r') as f:
+                    with open(metrics_path) as f:
                         data = json.load(f)
 
                     gen = data.get('generation', 0)
@@ -126,12 +127,12 @@ def run_bridge(project_name: str, run_name: str = None):
     # Log final summary
     if last_generation >= 0:
         try:
-            with open(metrics_path, 'r') as f:
+            with open(metrics_path) as f:
                 data = json.load(f)
             wandb.summary['final_generation'] = data.get('generation', 0)
             wandb.summary['final_best_fitness'] = data.get('all_time_best', 0)
             wandb.summary['final_avg_fitness'] = data.get('avg_fitness', 0)
-        except:
+        except Exception:
             pass
 
     wandb.finish()
