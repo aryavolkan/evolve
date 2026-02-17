@@ -220,6 +220,9 @@ func _ready() -> void:
 		if arg == "--demo":
 			call_deferred("_start_demo_playback")
 			return
+		if arg == "--auto-play":
+			call_deferred("_on_title_mode_selected", "play")
+			return
 
 	# Show title screen on startup (only for root viewport / human play)
 	if get_viewport() == get_tree().root and not training_mode:
