@@ -182,6 +182,22 @@ impl RustGeneticOps {
         
         PackedFloat32Array::from(fitnesses.as_slice())
     }
+    
+    /// Fast batch update of fitness scores with delta values.
+    /// Updates multiple individuals' fitness in one call.
+    #[func]
+    fn batch_update_fitness(mut current_fitness: PackedFloat32Array, indices: PackedInt32Array, delta: f32) -> PackedFloat32Array {
+        let fitness_slice = current_fitness.as_mut_slice();
+        let idx_slice = indices.as_slice();
+        
+        for &idx in idx_slice {
+            if (idx as usize) < fitness_slice.len() {
+                fitness_slice[idx as usize] += delta;
+            }
+        }
+        
+        current_fitness
+    }
 
     /// Fast sorting of indexed fitness array.
     /// Returns sorted indices (highest fitness first).
