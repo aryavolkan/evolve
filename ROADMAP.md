@@ -1,8 +1,8 @@
 # Evolve — Unified Development Roadmap
 
-**Last Updated:** 2026-02-12
+**Last Updated:** 2026-02-16
 **Status:** Active Development
-**Current Best Result:** Fitness 147,672 (sweep x0cst76l, comfy-sweep-22)
+**Current Best Result:** Fitness 189,512 (sweep 84jfx9jj — optimized Bayesian config)
 
 ---
 
@@ -273,6 +273,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-02-16 | Update best result to 189,512; merge LONG_TERM_PLAN.md; doc cleanup | Bernard |
 | 2026-02-12 | Comprehensive status update — mark all completed items across Phases 1-2, Tracks A-B | Claude |
 | 2026-02-12 | Add `scripts/benchmark.py` — Phase 2B benchmark suite | Claude |
 | 2026-02-10 | Initial unified roadmap synthesizing 4 agent analyses | Alfred |
