@@ -13,6 +13,10 @@ var double_points_time: float = 0.0
 
 var death_effect_scene: PackedScene = preload("res://death_effect.tscn")
 
+# Milestone rewards system
+var milestone_rewards: MilestoneRewards = null
+var is_training_mode: bool = false
+
 @onready var speed_particles: CPUParticles2D = $SpeedParticles
 @onready var invincibility_particles: CPUParticles2D = $InvincibilityParticles
 @onready var slow_particles: CPUParticles2D = $SlowParticles
@@ -25,6 +29,11 @@ func _ready() -> void:
 	slow_particles.emitting = false
 	timer_label.visible = false
 	ai_controlled = false
+	
+	# Initialize milestone rewards if not already set
+	if not milestone_rewards:
+		milestone_rewards = preload("res://milestone_rewards.gd").new()
+		milestone_rewards.tier_changed.connect(_on_milestone_tier_changed)
 
 
 func get_move_direction() -> Vector2:
@@ -222,3 +231,109 @@ func _trigger_hit() -> void:
 		effect.setup(global_position, 40.0, Color(1, 0.3, 0.3, 0.8))
 		get_parent().add_child(effect)
 	hit.emit()
+
+
+# Milestone rewards integration
+func get_speed_multiplier() -> float:
+	## Override from combat_entity to apply milestone speed bonus.
+	if milestone_rewards:
+		return milestone_rewards.get_speed_multiplier()
+	return 1.0
+
+
+func after_physics_process(delta: float) -> void:
+	## Update milestone visual effects.
+	if milestone_rewards and milestone_rewards.current_tier == 4:
+		# Legendary tier: animated rainbow effect
+		if DisplayServer.get_screen_count() > 0:  # Only if display is available
+			update_sprite_color()
+			milestone_rewards.rainbow_time += delta * 2.0
+
+
+func shoot(direction: Vector2) -> void:
+	## Override shoot to apply cooldown multiplier.
+	var projectile: Node
+	if projectile_pool:
+		projectile = projectile_pool.acquire()
+		projectile.reset(global_position, direction, self, -1, is_piercing)
+	else:
+		projectile = projectile_scene.instantiate()
+		projectile.position = global_position
+		projectile.direction = direction
+		projectile.is_piercing = is_piercing
+		projectile.owner_player = self
+		get_parent().add_child(projectile)
+	projectile.pool = projectile_pool
+	configure_projectile(projectile)
+	shot_fired.emit(direction)
+
+	can_shoot = false
+	var cooldown = shoot_cooldown * 0.3 if is_rapid_fire else shoot_cooldown
+	
+	# Apply milestone cooldown multiplier
+	if milestone_rewards:
+		cooldown *= milestone_rewards.get_cooldown_multiplier()
+	
+	await get_tree().create_timer(cooldown).timeout
+	can_shoot = true
+
+
+func update_sprite_color() -> void:
+	## Override to apply milestone tier colors.
+	if not sprite:
+		return
+
+	var target_color := get_default_sprite_color()
+	
+	# Priority: invincible > speed boost > shield > milestone
+	if is_invincible:
+		target_color = get_invincible_color()
+	elif is_speed_boosted:
+		target_color = get_speed_boost_color()
+	elif has_shield:
+		target_color = get_shield_color()
+	elif milestone_rewards:
+		# Apply milestone tier color
+		if milestone_rewards.current_tier == 4:
+			# Legendary rainbow effect
+			target_color = milestone_rewards.get_tier_color()
+		elif milestone_rewards.current_tier > 0:
+			# Other tiers: use predefined colors
+			target_color = milestone_rewards.get_tier_color()
+
+	sprite.modulate = target_color
+
+
+func update_fitness_milestone(fitness: float) -> void:
+	## Update the milestone rewards based on current fitness.
+	if not milestone_rewards:
+		milestone_rewards = preload("res://milestone_rewards.gd").new()
+		milestone_rewards.tier_changed.connect(_on_milestone_tier_changed)
+	
+	milestone_rewards.update_fitness(fitness)
+
+
+func _on_milestone_tier_changed(new_tier: int, tier_name: String) -> void:
+	## Handle milestone tier changes.
+	print("Milestone tier changed to: %s (Tier %d)" % [tier_name, new_tier])
+	
+	# Apply size scaling
+	if sprite and DisplayServer.get_screen_count() > 0:
+		var scale_mult = milestone_rewards.get_size_scale()
+		sprite.scale = Vector2.ONE * scale_mult
+		
+		# Also scale collision shape if it exists
+		var collision = find_child("CollisionShape2D", false)
+		if collision:
+			collision.scale = Vector2.ONE * scale_mult
+	
+	# Update visual color
+	update_sprite_color()
+	
+	# TODO: Add particle trail effects for higher tiers
+	# This would require checking if GPUParticles2D nodes exist first
+
+
+func set_training_mode(enabled: bool) -> void:
+	## Enable or disable training mode optimizations.
+	is_training_mode = enabled

@@ -71,6 +71,13 @@ func start_playback() -> void:
 	Engine.time_scale = 1.0
 	ai_controller.set_network(network)
 	player.enable_ai_control(true)
+	player.set_training_mode(true)
+	
+	# Update milestone rewards based on the network's achieved fitness
+	# For playback, we'll use a high fitness to show the visual effects
+	if player.has_method("update_fitness_milestone"):
+		# Assume the best network achieved at least 175000 fitness if saved
+		player.update_fitness_milestone(175000)
 
 	reset_game()
 	status_changed.emit("Playback started")

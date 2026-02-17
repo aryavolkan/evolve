@@ -224,6 +224,11 @@ func _create_eval_instance(individual_index: int) -> Dictionary:
 
 	var scene_player: CharacterBody2D = scene.get_node("Player")
 	scene_player.enable_ai_control(true)
+	scene_player.set_training_mode(true)
+	
+	# Update milestone rewards based on all-time best fitness
+	if scene_player.has_method("update_fitness_milestone"):
+		scene_player.update_fitness_milestone(ctx.all_time_best)
 
 	var controller = ctx.AIControllerScript.new()
 	controller.set_player(scene_player)
@@ -273,6 +278,11 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
 
 	var scene_player: CharacterBody2D = scene.get_node("Player")
 	scene_player.enable_ai_control(true)
+	scene_player.set_training_mode(true)
+	
+	# Update milestone rewards based on all-time best fitness
+	if scene_player.has_method("update_fitness_milestone"):
+		scene_player.update_fitness_milestone(ctx.all_time_best)
 
 	var controller = ctx.AIControllerScript.new()
 	controller.set_player(scene_player)
@@ -324,6 +334,10 @@ func _process_parallel_training(delta: float) -> void:
 		# Drive AI controller
 		var action: Dictionary = eval.controller.get_action()
 		eval.player.set_ai_action(action.move_direction, action.shoot_direction)
+		
+		# Update milestone in real-time for the best performing entity
+		if eval.scene.score > ctx.all_time_best and eval.player.has_method("update_fitness_milestone"):
+			eval.player.update_fitness_milestone(eval.scene.score)
 
 		# Check if game over OR timeout (60 second max)
 		var timed_out = eval.time >= 60.0
