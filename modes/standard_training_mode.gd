@@ -173,9 +173,8 @@ func _start_training() -> void:
 	ctx.curriculum.enabled = ctx.config.curriculum_enabled
 	# NEAT and NSGA2 are mutually exclusive: NEAT has its own speciation-based
 	# selection and does not support set_objectives(). Force NSGA2 off when NEAT is on.
-	ctx.use_nsga2 = ctx.config.use_nsga2 and not ctx.use_neat
-	if ctx.config.use_nsga2 and ctx.use_neat:
-		push_warning("use_nsga2 ignored because use_neat=true (incompatible)")
+	# NEAT + NSGA2 is supported via MO-NEAT (Pareto rank → scalar fitness in NeatEvolution)
+	ctx.use_nsga2 = ctx.config.use_nsga2
 	ctx.stats_tracker.reset()
 	ctx.use_map_elites = ctx.config.use_map_elites
 	if ctx.use_map_elites:
@@ -193,7 +192,7 @@ func _start_training() -> void:
 
 	ctx.training_status_changed.emit("Training started")
 	var mem_label = "+memory" if ctx.use_memory else ""
-	var evo_type = ("NEAT" if ctx.use_neat else ("NSGA-II" if ctx.use_nsga2 else "Standard")) + mem_label
+	var evo_type = (("MO-NEAT" if ctx.use_nsga2 else "NEAT") if ctx.use_neat else ("NSGA-II" if ctx.use_nsga2 else "Standard")) + mem_label
 	print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d, evo=%s" % [
 		ctx.population_size, ctx.max_generations, ctx.parallel_count, ctx.evals_per_individual, ctx.stagnation_limit, evo_type
 	])

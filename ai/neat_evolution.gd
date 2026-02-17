@@ -1,6 +1,8 @@
 extends "res://ai/evolution_base.gd"
 class_name NeatEvolution
 
+const NSGA2 = preload("res://ai/nsga2.gd")
+
 ## NEAT evolution manager: manages a population of NeatGenomes,
 ## organizes them into species, and produces new generations via
 ## species-proportionate reproduction with crossover and mutation.
@@ -12,7 +14,8 @@ var best_genome: NeatGenome = null
 var all_time_best_genome: NeatGenome = null
 var _next_species_id: int = 0
 
-# Compatibility stubs for training_manager.gd integration
+# Multi-objective support (MO-NEAT)
+var objective_scores: Array = []  ## Array of Vector3 per individual; set via set_objectives()
 var pareto_front: Array = []
 var last_hypervolume: float = 0.0
 
@@ -33,6 +36,13 @@ func _initialize_population() -> void:
 	generation = 0
 	seed_lineage(population.size())
 	_reset_scores()
+	_reset_objective_scores()
+
+
+func _reset_objective_scores() -> void:
+	objective_scores.clear()
+	for i in config.population_size:
+		objective_scores.append(Vector3.ZERO)
 
 
 func get_individual(index: int) -> NeatGenome:
@@ -49,14 +59,80 @@ func set_fitness(index: int, fitness: float) -> void:
 	super.set_fitness(index, fitness)
 
 
+func set_objectives(index: int, objectives: Vector3) -> void:
+	## MO-NEAT: store multi-objective scores. Actual fitness conversion happens
+	## at the start of evolve() via _apply_mo_fitness().
+	if index >= 0 and index < objective_scores.size():
+		objective_scores[index] = objectives
+	# Set scalar fitness as sum for any immediate reads before evolve()
+	var scalar := objectives.x + objectives.y + objectives.z
+	if index >= 0 and index < population.size():
+		population[index].fitness = scalar
+	super.set_fitness(index, scalar)
+
+
+func _apply_mo_fitness() -> void:
+	## Convert stored objective scores into MO fitness scalars using NSGA-II ranking.
+	## Assigns each genome a fitness that reflects its Pareto rank + crowding distance.
+	## Called at the start of evolve() when objectives have been set.
+	if objective_scores.is_empty():
+		return
+	var has_objectives := false
+	for obj in objective_scores:
+		if obj != Vector3.ZERO:
+			has_objectives = true
+			break
+	if not has_objectives:
+		return
+
+	var fronts: Array = NSGA2.non_dominated_sort(objective_scores)
+	if fronts.is_empty():
+		return
+
+	# Update pareto_front for metrics reporting
+	pareto_front = NSGA2.get_pareto_front(objective_scores)
+
+	# Compute crowding distances per front
+	var crowding_map: Dictionary = {}
+	for front in fronts:
+		var distances: PackedFloat32Array = NSGA2.crowding_distance(front, objective_scores)
+		for i in front.size():
+			crowding_map[front[i]] = distances[i]
+
+	# Build flat rank lookup
+	var rank_map: PackedInt32Array = NSGA2.build_rank_map(fronts, population.size())
+	var num_fronts := float(fronts.size())
+
+	# Normalization scale: use max raw scalar across population
+	var max_scalar: float = 1.0
+	for obj in objective_scores:
+		max_scalar = maxf(max_scalar, obj.x + obj.y + obj.z)
+
+	# Assign MO fitness to each genome:
+	#   mo_fitness = raw_scalar + rank_bonus + crowd_bonus
+	# rank_bonus: exponential decay per front (rank 0 → +max_scalar, rank 1 → +max_scalar/2, ...)
+	# crowd_bonus: up to 10% of max_scalar for diversity preservation within a front
+	for i in population.size():
+		var rank: int = rank_map[i] if i < rank_map.size() else int(num_fronts)
+		var raw: float = objective_scores[i].x + objective_scores[i].y + objective_scores[i].z
+		var rank_bonus: float = max_scalar * pow(0.5, rank)
+		var cd: float = crowding_map.get(i, 0.0)
+		var crowd_bonus: float = (max_scalar * 0.1) if cd == INF else minf(cd / max(max_scalar, 1.0), 0.1) * max_scalar
+		var mo_fitness: float = raw + rank_bonus + crowd_bonus
+		population[i].fitness = mo_fitness
+		fitness_scores[i] = mo_fitness
+
+
 func evolve() -> void:
 	## Run one generation of NEAT evolution:
-	## 1. Speciate
-	## 2. Evaluate fitness sharing
-	## 3. Track stagnation, cull stagnant species
-	## 4. Allocate offspring per species
-	## 5. Reproduce (crossover + mutation)
-	## 6. Adjust compatibility threshold
+	## 1. (MO-NEAT) Convert objectives to scalar fitness if set
+	## 2. Speciate
+	## 3. Evaluate fitness sharing
+	## 4. Track stagnation, cull stagnant species
+	## 5. Allocate offspring per species
+	## 6. Reproduce (crossover + mutation)
+	## 7. Adjust compatibility threshold
+	_apply_mo_fitness()
 	save_backup()
 
 	# 1. Speciate
@@ -209,10 +285,11 @@ func evolve() -> void:
 	# Reset innovation cache for next generation
 	innovation_tracker.reset_generation_cache()
 
-	# 6. Adjust compatibility threshold
+	# 7. Adjust compatibility threshold
 	NeatSpecies.adjust_compatibility_threshold(species_list, config)
 
 	_reset_scores()
+	_reset_objective_scores()
 
 	generation_complete.emit(generation, best_fitness, avg_fitness, min_fitness)
 
