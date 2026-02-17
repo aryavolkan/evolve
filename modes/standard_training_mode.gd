@@ -441,6 +441,10 @@ func _process_parallel_training(delta: float) -> void:
 				ctx._write_metrics_for_wandb()
 				return
 
+			# Guard: early stop may have fired inside generation_complete signal handler
+			if ctx.training_ui.training_complete:
+				return
+
 			ctx.generate_all_seed_events()
 			_start_next_batch()
 		else:
@@ -555,3 +559,4 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
 		print("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
 		ctx._show_training_complete("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
 		ctx._write_metrics_for_wandb()
+		return
