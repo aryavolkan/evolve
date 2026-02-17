@@ -1,6 +1,4 @@
 extends RefCounted
-class_name TuiBridge
-
 ## TUI Bridge — writes arena states for the external terminal UI every 0.5s,
 ## and polls for commands written back by the TUI every physics tick.
 

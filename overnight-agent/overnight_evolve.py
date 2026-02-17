@@ -114,7 +114,7 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
     cmd = [GODOT_PATH, "--path", PROJECT_PATH]
 
     if not visible:
-        cmd.extend(["--headless", "--rendering-driver", "dummy"])
+        cmd.append("--headless")
 
     cmd.extend(["--", "--auto-train"])
 
