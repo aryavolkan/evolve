@@ -264,7 +264,6 @@ impl RustNeuralNetwork {
     /// Apply Gaussian mutations to weights.
     /// mutation_rate: probability of mutating each weight
     /// mutation_strength: standard deviation of mutation noise
-    #[func]
     /// Batch forward pass for multiple agents sharing the same network weights.
     /// Useful for parallel evaluation during evolution where all agents use the same genome.
     /// inputs_array: Array of PackedFloat32Array (one per agent)
