@@ -112,7 +112,12 @@ fn test_known_values() {
     let h0 = 0.5_f32.tanh();
     let h1 = (-0.3_f32).tanh();
     let expected = (h0 + h1).tanh();
-    assert!((out[0] - expected).abs() < 1e-6, "Expected {}, got {}", expected, out[0]);
+    assert!(
+        (out[0] - expected).abs() < 1e-6,
+        "Expected {}, got {}",
+        expected,
+        out[0]
+    );
 }
 
 #[test]
