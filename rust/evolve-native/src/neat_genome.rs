@@ -11,25 +11,25 @@ pub struct RustNeatGenome {
     base: Base<RefCounted>,
 }
 
-/// Connection gene representation
+/// Connection gene representation (innovation tracked as HashMap key; only weight needed here)
 #[derive(Clone, Copy, Debug)]
 struct ConnectionGene {
-    from: i32,
-    to: i32,
     weight: f32,
-    enabled: bool,
-    innovation: i32,
 }
 
-/// Node gene representation
+/// Node gene representation (reserved for future structural mutations)
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct NodeGene {
     id: i32,
     node_type: i32, // 0=input, 1=hidden, 2=output
 }
 
+#[allow(dead_code)]
 const NODE_INPUT: i32 = 0;
+#[allow(dead_code)]
 const NODE_HIDDEN: i32 = 1;
+#[allow(dead_code)]
 const NODE_OUTPUT: i32 = 2;
 
 /// Free function for internal use (e.g. from neat_species.rs).
@@ -54,11 +54,7 @@ pub fn neat_distance(genome_a: VarDictionary, genome_b: VarDictionary, config: V
         let conn: VarDictionary = conns_a.at(i).to();
         let innovation: i32 = conn.get_or_nil("innovation").to();
         let gene = ConnectionGene {
-            from: conn.get_or_nil("from").to(),
-            to: conn.get_or_nil("to").to(),
             weight: conn.get_or_nil("weight").to(),
-            enabled: conn.get_or_nil("enabled").to(),
-            innovation,
         };
         innov_a.insert(innovation, gene);
         max_innov_a = max_innov_a.max(innovation);
@@ -68,11 +64,7 @@ pub fn neat_distance(genome_a: VarDictionary, genome_b: VarDictionary, config: V
         let conn: VarDictionary = conns_b.at(i).to();
         let innovation: i32 = conn.get_or_nil("innovation").to();
         let gene = ConnectionGene {
-            from: conn.get_or_nil("from").to(),
-            to: conn.get_or_nil("to").to(),
             weight: conn.get_or_nil("weight").to(),
-            enabled: conn.get_or_nil("enabled").to(),
-            innovation,
         };
         innov_b.insert(innovation, gene);
         max_innov_b = max_innov_b.max(innovation);

@@ -17,7 +17,6 @@ struct Species {
     id: i32,
     representative: usize,       // Index into population
     members: Vec<usize>,         // Indices into population
-    fitness_sum: f32,
     best_fitness: f32,
     stagnant_generations: i32,
 }
@@ -63,7 +62,6 @@ impl RustNeatSpecies {
                 id,
                 representative: repr_genome_idx as usize,
                 members: Vec::new(),
-                fitness_sum: 0.0,
                 best_fitness: 0.0,
                 stagnant_generations: species_dict.get_or_nil("stagnant_generations").to(),
             });
@@ -105,7 +103,6 @@ impl RustNeatSpecies {
                     id: new_id,
                     representative: genome_idx,
                     members: vec![genome_idx],
-                    fitness_sum: 0.0,
                     best_fitness: 0.0,
                     stagnant_generations: 0,
                 });
