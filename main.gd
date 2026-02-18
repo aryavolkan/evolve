@@ -8,10 +8,16 @@ extends Node2D
 var floating_text_scene: PackedScene = preload("res://floating_text.tscn")
 var spawned_obstacle_positions: Array = []
 
+# Preload subsystem manager scripts explicitly so class names resolve in headless mode
+# (class_name alone is unreliable in headless mode without a warm script cache)
+const _GameStateManagerScript = preload("res://game_state_manager.gd")
+const _DifficultyScalerScript = preload("res://difficulty_scaler.gd")
+const _InputCoordinatorScript = preload("res://input_coordinator.gd")
+
 # Subsystem managers
-var game_state: GameStateManager
-var difficulty: DifficultyScaler
-var input_coord: InputCoordinator
+var game_state
+var difficulty
+var input_coord
 var spawn_mgr: RefCounted  ## SpawnManager
 var score_mgr: RefCounted  ## ScoreManager
 var powerup_mgr: RefCounted  ## PowerupManager
@@ -173,7 +179,7 @@ func clear_sandbox_overrides() -> void:
 func _apply_sandbox_starting_state() -> void:
 	if not sandbox_overrides_active:
 		return
-	score = sandbox_starting_difficulty * DifficultyScaler.DIFFICULTY_SCALE_SCORE
+	score = sandbox_starting_difficulty * _DifficultyScalerScript.DIFFICULTY_SCALE_SCORE
 	next_spawn_score = score + get_scaled_spawn_interval()
 	next_powerup_score = score + _get_powerup_interval(80.0)
 
@@ -204,8 +210,8 @@ func _ready() -> void:
 	get_tree().paused = false
 
 	# Initialize core managers
-	game_state = GameStateManager.new()
-	difficulty = DifficultyScaler.new()
+	game_state = _GameStateManagerScript.new()
+	difficulty = _DifficultyScalerScript.new()
 
 	# Initialize extracted managers
 	score_mgr = load("res://score_manager.gd").new()
@@ -243,7 +249,7 @@ func _ready() -> void:
 	ui_mgr.setup_ui_screens()
 
 	# Input coordinator (for interactive modes)
-	input_coord = InputCoordinator.new()
+	input_coord = _InputCoordinatorScript.new()
 	input_coord.setup(self)
 
 	# Check for command-line flags
@@ -330,7 +336,7 @@ func _show_game_over_stats() -> void:
 	elif training_manager and training_manager.get_mode() == training_manager.Mode.ARCHIVE_PLAYBACK:
 		mode_str = "archive"
 
-	var stats := game_state.get_stats()
+	var stats: Dictionary = game_state.get_stats()
 	stats["is_high_score"] = score_mgr.is_high_score(int(score))
 	stats["mode"] = mode_str
 	game_over_screen.show_stats(stats)
@@ -622,7 +628,7 @@ func spawn_powerup_at(pos: Vector2, powerup_type: int) -> void:
 	spawn_mgr.spawn_powerup_at(pos, powerup_type, MAX_POWERUPS, powerup_mgr.handle_powerup_collected)
 
 func spawn_initial_enemies() -> void:
-	spawn_mgr.spawn_initial_enemies(training_mode, DifficultyScaler.BASE_ENEMY_SPEED, enemy_ai_network)
+	spawn_mgr.spawn_initial_enemies(training_mode, _DifficultyScalerScript.BASE_ENEMY_SPEED, enemy_ai_network)
 
 func count_local_powerups() -> int:
 	return spawn_mgr.count_local_powerups()
@@ -695,7 +701,7 @@ func _on_player_hit() -> void:
 			game_over_label.visible = true
 	else:
 		var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
-		player.respawn(arena_center, GameStateManager.RESPAWN_INVINCIBILITY)
+		player.respawn(arena_center, _GameStateManagerScript.RESPAWN_INVINCIBILITY)
 
 func submit_high_score(player_name: String) -> void:
 	score_mgr.submit_high_score(player_name, int(score))
