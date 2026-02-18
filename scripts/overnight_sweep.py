@@ -186,6 +186,10 @@ def train():
     define_step_metric()
     config = dict(wandb.config)
 
+    # Ensure required fields always present regardless of sweep config
+    config.setdefault("time_scale", 16)
+    config.setdefault("parallel_count", 5)
+
     print(f"\n{'=' * 60}")
     print(f"Starting sweep run: {run.name} (worker: {_worker.worker_id if _worker else '?'})")
     print(f"Config: pop={config.get('population_size')}, neat={config.get('use_neat', False)}, "
