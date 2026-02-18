@@ -668,7 +668,7 @@ func _on_shot_fired(direction: Vector2) -> void:
 		if dot > 0.7 and dist < 800:
 			var bonus = score_mgr.SHOOT_TOWARD_ENEMY_BONUS
 			score += bonus
-			score_from_kills += bonus
+			# Note: aim bonus is NOT a kill — do not add to score_from_kills
 			return
 
 func get_local_enemies() -> Array:

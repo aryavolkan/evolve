@@ -17,10 +17,8 @@ import sys
 
 # Import shared utilities
 sys.path.insert(0, os.path.expanduser("~/shared-evolve-utils"))
-from godot_wandb import godot_user_dir, read_metrics, poll_metrics  # noqa: E402
-
 import wandb  # noqa: E402
-
+from godot_wandb import godot_user_dir, poll_metrics, read_metrics  # noqa: E402
 
 EVOLVE_LOG_KEYS = [
     "generation", "best_fitness", "avg_fitness", "min_fitness",
