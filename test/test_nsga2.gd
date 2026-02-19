@@ -1,7 +1,7 @@
 extends "res://test/test_base.gd"
 ## Tests for NSGA-II multi-objective selection algorithm.
 
-var NSGA2Script = preload("res://ai/nsga2.gd")
+var NSGA2Script = preload("res://evolve-core/genetic/nsga2.gd")
 
 
 func _run_tests() -> void:

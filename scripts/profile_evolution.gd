@@ -16,20 +16,20 @@ func _init() -> void:
 	
 	# Test NEAT Evolution
 	print("\n[NEAT Evolution Profiling]")
-	var neat_config = preload("res://ai/neat_config.gd").new()
+	var neat_config = preload("res://evolve-core/ai/neat/neat_config.gd").new()
 	neat_config.population_size = 100
 	neat_config.input_count = 86
 	neat_config.output_count = 6
 	# neat_config doesn't have hidden_size, it uses hidden nodes dynamically
 	neat_config.use_bias = true
 	
-	var neat_evo = preload("res://ai/neat_evolution.gd").new(neat_config)
+	var neat_evo = preload("res://evolve-core/ai/neat/neat_evolution.gd").new(neat_config)
 	
 	# Profile speciation
 	var speciation_start = Time.get_ticks_usec()
 	for i in 5:
 		neat_evo._apply_mo_fitness()
-		var spec_result = preload("res://ai/neat_species.gd").speciate(
+		var spec_result = preload("res://evolve-core/ai/neat/neat_species.gd").speciate(
 			neat_evo.population, 
 			neat_evo.species_list, 
 			neat_config, 
@@ -47,7 +47,7 @@ func _init() -> void:
 	# GDScript version
 	var nsga2_gd_start = Time.get_ticks_usec()
 	for i in 10:
-		var fronts = preload("res://ai/nsga2.gd").non_dominated_sort(objectives)
+		var fronts = preload("res://evolve-core/genetic/nsga2.gd").non_dominated_sort(objectives)
 	var nsga2_gd_time = (Time.get_ticks_usec() - nsga2_gd_start) / 1000000.0
 	print("NSGA2 GDScript (10 iterations): %.3fs" % nsga2_gd_time)
 	
@@ -92,8 +92,8 @@ func _init() -> void:
 	
 	# Profile genome operations
 	print("\n[NEAT Genome Operations Profiling]")
-	var genome_a = preload("res://ai/neat_genome.gd").create(neat_config, neat_evo.innovation_tracker)
-	var genome_b = preload("res://ai/neat_genome.gd").create(neat_config, neat_evo.innovation_tracker)
+	var genome_a = preload("res://evolve-core/ai/neat/neat_genome.gd").create(neat_config, neat_evo.innovation_tracker)
+	var genome_b = preload("res://evolve-core/ai/neat/neat_genome.gd").create(neat_config, neat_evo.innovation_tracker)
 	genome_a.create_basic()
 	genome_b.create_basic()
 	
@@ -108,7 +108,7 @@ func _init() -> void:
 	# Crossover
 	var crossover_start = Time.get_ticks_usec()
 	for i in 1000:
-		var child = preload("res://ai/neat_genome.gd").crossover(genome_a, genome_b)
+		var child = preload("res://evolve-core/ai/neat/neat_genome.gd").crossover(genome_a, genome_b)
 	var crossover_time = (Time.get_ticks_usec() - crossover_start) / 1000000.0
 	print("NEAT crossover (1k operations): %.3fs" % crossover_time)
 	

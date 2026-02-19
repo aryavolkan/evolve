@@ -2,7 +2,7 @@ extends "res://test/test_base.gd"
 
 ## Tests for NeatConfig: hyperparameter storage and duplication.
 
-const NeatConfigClass = preload("res://ai/neat_config.gd")
+const NeatConfigClass = preload("res://evolve-core/ai/neat/neat_config.gd")
 
 
 func _run_tests() -> void:

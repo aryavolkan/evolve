@@ -6,7 +6,7 @@ extends "res://ai/evolution_base.gd"
 
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 const NNFactory = preload("res://ai/neural_network_factory.gd")
-const NSGA2 = preload("res://ai/nsga2.gd")
+const NSGA2 = preload("res://evolve-core/genetic/nsga2.gd")
 
 # Rust accelerated genetic operations (when available)
 var _rust_genetic_ops = null

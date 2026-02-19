@@ -2,7 +2,7 @@ extends "res://test/test_base.gd"
 ## Integration tests for NSGA-II multi-objective evolution.
 
 const Evolution = preload("res://ai/evolution.gd")
-const NSGA2 = preload("res://ai/nsga2.gd")
+const NSGA2 = preload("res://evolve-core/genetic/nsga2.gd")
 
 
 func _run_tests() -> void:

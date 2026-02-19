@@ -225,8 +225,8 @@ var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 var AISensorScript = preload("res://ai/sensor.gd")
 var AIControllerScript = preload("res://ai/ai_controller.gd")
 var EvolutionScript = preload("res://ai/evolution.gd")
-var NeatEvolutionScript = preload("res://ai/neat_evolution.gd")
-var NeatNetworkScript = preload("res://ai/neat_network.gd")
+var NeatEvolutionScript = preload("res://evolve-core/ai/neat/neat_evolution.gd")
+var NeatNetworkScript = preload("res://evolve-core/ai/neat/neat_network.gd")
 var MainScenePacked = preload("res://main.tscn")
 
 

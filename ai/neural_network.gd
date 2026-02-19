@@ -333,8 +333,8 @@ static func _load_from_json(json_text: String):
 
 	# Build a NeatNetwork directly from the serialized data without needing
 	# NeatConfig/NeatInnovation (which are only needed for evolution, not playback).
-	var NeatNetworkScript = load("res://ai/neat_network.gd")
-	var NeatGenomeScript = load("res://ai/neat_genome.gd")
+	var NeatNetworkScript = load("res://evolve-core/ai/neat/neat_network.gd")
+	var NeatGenomeScript = load("res://evolve-core/ai/neat/neat_genome.gd")
 
 	# Reconstruct a minimal genome for network building
 	var genome = NeatGenomeScript.new()

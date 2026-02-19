@@ -7,13 +7,13 @@ func _init() -> void:
 	print("=== NEAT Rust Optimization Benchmark ===\n")
 	
 	# Setup
-	var config = preload("res://ai/neat_config.gd").new()
+	var config = preload("res://evolve-core/ai/neat/neat_config.gd").new()
 	config.population_size = 100
 	config.input_count = 86
 	config.output_count = 6
 	config.use_bias = true
 	
-	var evolution = preload("res://ai/neat_evolution.gd").new(config)
+	var evolution = preload("res://evolve-core/ai/neat/neat_evolution.gd").new(config)
 	
 	# Create test population
 	print("Creating test population...")
@@ -36,14 +36,14 @@ func _init() -> void:
 	# GDScript version
 	var gd_start = Time.get_ticks_usec()
 	for i in iterations:
-		var result = preload("res://ai/neat_species.gd").speciate(
+		var result = preload("res://evolve-core/ai/neat/neat_species.gd").speciate(
 			population, species_list, config, 1000
 		)
 	var gd_time = (Time.get_ticks_usec() - gd_start) / 1000000.0
 	print("GDScript: %.3fs for %d iterations (%.3fs per iteration)" % [gd_time, iterations, gd_time / iterations])
 	
 	# Rust version (if available)
-	var integration = preload("res://ai/neat_evolution_rust_integration.gd")
+	var integration = preload("res://evolve-core/ai/neat/neat_evolution_rust_integration.gd")
 	integration._check_rust_available()
 	
 	if integration._rust_species:
@@ -99,7 +99,7 @@ func _init() -> void:
 		# GDScript
 		var gd_cross_start = Time.get_ticks_usec()
 		for i in iterations:
-			var child = preload("res://ai/neat_genome.gd").crossover(parent_a, parent_b)
+			var child = preload("res://evolve-core/ai/neat/neat_genome.gd").crossover(parent_a, parent_b)
 		var gd_cross_time = (Time.get_ticks_usec() - gd_cross_start) / 1000000.0
 		print("GDScript: %.3fs for %d crossovers" % [gd_cross_time, iterations])
 		
