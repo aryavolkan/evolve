@@ -30,7 +30,7 @@ DEFAULT_CONFIG = {
 }
 
 # Paths
-GODOT_PATH = "/Applications/Godot.app/Contents/MacOS/Godot"
+GODOT_PATH = "/opt/homebrew/bin/godot"
 PROJECT_PATH = os.path.expanduser("~/Projects/evolve")
 GODOT_USER_DIR = os.path.expanduser("~/Library/Application Support/Godot/app_userdata/evolve")
 METRICS_PATH = os.path.join(GODOT_USER_DIR, "metrics.json")
