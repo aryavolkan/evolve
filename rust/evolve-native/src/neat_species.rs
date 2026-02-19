@@ -15,8 +15,8 @@ pub struct RustNeatSpecies {
 /// Species data structure
 struct Species {
     id: i32,
-    representative: usize,       // Index into population
-    members: Vec<usize>,         // Indices into population
+    representative: usize, // Index into population
+    members: Vec<usize>,   // Indices into population
     best_fitness: f32,
     stagnant_generations: i32,
 }

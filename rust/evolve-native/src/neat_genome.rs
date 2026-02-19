@@ -94,7 +94,11 @@ pub fn neat_distance(genome_a: VarDictionary, genome_b: VarDictionary, config: V
         }
     }
 
-    let weight_avg = if matching > 0 { weight_diff / matching as f32 } else { 0.0 };
+    let weight_avg = if matching > 0 {
+        weight_diff / matching as f32
+    } else {
+        0.0
+    };
     let n = conns_a.len().max(conns_b.len()).max(1) as f32;
     let normalize = n > 20.0;
 
@@ -145,7 +149,11 @@ impl RustNeatGenome {
             let innovation: i32 = conn_fit.get_or_nil("innovation").to();
 
             let child_conn = if let Some(conn_less) = innov_less.get(&innovation) {
-                if rng.gen_bool(0.5) { conn_fit.clone() } else { conn_less.clone() }
+                if rng.gen_bool(0.5) {
+                    conn_fit.clone()
+                } else {
+                    conn_less.clone()
+                }
             } else {
                 conn_fit.clone()
             };
