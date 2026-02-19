@@ -21,7 +21,6 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-EvolvePhysicsRegistrar="*res://autoloads/register_physics.gd"
 
 [debug]
 
