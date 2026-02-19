@@ -34,7 +34,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Rust GDExtension
+      - name: Checkout evolve-physics dependency
+        uses: actions/checkout@v4
+        with:
+          repository: aryavolkan/evolve-physics
+          path: _evolve-physics
+
+      - name: Build evolve-physics GDExtension
+        run: cargo build --release
+        working-directory: _evolve-physics
+
+      - name: Symlink evolve-physics to expected path
+        run: |
+          PROJECTS_DIR="$(dirname "$(dirname "$GITHUB_WORKSPACE")")/Projects"
+          mkdir -p "$PROJECTS_DIR"
+          ln -sfn "$GITHUB_WORKSPACE/_evolve-physics" "$PROJECTS_DIR/evolve-physics"
+
+      - name: Build Rust GDExtension (evolve-native)
         run: cargo build --release
         working-directory: rust/evolve-native
 
