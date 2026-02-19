@@ -76,13 +76,20 @@ static func generate(seed_value: int, p_curriculum_config: Dictionary = {}, sand
 	while spawn_time < 120.0:
 		spawn_time += current_spawn_interval
 		current_spawn_interval = maxf(current_spawn_interval * SPAWN_DECAY, min_spawn_interval)
-		var edge = gen_rng.randi() % 4
-		var pos: Vector2
-		match edge:
-			0: pos = Vector2(gen_rng.randf_range(padding, scaled_width - padding), padding)
-			1: pos = Vector2(gen_rng.randf_range(padding, scaled_width - padding), scaled_height - padding)
-			2: pos = Vector2(padding, gen_rng.randf_range(padding, scaled_height - padding))
-			3: pos = Vector2(scaled_width - padding, gen_rng.randf_range(padding, scaled_height - padding))
+
+		# Spawn enemies around the player (center), not just from edges.
+		# Distance shrinks over time so pressure ramps up.
+		var max_spawn_dist: float = minf(scaled_width * 0.45, 1600.0)
+		var min_spawn_dist: float = 250.0 * arena_scale  # Don't spawn on top of player
+		var time_factor: float = clampf(spawn_time / 60.0, 0.0, 1.0)
+		# Enemies spawn closer as time progresses
+		var spawn_dist: float = lerpf(max_spawn_dist, min_spawn_dist * 2.0, time_factor)
+		var angle: float = gen_rng.randf() * TAU
+		var dist: float = gen_rng.randf_range(min_spawn_dist, spawn_dist)
+		var pos: Vector2 = arena_center + Vector2(cos(angle), sin(angle)) * dist
+		pos.x = clampf(pos.x, padding, scaled_width - padding)
+		pos.y = clampf(pos.y, padding, scaled_height - padding)
+
 		var enemy_type: int = allowed_enemy_types[gen_rng.randi() % allowed_enemy_types.size()]
 		enemy_spawns.append({"time": spawn_time, "pos": pos, "type": enemy_type})
 

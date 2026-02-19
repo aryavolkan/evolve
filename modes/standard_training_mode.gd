@@ -245,6 +245,8 @@ func _create_eval_instance(individual_index: int) -> Dictionary:
 	var scene_player: CharacterBody2D = scene.get_node("Player")
 	scene_player.enable_ai_control(true)
 	scene_player.set_training_mode(true)
+	# Training uses 1 life — die on first hit for meaningful selection pressure
+	scene.game_state.lives = 1
 	
 	# Update milestone rewards based on all-time best fitness
 	if scene_player.has_method("update_fitness_milestone"):
@@ -299,6 +301,8 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
 	var scene_player: CharacterBody2D = scene.get_node("Player")
 	scene_player.enable_ai_control(true)
 	scene_player.set_training_mode(true)
+	# Training uses 1 life — die on first hit for meaningful selection pressure
+	scene.game_state.lives = 1
 	
 	# Update milestone rewards based on all-time best fitness
 	if scene_player.has_method("update_fitness_milestone"):
