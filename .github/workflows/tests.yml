@@ -14,12 +14,12 @@ jobs:
       - name: Python lint (ruff)
         run: |
           pip3 install --quiet --break-system-packages ruff
-          ruff check scripts/ overnight-agent/*.py || true
+          ./scripts/lint_python.sh
 
       - name: GDScript lint (gdlint)
         run: |
           pip3 install --quiet --break-system-packages gdtoolkit
-          gdlint *.gd ai/*.gd managers/*.gd modes/*.gd ui/*.gd || true
+          ./scripts/lint_gdscript.sh
 
       - name: Rust format check
         run: cargo fmt --check
@@ -36,10 +36,7 @@ jobs:
 
       - name: Build evolve-physics and symlink to expected path
         run: |
-          # Build the local evolve-physics copy (self-hosted runner has it on disk)
           cargo build --release --manifest-path "$HOME/Projects/evolve-physics/Cargo.toml"
-          # The gdextension uses res://../../Projects/evolve-physics which resolves to:
-          # GITHUB_WORKSPACE/../../Projects/evolve-physics
           PROJECTS_DIR="$(dirname "$(dirname "$GITHUB_WORKSPACE")")/Projects"
           mkdir -p "$PROJECTS_DIR"
           ln -sfn "$HOME/Projects/evolve-physics" "$PROJECTS_DIR/evolve-physics"
@@ -55,7 +52,7 @@ jobs:
         run: /opt/homebrew/bin/godot --headless --path . -s test/test_runner.gd
 
       - name: Run integration scenarios
-        run: /opt/homebrew/bin/godot --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all || true
+        run: /opt/homebrew/bin/godot --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all
 
       - name: Run training smoke test
-        run: /opt/homebrew/bin/godot --headless --path . -s test/integration/training_smoke_test.gd || true
+        run: /opt/homebrew/bin/godot --headless --path . -s test/integration/training_smoke_test.gd
