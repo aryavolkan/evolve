@@ -685,7 +685,9 @@ func _on_player_hit() -> void:
 	spawn_floating_text("-1 LIFE", Color(1, 0.2, 0.2, 1), player.position + Vector2(0, -30))
 
 	if game_over:
-		get_tree().paused = true
+		# Don't pause tree in training mode — it freezes all parallel evals
+		if not training_mode:
+			get_tree().paused = true
 		if score_mgr.is_high_score(int(score)):
 			entering_name = true
 			game_over_label.text = "NEW HIGH SCORE!\nScore: %d" % int(score)
