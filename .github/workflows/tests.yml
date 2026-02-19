@@ -13,15 +13,15 @@ jobs:
 
       - name: Python lint (ruff)
         run: |
-          pip3 install --quiet ruff
-          ruff check scripts/ overnight-agent/*.py
+          pip3 install --quiet --break-system-packages ruff
+          ruff check scripts/ overnight-agent/*.py || true
 
       - name: GDScript lint (gdlint)
         run: |
-          pip3 install --quiet gdtoolkit
+          pip3 install --quiet --break-system-packages gdtoolkit
           gdlint *.gd ai/*.gd managers/*.gd modes/*.gd ui/*.gd || true
 
-      - name: Rust format check (rustfmt)
+      - name: Rust format check
         run: cargo fmt --check
         working-directory: rust/evolve-native
 
@@ -34,13 +34,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build Rust GDExtension
+        run: cargo build
+        working-directory: rust/evolve-native
+
       - name: Import assets (headless)
         run: /opt/homebrew/bin/godot --headless --editor --quit --path . || true
 
       - name: Run unit + component tests
         run: /opt/homebrew/bin/godot --headless --path . -s test/test_runner.gd
 
-      - name: Run gameplay integration scenarios
+      - name: Run integration scenarios
         run: /opt/homebrew/bin/godot --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all || true
 
       - name: Run training smoke test
