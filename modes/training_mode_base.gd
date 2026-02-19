@@ -7,7 +7,7 @@ class_name TrainingModeBase
 
 ## Score awarded per second of survival. survival_score = survival_time * SURVIVAL_UNIT_SCORE
 ## Independent of kill/powerup scores.
-const SURVIVAL_UNIT_SCORE: float = 1.0
+const SURVIVAL_UNIT_SCORE: float = 1000.0
 
 var ctx  # training_manager reference
 
