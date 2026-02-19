@@ -78,11 +78,9 @@ static func generate(seed_value: int, p_curriculum_config: Dictionary = {}, sand
 		current_spawn_interval = maxf(current_spawn_interval * SPAWN_DECAY, min_spawn_interval)
 
 		# Spawn enemies around the player (center), not just from edges.
-		# Cap max distance so enemies arrive within ~4s regardless of arena size.
-		# Enemy speed ~150px/s → 600px max ensures arrival in ~4s.
-		# Distance shrinks as time progresses for escalating pressure.
-		var max_spawn_dist: float = minf(scaled_width * 0.45, 600.0)
-		var min_spawn_dist: float = minf(200.0 * arena_scale, 200.0)  # Don't spawn on top of player
+		# Cap max distance so enemies arrive quickly regardless of arena size.
+		var max_spawn_dist: float = minf(scaled_width * 0.3, 600.0)
+		var min_spawn_dist: float = 150.0  # Don't spawn on top of player
 		var time_factor: float = clampf(spawn_time / 60.0, 0.0, 1.0)
 		# Enemies spawn closer as time progresses
 		var spawn_dist: float = lerpf(max_spawn_dist, min_spawn_dist * 2.0, time_factor)

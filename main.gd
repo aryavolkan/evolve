@@ -582,7 +582,18 @@ func _process_enemy_spawning() -> void:
 	if use_preset_events:
 		while preset_enemy_spawns.size() > 0 and preset_enemy_spawns[0].time <= survival_time:
 			var spawn_data = preset_enemy_spawns.pop_front()
-			spawn_enemy_at(spawn_data.pos, spawn_data.type)
+			if training_mode:
+				# Spawn relative to player, not at absolute position.
+				# Use the pre-generated offset from arena center, apply around player.
+				var arena_center = Vector2(effective_arena_width / 2, effective_arena_height / 2)
+				var offset = spawn_data.pos - arena_center
+				var spawn_pos = player.global_position + offset
+				# Clamp within arena bounds
+				spawn_pos.x = clampf(spawn_pos.x, 60.0, effective_arena_width - 60.0)
+				spawn_pos.y = clampf(spawn_pos.y, 60.0, effective_arena_height - 60.0)
+				spawn_enemy_at(spawn_pos, spawn_data.type)
+			else:
+				spawn_enemy_at(spawn_data.pos, spawn_data.type)
 	elif score >= next_spawn_score and screen_clear_cooldown <= 0:
 		spawn_enemy()
 		var spawn_interval = get_scaled_spawn_interval()
