@@ -158,6 +158,13 @@ func set_training_mode(enabled: bool, p_curriculum_config: Dictionary = {}) -> v
 	if spawn_mgr:
 		spawn_mgr.effective_arena_width = effective_arena_width
 		spawn_mgr.effective_arena_height = effective_arena_height
+	# In training mode without an explicit starting_difficulty, default to 0.8 so
+	# enemies start at ~390px/s (> player 300px/s) and provide real selection pressure.
+	# Without this, gen-1 agents survive the full 60s timeout since enemies (150px/s)
+	# can never catch the player (300px/s), making fitness signal pure noise.
+	if enabled and not curriculum_config.has("starting_difficulty"):
+		sandbox_starting_difficulty = 0.8
+		_apply_sandbox_starting_state()
 
 func apply_sandbox_overrides(config: Dictionary) -> void:
 	sandbox_spawn_rate_multiplier = clampf(config.get("spawn_rate_multiplier", 1.0), 0.25, 3.0)

@@ -4,7 +4,7 @@ class_name DifficultyScaler
 ## Computes difficulty-dependent values: enemy speed, spawn intervals, etc.
 
 const BASE_ENEMY_SPEED: float = 150.0
-const MAX_ENEMY_SPEED: float = 300.0
+const MAX_ENEMY_SPEED: float = 450.0  # Must exceed player speed (300) so enemies can threaten at high difficulty
 const BASE_SPAWN_INTERVAL: float = 50.0
 const MIN_SPAWN_INTERVAL: float = 20.0
 const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxed
