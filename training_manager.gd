@@ -7,6 +7,7 @@ signal stats_updated(stats: Dictionary)
 
 enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION, SANDBOX, COMPARISON, RTNEAT, TEAMS }
 
+
 var current_mode: Mode = Mode.HUMAN
 var _active_mode: TrainingModeBase = null
 

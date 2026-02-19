@@ -403,7 +403,7 @@ func _process_parallel_training(delta: float) -> void:
 			var fitness: float = eval.scene.score
 			var kill_score: float = eval.scene.score_from_kills
 			var powerup_score: float = eval.scene.score_from_powerups
-			var survival_score: float = eval.scene.score - kill_score - powerup_score
+			var survival_score: float = eval.scene.survival_time * SURVIVAL_UNIT_SCORE
 			ctx.stats_tracker.record_eval_result(eval.index, fitness, kill_score, powerup_score, survival_score)
 
 			if ctx.use_map_elites:
