@@ -19,6 +19,10 @@ run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
+[autoload]
+
+EvolvePhysicsRegistrar="*res://autoloads/register_physics.gd"
+
 [debug]
 
 settings/stdout/verbose_stdout=true
@@ -53,6 +57,7 @@ shoot_right={
 
 [physics]
 
+2d/physics_engine="EvolvePhysics"
 common/physics_ticks_per_second=120
 common/max_physics_steps_per_frame=16
 
