@@ -7,51 +7,51 @@ metric:
 parameters:
   # Fixed based on top runs
   use_neat:
-	value: true
+	value: true # NEAT dominated the top runs; NSGA2 path lagged
   use_nsga2:
-	value: false
+	value: false # Forced off when NEAT is on; top runs all NEAT
   curriculum_enabled:
-	value: true
+	value: true # Curriculum consistently improved late-gen fitness
   time_scale:
-	value: 16
+	value: 16 # Best throughput/score tradeoff in overnight runs
   max_generations:
-	value: 50
+	value: 50 # Matches record run budget (Gen 46 peak)
   parallel_count:
-	value: 10
+	value: 10 # Stable saturation for current worker hardware
   evals_per_individual:
-	value: 2
+	value: 2 # Reduced noise without doubling runtime too much
 
   # Optimized ranges from top 3 runs
   population_size:
-	values: [100, 120, 150]
-  
+	values: [100, 120, 150] # Top runs clustered 100–150; best known 120 (consider narrowing to 120/150 if compute tight)
+
   hidden_size:
-	values: [80, 88, 96]
-  
+	values: [80, 88, 96] # 80 is best-known; 88/96 were close enough to keep
+
   elite_count:
-	values: [15, 18, 20]
-  
+	values: [15, 18, 20] # Best-known 20; keep 15/18 to test if less elitism helps diversity
+
   mutation_rate:
 	distribution: uniform
-	min: 0.24
-	max: 0.34
-  
+	min: 0.24 # Winners centered ~0.27; consider narrowing to ~0.24–0.30 if stable
+	max: 0.34 # Upper bound keeps occasional higher-rate successes
+
   mutation_strength:
 	distribution: uniform
-	min: 0.08
-	max: 0.12
-  
+	min: 0.08 # Record run used ~0.11; lower bound keeps mild perturbations
+	max: 0.12 # Tight around the top cluster (could narrow to 0.09–0.12)
+
   crossover_rate:
 	distribution: uniform
-	min: 0.68
-	max: 0.78
-  
+	min: 0.68 # Top runs ~0.70; keep slight low tail for exploration
+	max: 0.78 # Upper bound still below 0.8 where performance dipped
+
   # Mixed in top runs - keep exploring
   use_memory:
-	values: [true, false]
-  
+	values: [true, false] # Mixed winners; no clear dominance yet
+
   use_map_elites:
-	values: [true, false]
-  
+	values: [true, false] # Mixed winners; keep both modes in play
+
   map_elites_grid_size:
-	values: [15, 20, 25]
+	values: [15, 20, 25] # 20–25 tended to work best when MAP-Elites helped
