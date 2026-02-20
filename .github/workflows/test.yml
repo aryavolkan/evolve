@@ -9,7 +9,7 @@ on:
 jobs:
   godot-tests:
     name: Godot Tests
-    runs-on: mint-desktop-evolve
+    runs-on: self-hosted
     
     steps:
       - name: Checkout code
