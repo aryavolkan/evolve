@@ -7,7 +7,7 @@ on:
 
 jobs:
   lint:
-    runs-on: [self-hosted, macos, arm64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -30,9 +30,22 @@ jobs:
         working-directory: rust/evolve-native
 
   godot-tests:
-    runs-on: [self-hosted, macos, arm64]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Detect platform and set Godot path
+        id: godot
+        run: |
+          if command -v godot &> /dev/null; then
+            echo "path=$(which godot)" >> $GITHUB_OUTPUT
+          elif [ -f "/opt/homebrew/bin/godot" ]; then
+            echo "path=/opt/homebrew/bin/godot" >> $GITHUB_OUTPUT
+          elif [ -f "$HOME/.local/bin/godot" ]; then
+            echo "path=$HOME/.local/bin/godot" >> $GITHUB_OUTPUT
+          else
+            echo "path=godot" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build evolve-physics and symlink to expected path
         run: |
@@ -46,13 +59,13 @@ jobs:
         working-directory: rust/evolve-native
 
       - name: Import assets (headless)
-        run: /opt/homebrew/bin/godot --headless --editor --quit --path . || true
+        run: ${{ steps.godot.outputs.path }} --headless --editor --quit --path . || true
 
       - name: Run unit + component tests
-        run: /opt/homebrew/bin/godot --headless --path . -s test/test_runner.gd
+        run: ${{ steps.godot.outputs.path }} --headless --path . -s test/test_runner.gd
 
       - name: Run integration scenarios
-        run: /opt/homebrew/bin/godot --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all
+        run: ${{ steps.godot.outputs.path }} --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all
 
       - name: Run training smoke test
-        run: /opt/homebrew/bin/godot --headless --path . -s test/integration/training_smoke_test.gd
+        run: ${{ steps.godot.outputs.path }} --headless --path . -s test/integration/training_smoke_test.gd
