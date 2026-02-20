@@ -1,0 +1,53 @@
+name: Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  godot-tests:
+    name: Godot Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Setup Godot
+        uses: firebelley/godot-setup@v1
+        with:
+          godot-version: 4.2.2
+      
+      - name: Run tests
+        run: godot --headless --script test/test_runner.gd
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-test-results
+          path: test_results.json
+
+  lint-gdscript:
+    name: Lint GDScript
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install linters
+        run: pip install gdlint
+      
+      - name: Run gdlint
+        run: gdlint --recursive .
+        continue-on-error: true

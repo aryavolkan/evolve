@@ -1,0 +1,22 @@
+[gdlint]
+run_on_save = false
+cache_linting = true
+exclude_files = []
+
+[gdlint.rules]
+class_names = true
+constant_names = true
+enum_names = true
+export_func_names = true
+func_names = true
+inline_comment = true
+line_length = 120
+max_line_length = 200
+signal_names = true
+signal_parameters = true
+subclass_names = true
+tool_bar = true
+trailing_comma = true
+type_name = true
+unused_argument = true
+var_names = true
