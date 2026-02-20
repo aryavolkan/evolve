@@ -9,7 +9,7 @@ on:
 jobs:
   godot-tests:
     name: Godot Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     
     steps:
       - name: Checkout code
@@ -32,22 +32,23 @@ jobs:
           name: godot-test-results
           path: test_results.json
 
-  lint-gdscript:
-    name: Lint GDScript
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install linters
-        run: pip install gdlint
-      
-      - name: Run gdlint
-        run: gdlint --recursive .
-        continue-on-error: true
+  # lint-gdscript:
+  #   name: Lint GDScript
+  #   runs-on: [self-hosted, Linux]
+  #   # gdlint not available on self-hosted runner
+  #   
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
+  #     
+  #     - name: Install linters
+  #       run: pip install gdlint
+  #     
+  #     - name: Run gdlint
+  #       run: gdlint --recursive .
+  #       continue-on-error: true
