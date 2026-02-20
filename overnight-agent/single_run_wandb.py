@@ -153,9 +153,14 @@ def monitor_training(wandb_run, process):
                   f"ATB: {metrics.get('all_time_best', 0):8.1f} | "
                   f"Stagnant: {metrics.get('generations_without_improvement', 0)}/{metrics.get('stagnation_limit', 20)}")
 
-        # Check if training is complete
-        if metrics.get("training_complete", False):
-            print("\n✓ Training complete!")
+        # Check if training is complete (either via training_complete flag OR stagnation)
+        stagnation = metrics.get("generations_without_improvement", 0)
+        stagnation_limit = metrics.get("stagnation_limit", 20)
+        is_stagnant = stagnation >= stagnation_limit
+        
+        if metrics.get("training_complete", False) or is_stagnant:
+            reason = "stagnation" if is_stagnant else "training_complete"
+            print(f"\n✓ Training complete! ({reason})")
             # Log final metrics one more time
             wandb_run.log(metrics)
 
