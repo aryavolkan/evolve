@@ -17,10 +17,11 @@ jobs:
     steps:
       - name: Debug info
         run: |
-          echo "GITHUB_TOKEN exists: ${{ secrets.GITHUB_TOKEN != '' }}"
+          echo "Testing..."
+          sleep 10
+          echo "Done sleeping"
           whoami
           pwd
-          ls -la
       
       - name: Checkout code
         uses: actions/checkout@v4
