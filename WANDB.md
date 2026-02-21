@@ -39,14 +39,12 @@ curl -X POST https://mint-desktop.tail1cabdc.ts.net/hooks/wandb \
 
 ## Sweep Runner
 
-Workers use `overnight-agent/overnight_evolve.py`:
+Workers use `scripts/overnight_sweep.py`:
 
 ```bash
 cd ~/projects/evolve
-export GODOT_PATH=/usr/local/bin/godot
-export EVOLVE_PROJECT_PATH=$HOME/projects/evolve
-nohup ~/.venv/wandb-worker/bin/python overnight-agent/overnight_evolve.py \
-  --sweep-id <sweep_id> --count 5 > logs/worker_$(date +%H%M).log 2>&1 &
+source .venv/bin/activate
+python scripts/overnight_sweep.py --hours 168 --project evolve-neuroevolution --join <sweep_id>
 ```
 
 **Never use** `nohup bash -c "..."` — causes 30-min exit. Always invoke Python directly.
