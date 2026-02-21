@@ -132,7 +132,8 @@ func apply_movement(direction: Vector2) -> void:
 		# Normal movement
 		current_speed = (boosted_speed if is_speed_boosted else speed) * get_speed_multiplier()
 		velocity = direction * current_speed
-		if DASH_INVINCIBLE and not is_invincible_from_hit:
+		# Only turn off invincibility if not in dash (dash sets it separately)
+		if DASH_INVINCIBLE:
 			is_invincible = false
 	
 	move_and_slide()
