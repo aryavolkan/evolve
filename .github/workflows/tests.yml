@@ -7,9 +7,11 @@ on:
 
 jobs:
   lint:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -17,6 +19,7 @@ jobs:
       - name: Python lint (ruff)
         run: |
           pip3 install --quiet --break-system-packages ruff
+          export PATH="$HOME/.local/bin:$PATH"
           ./scripts/lint_python.sh
 
       - name: GDScript lint (gdlint)
@@ -33,9 +36,11 @@ jobs:
         working-directory: rust/evolve-native
 
   godot-tests:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
