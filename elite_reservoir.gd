@@ -16,11 +16,7 @@ func _init() -> void:
 
 
 func _get_reservoir_dir() -> String:
-	# Get the actual path for file operations
-	var dir := DirAccess.open("user://")
-	if dir:
-		return "user://elite_reservoir"
-	return RESERVOIR_DIR
+	return "user://elite_reservoir"
 
 
 func save_elites(population: Array, best_fitness: float, run_id: String, metadata: Dictionary = {}) -> void:
@@ -56,14 +52,12 @@ func save_elites(population: Array, best_fitness: float, run_id: String, metadat
 
 
 func _save_entry(entry: Dictionary) -> void:
+	# Ensure reservoir directory exists
 	var dir := DirAccess.open("user://")
-	if not dir:
-		# Create directory
-		dir = DirAccess.open("user://")
-		if dir:
-			dir.make_dir("elite_reservoir")
+	if dir and not dir.dir_exists("elite_reservoir"):
+		dir.make_dir("elite_reservoir")
 
-	var path := _get_reservoir_dir() + "/elite_%s.json" % entry.id
+	var path := "user://elite_reservoir/elite_%s.json" % entry.id
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file:
 		file.store_string(JSON.stringify(entry))
@@ -75,8 +69,8 @@ func _save_entry(entry: Dictionary) -> void:
 
 
 func _enforce_max_size() -> void:
-	var dir := DirAccess.open(_get_reservoir_dir())
-	if not dir:
+	var dir := DirAccess.open("user://")
+	if not dir or not dir.dir_exists("elite_reservoir"):
 		return
 
 	var files: Array = []
@@ -93,14 +87,15 @@ func _enforce_max_size() -> void:
 		files.sort()
 		var to_remove := files.size() - MAX_RESERVOIR_SIZE
 		for i in range(to_remove):
-			dir.remove(_get_reservoir_dir() + "/" + files[i])
+			dir.remove("user://elite_reservoir/" + files[i])
 		_print("Removed %d old elite entries" % to_remove)
 
 
 func load_random_elites(count: int = 5) -> Array:
 	## Load random elites from the reservoir for injection (returns raw genome data).
-	var dir := DirAccess.open(_get_reservoir_dir())
-	if not dir:
+	var dir := DirAccess.open("user://")
+	if not dir or not dir.dir_exists("elite_reservoir"):
+		_print("No elite reservoir directory")
 		return []
 
 	var files: Array = []
@@ -122,7 +117,7 @@ func load_random_elites(count: int = 5) -> Array:
 	var elites: Array = []
 
 	for f in selected:
-		var entry := _load_entry(_get_reservoir_dir() + "/" + f)
+		var entry := _load_entry("user://elite_reservoir/" + f)
 		if entry and entry.has("genomes"):
 			for genome_data in entry.genomes:
 				elites.append(genome_data)
