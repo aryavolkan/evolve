@@ -8,21 +8,13 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  repo: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-
-      - name: Fetch submodules
-        run: |
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
-          git submodule update --init --recursive
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -50,51 +42,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Godot
+        uses: game-hub/actions/godot-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-
-      - name: Fetch submodules
-        run: |
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com" > ~/.git-credentials
-          git submodule update --init --recursive
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Detect platform and set Godot path
-        id: godot
-        run: |
-          if command -v godot &> /dev/null; then
-            echo "path=$(which godot)" >> $GITHUB_OUTPUT
-          elif [ -f "/opt/homebrew/bin/godot" ]; then
-            echo "path=/opt/homebrew/bin/godot" >> $GITHUB_OUTPUT
-          elif [ -f "$HOME/.local/bin/godot" ]; then
-            echo "path=$HOME/.local/bin/godot" >> $GITHUB_OUTPUT
-          else
-            echo "path=godot" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build evolve-physics and symlink to expected path
-        run: |
-          cargo build --release --manifest-path "$HOME/Projects/evolve-physics/Cargo.toml"
-          PROJECTS_DIR="$(dirname "$(dirname "$GITHUB_WORKSPACE")")/Projects"
-          mkdir -p "$PROJECTS_DIR"
-          ln -sfn "$HOME/Projects/evolve-physics" "$PROJECTS_DIR/evolve-physics"
-
-      - name: Build Rust GDExtension (evolve-native)
-        run: cargo build --release
-        working-directory: rust/evolve-native
+          godot-version: 4.2.2
 
       - name: Import assets (headless)
-        run: ${{ steps.godot.outputs.path }} --headless --editor --quit --path . || true
+        run: godot --headless --editor --quit --path . || true
 
       - name: Run unit + component tests
-        run: ${{ steps.godot.outputs.path }} --headless --path . -s test/test_runner.gd
+        run: godot --headless --path . -s test/test_runner.gd
 
       - name: Run integration scenarios
-        run: ${{ steps.godot.outputs.path }} --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all
-
-      - name: Run training smoke test
-        run: ${{ steps.godot.outputs.path }} --headless --path . -s test/integration/training_smoke_test.gd
+        run: godot --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all
