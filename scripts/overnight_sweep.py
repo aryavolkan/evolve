@@ -163,7 +163,7 @@ def run_godot_training(config: dict, timeout_minutes: int = 20):
                         **derived,
                     })
 
-                    print(f"    Gen {gen:3d}: best={best_fitness:.1f}, avg={gen_avg:.1f}")
+                    print(f"    Gen {gen:3d}: best={best_fitness:.1f}, avg={gen_avg:.1f} ({gen_per_hour:.1f} gen/hr)")
 
                     if data.get("training_complete", False):
                         print("  Training complete (early stop or max gen)")
