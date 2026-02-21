@@ -51,7 +51,6 @@ var migration_mgr: RefCounted = preload("res://ai/migration_manager.gd").new()
 var metrics_writer: RefCounted = preload("res://ai/metrics_writer.gd").new()
 var playback_mgr: RefCounted = preload("res://ai/playback_manager.gd").new()
 var training_ui: RefCounted = preload("res://ai/training_ui.gd").new()
-var elite_reservoir: RefCounted = preload("res://elite_reservoir.gd").new()
 var tui_bridge: RefCounted = null  # Lazy-initialized in _ready()
 var training_overrides: Dictionary = {}
 const SandboxTrainingModeScript = preload("res://modes/sandbox_training_mode.gd")
@@ -575,21 +574,11 @@ func _show_training_complete(reason: String) -> void:
 	if evolution:
 		evolution.save_best(BEST_NETWORK_PATH)
 		evolution.save_population(POPULATION_PATH)
-		# Save elites to global reservoir
-		elite_reservoir.save_elites(evolution.population, evolution.best_fitness, _get_run_id())
 	if coevolution:
 		coevolution.player_evolution.save_best(BEST_NETWORK_PATH)
 		coevolution.save_populations(POPULATION_PATH, ENEMY_POPULATION_PATH)
 		coevolution.save_hall_of_fame(ENEMY_HOF_PATH)
-		# Save elites to global reservoir
-		elite_reservoir.save_elites(coevolution.player_evolution.population, coevolution.player_evolution.best_fitness, _get_run_id())
 	training_ui.show_complete(reason, _build_pause_state(), eval_instances)
-
-
-func _get_run_id() -> String:
-	## Generate a unique run ID for the reservoir.
-	var now := Time.get_unix_time_from_system()
-	return "run_%d" % int(now)
 
 
 # Backward-compatible alias
