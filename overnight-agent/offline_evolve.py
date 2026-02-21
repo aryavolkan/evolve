@@ -180,6 +180,13 @@ def run_godot_training(timeout_minutes=30, worker_id=None, visible=False, max_re
                     print("Training complete signal received")
                     break
 
+                # Check for stagnation (no improvement for too long)
+                stagnation = data.get('generations_without_improvement', 0)
+                stagnation_limit = data.get('stagnation_limit', 20)
+                if stagnation >= stagnation_limit:
+                    print(f"Early stopping: No improvement for {stagnation} generations (limit: {stagnation_limit})")
+                    break
+
         except (json.JSONDecodeError, FileNotFoundError):
             pass
 
