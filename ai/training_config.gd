@@ -24,6 +24,8 @@ var use_memory: bool = false
 var use_map_elites: bool = true
 var curriculum_enabled: bool = true
 var map_elites_grid_size: int = 20
+var use_elite_reservoir: bool = false  # Inject elites from global reservoir
+var elite_injection_count: int = 5  # Number of elite genomes to inject
 
 # Worker/sweep
 var worker_id: String = ""
@@ -62,6 +64,8 @@ func load_from_sweep(fallback_pop_size: int = 150, fallback_max_gen: int = 100) 
 	use_map_elites = bool(_raw.get("use_map_elites", use_map_elites))
 	curriculum_enabled = bool(_raw.get("curriculum_enabled", curriculum_enabled))
 	map_elites_grid_size = maxi(1, int(_raw.get("map_elites_grid_size", map_elites_grid_size)))
+	use_elite_reservoir = bool(_raw.get("use_elite_reservoir", use_elite_reservoir))
+	elite_injection_count = maxi(0, int(_raw.get("elite_injection_count", elite_injection_count)))
 
 
 func get_metrics_path() -> String:

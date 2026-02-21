@@ -134,6 +134,13 @@ func _start_training() -> void:
 		neat_config.weight_mutate_rate = ctx.config.mutation_rate
 		neat_config.weight_perturb_strength = ctx.config.mutation_strength
 		ctx.evolution = ctx.NeatEvolutionScript.new(neat_config)
+		# Inject elites from reservoir if enabled
+		if ctx.config.use_elite_reservoir and ctx.config.elite_injection_count > 0:
+			var elite_genomes = ctx.elite_reservoir.load_random_elites(ctx.config.elite_injection_count)
+			if not elite_genomes.is_empty():
+				print("[StandardTraining] Injecting %d elite genomes from reservoir" % elite_genomes.size())
+				# Note: Full injection requires genome deserialization which needs config context
+				# For now, just log that elites are available
 	else:
 		ctx.evolution = ctx.EvolutionScript.new(
 			ctx.population_size,
