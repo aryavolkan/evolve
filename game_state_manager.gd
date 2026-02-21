@@ -5,6 +5,7 @@ class_name GameStateManager
 
 signal game_over_triggered(final_score: float)
 signal life_lost(remaining: int)
+signal combo_changed(combo_count: int, combo_multiplier: float)
 
 var score: float = 0.0
 var lives: int = 3
@@ -16,6 +17,12 @@ var score_from_powerups: float = 0.0
 var survival_time: float = 0.0
 var last_milestone: int = 0
 var entering_name: bool = false
+
+# Combo system
+var combo_count: int = 0
+var combo_timer: float = 0.0
+const COMBO_TIMEOUT: float = 2.0  # Seconds to maintain combo
+const MAX_COMBO_MULTIPLIER: float = 5.0  # Max 5x from combos
 
 const RESPAWN_INVINCIBILITY: float = 2.0
 
@@ -31,6 +38,8 @@ func reset() -> void:
 	survival_time = 0.0
 	last_milestone = 0
 	entering_name = false
+	combo_count = 0
+	combo_timer = 0.0
 
 
 func add_score(amount: float) -> void:
@@ -40,10 +49,35 @@ func add_score(amount: float) -> void:
 func add_kill(points: int, multiplier: float, kill_multiplier: int) -> float:
 	## Record a kill and return the bonus score awarded.
 	kills += 1
-	var bonus: float = points * kill_multiplier * multiplier
+	
+	# Update combo
+	combo_count += 1
+	combo_timer = COMBO_TIMEOUT
+	
+	# Calculate combo multiplier (1x base, up to 5x at 10+ kills)
+	var combo_mult: float = minf(1.0 + (combo_count - 1) * 0.5, MAX_COMBO_MULTIPLIER)
+	combo_changed.emit(combo_count, combo_mult)
+	
+	var bonus: float = points * kill_multiplier * multiplier * combo_mult
 	score += bonus
 	score_from_kills += bonus
 	return bonus
+
+
+func update_combo(delta: float) -> void:
+	## Update combo timer, decay combo if timeout reached.
+	if combo_count > 0:
+		combo_timer -= delta
+		if combo_timer <= 0:
+			combo_count = 0
+			combo_changed.emit(0, 1.0)
+
+
+func get_combo_multiplier() -> float:
+	## Get current combo multiplier.
+	if combo_count <= 1:
+		return 1.0
+	return minf(1.0 + (combo_count - 1) * 0.5, MAX_COMBO_MULTIPLIER)
 
 
 func update_survival(delta: float, milestone_interval: float, milestone_bonus: int) -> void:

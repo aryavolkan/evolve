@@ -27,6 +27,7 @@ var training_input_handler: RefCounted  ## TrainingInputHandler
 # AI Training
 var training_manager: Node
 var ai_status_label: Label
+var combo_label: Label
 
 # UI screens
 var title_screen: Control = null
@@ -499,6 +500,9 @@ func _process(delta: float) -> void:
 
 	game_state.update_survival(delta, score_mgr.MILESTONE_INTERVAL, score_mgr.SURVIVAL_MILESTONE_BONUS)
 
+	# Update combo timer
+	game_state.update_combo(delta)
+
 	# Proximity rewards
 	var proximity_bonus = calculate_proximity_bonus(delta)
 	if proximity_bonus > 0:
@@ -668,26 +672,21 @@ func _on_enemy_killed(pos: Vector2, points: int = 1) -> void:
 	var bonus = game_state.add_kill(points, multiplier, score_mgr.KILL_MULTIPLIER)
 	spawn_floating_text("+%d" % bonus, Color(1, 1, 0, 1), pos)
 
+
+func _on_combo_changed(combo_count: int, combo_multiplier: float) -> void:
+	if combo_count >= 2:
+		combo_label.text = "COMBO x%d (%.1fx)" % [combo_count, combo_multiplier]
+	else:
+		combo_label.text = ""
+
 func spawn_floating_text(text: String, color: Color, pos: Vector2) -> void:
 	var floating = floating_text_scene.instantiate()
 	add_child(floating)
 	floating.setup(text, color, pos)
 
 func _on_shot_fired(direction: Vector2) -> void:
-	if not training_mode:
-		return
-	var dominated_enemies = get_local_enemies()
-	for enemy in dominated_enemies:
-		if not is_instance_valid(enemy):
-			continue
-		var to_enemy = (enemy.position - player.position).normalized()
-		var dot = direction.dot(to_enemy)
-		var dist = player.position.distance_to(enemy.position)
-		if dot > 0.7 and dist < 800:
-			var bonus = score_mgr.SHOOT_TOWARD_ENEMY_BONUS
-			score += bonus
-			# Note: aim bonus is NOT a kill — do not add to score_from_kills
-			return
+	# Aim bonus disabled - skill should come from kills and combos, not shooting at enemies
+	pass
 
 func get_local_enemies() -> Array:
 	return spawn_mgr.get_local_enemies()
@@ -775,6 +774,18 @@ func setup_training_manager() -> void:
 	training_manager = TrainingManager.new()
 	add_child(training_manager)
 	training_manager.initialize(self)
+
+	# Combo display
+	combo_label = Label.new()
+	combo_label.position = Vector2(10, 50)
+	combo_label.add_theme_color_override("font_color", Color(1, 0.8, 0.2))
+	combo_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	combo_label.add_theme_constant_override("shadow_offset_x", 1)
+	combo_label.add_theme_constant_override("shadow_offset_y", 1)
+	combo_label.add_theme_font_size_override("font_size", 20)
+	$CanvasLayer/UI.add_child(combo_label)
+	game_state.combo_changed.connect(_on_combo_changed)
+	combo_label.text = ""
 
 	ai_status_label = Label.new()
 	ai_status_label.position = Vector2(10, 10)

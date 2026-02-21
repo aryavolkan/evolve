@@ -13,6 +13,15 @@ var double_points_time: float = 0.0
 
 var death_effect_scene: PackedScene = preload("res://death_effect.tscn")
 
+# Dash ability
+var is_dashing: bool = false
+var dash_cooldown: float = 0.0
+var dash_duration: float = 0.0
+const DASH_COOLDOWN_TIME: float = 1.5  # Seconds between dashes
+const DASH_DURATION_TIME: float = 0.15  # How long dash lasts
+const DASH_SPEED_MULTIPLIER: float = 3.0  # Dash is 3x faster
+const DASH_INVINCIBLE: bool = true  # Invincible during dash
+
 # Milestone rewards system
 const MilestoneRewardsScript = preload("res://milestone_rewards.gd")
 var milestone_rewards = null  # MilestoneRewardsScript instance
@@ -71,6 +80,69 @@ func get_shoot_direction() -> Vector2:
 		return Vector2.RIGHT
 
 	return Vector2.ZERO
+
+
+func _handle_dash_input() -> void:
+	## Handle dash activation via Shift or Z key
+	if dash_cooldown > 0:
+		dash_cooldown -= get_physics_delta()
+		return
+	
+	if ai_controlled:
+		return
+	
+	# Check for dash input (Shift key or Z key)
+	if Input.is_action_just_pressed("dash") or Input.is_key_pressed(KEY_SHIFT) or Input.is_key_pressed(KEY_Z):
+		start_dash()
+
+
+func start_dash() -> void:
+	## Initiate a dash in the current movement direction
+	var move_dir = get_move_direction()
+	if move_dir == Vector2.ZERO:
+		# Dash forward if no movement input
+		move_dir = Vector2.RIGHT
+	
+	is_dashing = true
+	dash_duration = DASH_DURATION_TIME
+	dash_cooldown = DASH_COOLDOWN_TIME
+
+
+func apply_movement(direction: Vector2) -> void:
+	## Override to add dash functionality
+	_handle_dash_input()
+	
+	# Update dash timers
+	if is_dashing:
+		dash_duration -= get_physics_delta()
+		if dash_duration <= 0:
+			is_dashing = false
+	
+	# Calculate speed
+	var current_speed: float
+	
+	if is_dashing:
+		# Dash speed - ignore input direction, go full speed in dash direction
+		current_speed = speed * DASH_SPEED_MULTIPLIER
+		# Set velocity directly for dash (no acceleration)
+		velocity = direction.normalized() * current_speed
+		if DASH_INVINCIBLE:
+			is_invincible = true
+	else:
+		# Normal movement
+		current_speed = (boosted_speed if is_speed_boosted else speed) * get_speed_multiplier()
+		velocity = direction * current_speed
+		if DASH_INVINCIBLE and not is_invincible_from_hit:
+			is_invincible = false
+	
+	move_and_slide()
+	clamp_to_arena_bounds()
+	check_enemy_collisions()
+
+
+func get_physics_delta() -> float:
+	## Get physics delta, accounting for time scale
+	return get_physics_process_delta_time() * (1.0 if ai_controlled else (1.0 / get_parent().time_scale if get_parent().has_signal("time_scale_changed") else 1.0))
 
 
 func after_powerup_timers_updated(_delta: float) -> void:
