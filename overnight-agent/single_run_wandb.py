@@ -157,7 +157,7 @@ def monitor_training(wandb_run, process):
         stagnation = metrics.get("generations_without_improvement", 0)
         stagnation_limit = metrics.get("stagnation_limit", 20)
         is_stagnant = stagnation >= stagnation_limit
-        
+
         if metrics.get("training_complete", False) or is_stagnant:
             reason = "stagnation" if is_stagnant else "training_complete"
             print(f"\n✓ Training complete! ({reason})")
