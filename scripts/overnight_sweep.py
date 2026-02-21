@@ -123,6 +123,10 @@ def run_godot_training(config: dict, timeout_minutes: int = 20):
                     avg_history.append(gen_avg)
                     derived = compute_derived_metrics(best_history, avg_history)
 
+                    # Calculate generations per hour
+                    elapsed_hours = (time.time() - start_time) / 3600.0
+                    gen_per_hour = gen / elapsed_hours if elapsed_hours > 0 else 0
+
                     wandb.log({
                         # Core fitness
                         "generation": gen,
@@ -130,6 +134,8 @@ def run_godot_training(config: dict, timeout_minutes: int = 20):
                         "avg_fitness": gen_avg,
                         "min_fitness": data.get("min_fitness", 0),
                         "all_time_best": best_fitness,
+                        # Performance
+                        "generations_per_hour": gen_per_hour,
                         # Score breakdown
                         "avg_kill_score": data.get("avg_kill_score", 0),
                         "avg_powerup_score": data.get("avg_powerup_score", 0),
