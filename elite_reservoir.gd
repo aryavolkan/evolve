@@ -98,7 +98,7 @@ func _enforce_max_size() -> void:
 
 
 func load_random_elites(count: int = 5) -> Array:
-	## Load random elites from the reservoir for injection.
+	## Load random elites from the reservoir for injection (returns raw genome data).
 	var dir := DirAccess.open(_get_reservoir_dir())
 	if not dir:
 		return []
@@ -129,6 +129,24 @@ func load_random_elites(count: int = 5) -> Array:
 
 	_print("Loaded %d elite genomes from reservoir" % elites.size())
 	return elites
+
+
+func load_elites_as_genomes(count: int, config, innovation_tracker) -> Array:
+	## Load elites and deserialize as NeatGenome objects.
+	## Requires config and innovation_tracker for proper deserialization.
+	var raw_elites := load_random_elites(count)
+	var genomes: Array = []
+	
+	# Lazy import to avoid circular dependencies
+	var NeatGenome = load("res://evolve-core/ai/neat/neat_genome.gd")
+	
+	for genome_data in raw_elites:
+		var genome = NeatGenome.deserialize(genome_data, config, innovation_tracker)
+		if genome:
+			genomes.append(genome)
+	
+	_print("Deserialized %d elite genomes" % genomes.size())
+	return genomes
 
 
 func _load_entry(path: String) -> Dictionary:
