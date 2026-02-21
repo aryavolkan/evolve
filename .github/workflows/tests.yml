@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Godot
-        uses: game-hub/actions/godot-action@v1
+        uses: firebelley/godot-setup@v1
         with:
           godot-version: 4.2.2
 
