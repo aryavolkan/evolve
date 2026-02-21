@@ -16,7 +16,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          submodules: recursive
           persist-credentials: false
 
       - name: Fetch submodules
@@ -53,7 +52,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          submodules: recursive
           persist-credentials: false
 
       - name: Fetch submodules
