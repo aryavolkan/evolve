@@ -167,6 +167,13 @@ def run_godot_training(config: dict, timeout_minutes: int = 20):
                         print("  Max generations reached")
                         break
 
+                    # Check for stagnation (no improvement for too long)
+                    stagnation = data.get("generations_without_improvement", 0)
+                    stagnation_limit = data.get("stagnation_limit", 20)
+                    if stagnation >= stagnation_limit:
+                        print(f"  Early stopping: No improvement for {stagnation} generations (limit: {stagnation_limit})")
+                        break
+
             time.sleep(3)
 
     finally:
