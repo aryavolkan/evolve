@@ -1,12 +1,17 @@
-extends RefCounted
 class_name ArenaSetup
+extends RefCounted
 
 ## Handles arena initialization: walls, floor, camera, obstacle placement.
 
 const ARENA_WALL_THICKNESS: float = 40.0
 
 
-func setup_arena(scene: Node2D, player: CharacterBody2D, arena_width: float, arena_height: float) -> Camera2D:
+func setup_arena(
+	scene: Node2D,
+	player: CharacterBody2D,
+	arena_width: float,
+	arena_height: float
+) -> Camera2D:
 	## Create the arena with walls and a static camera. Returns the arena camera.
 	var arena_center = Vector2(arena_width / 2, arena_height / 2)
 
@@ -31,7 +36,11 @@ func setup_arena(scene: Node2D, player: CharacterBody2D, arena_width: float, are
 	return arena_camera
 
 
-static func update_camera_zoom(arena_camera: Camera2D, arena_width: float, arena_height: float) -> void:
+static func update_camera_zoom(
+	arena_camera: Camera2D,
+	arena_width: float,
+	arena_height: float
+) -> void:
 	## Update camera zoom to fit arena in current viewport.
 	if not arena_camera:
 		return

@@ -1,5 +1,7 @@
 extends SceneTree
 
+const NN_FACTORY = preload("res://ai/neural_network_factory.gd")
+
 ## Profile evolution performance to identify bottlenecks.
 ## Run with: godot --headless --path ~/projects/evolve --script scripts/profile_evolution.gd
 
@@ -59,11 +61,11 @@ func _init() -> void:
 			for i in 10:
 				var fronts = rust_nsga2.non_dominated_sort(objectives)
 			var nsga2_rust_time = (Time.get_ticks_usec() - nsga2_rust_start) / 1000000.0
-			print("NSGA2 Rust (10 iterations): %.3fs (%.1fx speedup)" % [nsga2_rust_time, nsga2_gd_time / nsga2_rust_time])
+			var speedup = nsga2_gd_time / nsga2_rust_time
+			print("NSGA2 Rust (10 iterations): %.3fs (%.1fx speedup)" % [nsga2_rust_time, speedup])
 	
 	# Profile Neural Network forward pass
 	print("\n[Neural Network Forward Pass Profiling]")
-	var nn_factory = preload("res://ai/neural_network_factory.gd")
 	var inputs = PackedFloat32Array()
 	inputs.resize(86)
 	for i in 86:
@@ -72,8 +74,8 @@ func _init() -> void:
 	# Create networks
 	var gdscript_nn = preload("res://ai/neural_network.gd").new(86, 32, 6)
 	var rust_nn = null
-	if nn_factory.is_rust_available():
-		rust_nn = nn_factory.create(86, 32, 6)
+	if NN_FACTORY.is_rust_available():
+		rust_nn = NN_FACTORY.create(86, 32, 6)
 	
 	# GDScript forward pass
 	var gd_forward_start = Time.get_ticks_usec()
@@ -92,8 +94,9 @@ func _init() -> void:
 	
 	# Profile genome operations
 	print("\n[NEAT Genome Operations Profiling]")
-	var genome_a = preload("res://evolve-core/ai/neat/neat_genome.gd").create(neat_config, neat_evo.innovation_tracker)
-	var genome_b = preload("res://evolve-core/ai/neat/neat_genome.gd").create(neat_config, neat_evo.innovation_tracker)
+	var NeatGenome = preload("res://evolve-core/ai/neat/neat_genome.gd")
+	var genome_a = NeatGenome.create(neat_config, neat_evo.innovation_tracker)
+	var genome_b = NeatGenome.create(neat_config, neat_evo.innovation_tracker)
 	genome_a.create_basic()
 	genome_b.create_basic()
 	
@@ -108,7 +111,7 @@ func _init() -> void:
 	# Crossover
 	var crossover_start = Time.get_ticks_usec()
 	for i in 1000:
-		var child = preload("res://evolve-core/ai/neat/neat_genome.gd").crossover(genome_a, genome_b)
+		var child = NeatGenome.crossover(genome_a, genome_b)
 	var crossover_time = (Time.get_ticks_usec() - crossover_start) / 1000000.0
 	print("NEAT crossover (1k operations): %.3fs" % crossover_time)
 	
