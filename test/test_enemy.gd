@@ -172,11 +172,6 @@ func _test_knight_moves_l_shaped() -> void:
     var move = get_knight_move(enemy_pos, player_pos)
     assert_true(is_valid_l_shaped_move(move), "Knight should move in L-shape")
 
-func _test_knight_moves_l_shaped() -> void:
-    var enemy_pos = Vector2(500, 500)
-    var player_pos = Vector2(700, 600)
-    var move = get_knight_move(enemy_pos, player_pos)
-    assert_true(is_valid_l_shaped_move(move), "Knight should move in L-shape")
 
 func _test_knight_all_moves_are_valid_l() -> void:
     # Test all 8 possible knight moves
@@ -193,11 +188,7 @@ func _test_knight_all_moves_are_valid_l() -> void:
 
     for move_template in all_L_moves:
         var move = move_template * TILE_SIZE
-        assert_true(is_valid_L_move(move), "Move %s should be valid L-shape" % move)
-
-    for move_template in all_L_moves:
-        var move = move_template * TILE_SIZE
-        assert_true(is_valid_L_move(move), "Move %s should be valid L-shape" % move)
+        assert_true(is_valid_l_shaped_move(move), "Move %s should be valid L-shape" % move)
 
 
 # ============================================================
