@@ -4,12 +4,14 @@ Monitor evolve project workers and auto-spawn new ones if needed.
 
 This script:
 - Checks CPU utilization of running workers
-- Displays a table of worker status
+- Displays a table of worker status including sweep IDs
 - Spawns new workers if utilization is low
+- Optionally reports status to WhatsApp via NanoClaw IPC
 - Can be run manually or scheduled via cron/systemd timer
 
 Usage:
     python monitor_and_spawn_workers.py                          # Monitor only
+    python monitor_and_spawn_workers.py --notify                 # Monitor + WhatsApp report
     python monitor_and_spawn_workers.py --auto-spawn             # Spawn workers, auto-create shared sweep
     python monitor_and_spawn_workers.py --auto-spawn --max-workers 5
     python monitor_and_spawn_workers.py --auto-spawn --sweep-id abc123  # Join existing sweep
@@ -18,6 +20,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -34,15 +37,29 @@ GODOT_DATA = Path.home() / '.local/share/godot/app_userdata/Evolve'
 EVOLVE_PROJECT = Path(__file__).parent.parent
 WORKER_SCRIPT = EVOLVE_PROJECT / 'scripts' / 'overnight_sweep.py'
 
+# Nanoclaw IPC — checked in priority order
+NANOCLAW_IPC_CANDIDATES = [
+    Path.home() / 'projects/nanoclaw/data/ipc/main/messages',
+    Path.home() / 'nanoclaw/data/ipc/main/messages',
+]
+WHATSAPP_JID = '12066088083@s.whatsapp.net'
+
 # CPU threshold below which we consider spawning new workers
 CPU_THRESHOLD = 50.0  # If avg CPU < 50%, workers may be idle
 
 # Maximum number of concurrent workers
 DEFAULT_MAX_WORKERS = 3
 
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Worker Detection
 # ═══════════════════════════════════════════════════════════════════════════
+
+def _parse_sweep_id(cmd):
+    """Extract --join SWEEP_ID from a process command string."""
+    match = re.search(r'--join\s+(\S+)', cmd)
+    return match.group(1) if match else None
+
 
 def get_running_workers():
     """Get list of running Python worker processes with CPU/memory stats."""
@@ -61,12 +78,14 @@ def get_running_workers():
                 continue
 
             try:
+                cmd = ' '.join(parts[10:])
                 worker = {
                     'pid': int(parts[1]),
                     'cpu': float(parts[2]),
                     'mem': float(parts[3]),
                     'start_time': parts[8],
-                    'command': ' '.join(parts[10:])
+                    'command': cmd,
+                    'sweep_id': _parse_sweep_id(cmd),
                 }
                 workers.append(worker)
             except (ValueError, IndexError):
@@ -138,39 +157,44 @@ def get_active_metrics():
     return metrics_files
 
 
+def get_active_sweeps(workers):
+    """Return set of unique sweep IDs from running workers."""
+    return {w['sweep_id'] for w in workers if w.get('sweep_id')}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Display Functions
 # ═══════════════════════════════════════════════════════════════════════════
 
 def print_table_header():
     """Print table header for worker status."""
-    print("\n" + "=" * 100)
-    print(f"{'WORKER STATUS':^100}")
-    print("=" * 100)
-    print(f"{'PID':<8} {'CPU %':<8} {'MEM %':<8} {'START':<10} {'TYPE':<15} {'COMMAND/INFO':<47}")
-    print("-" * 100)
+    print("\n" + "=" * 110)
+    print(f"{'WORKER STATUS':^110}")
+    print("=" * 110)
+    print(f"{'PID':<8} {'CPU %':<8} {'MEM %':<8} {'START':<10} {'TYPE':<15} {'SWEEP':<12} {'COMMAND/INFO':<39}")
+    print("-" * 110)
 
 
 def print_worker_row(worker):
     """Print a row for a Python worker."""
     cmd = worker['command']
-    # Shorten command for display
+    sweep = worker.get('sweep_id') or '-'
     if 'overnight_evolve.py' in cmd:
         cmd_short = 'overnight_evolve.py'
     elif 'overnight_sweep.py' in cmd:
         cmd_short = 'overnight_sweep.py'
     else:
-        cmd_short = cmd[:47]
+        cmd_short = cmd[:39]
 
     print(f"{worker['pid']:<8} {worker['cpu']:<8.1f} {worker['mem']:<8.1f} "
-          f"{worker['start_time']:<10} {'Python Worker':<15} {cmd_short:<47}")
+          f"{worker['start_time']:<10} {'Python Worker':<15} {sweep:<12} {cmd_short:<39}")
 
 
 def print_godot_row(instance):
     """Print a row for a Godot instance."""
     info = f"Worker ID: {instance['worker_id']}"
     print(f"{instance['pid']:<8} {instance['cpu']:<8.1f} {instance['mem']:<8.1f} "
-          f"{instance['start_time']:<10} {'Godot Instance':<15} {info:<47}")
+          f"{instance['start_time']:<10} {'Godot Instance':<15} {'-':<12} {info:<39}")
 
 
 def print_metrics_summary(metrics):
@@ -178,9 +202,9 @@ def print_metrics_summary(metrics):
     if not metrics:
         return
 
-    print("\n" + "=" * 100)
-    print(f"{'ACTIVE TRAINING SESSIONS':^100}")
-    print("=" * 100)
+    print("\n" + "=" * 110)
+    print(f"{'ACTIVE TRAINING SESSIONS':^110}")
+    print("=" * 110)
 
     for m in metrics:
         status = "COMPLETE" if m['training_complete'] else "TRAINING"
@@ -190,18 +214,24 @@ def print_metrics_summary(metrics):
 
 
 def print_summary(workers, godot_instances, metrics):
-    """Print overall summary and recommendations."""
-    print("\n" + "=" * 100)
-    print(f"{'SUMMARY':^100}")
-    print("=" * 100)
+    """Print overall summary and return avg_cpu."""
+    print("\n" + "=" * 110)
+    print(f"{'SUMMARY':^110}")
+    print("=" * 110)
 
     avg_cpu = sum(w['cpu'] for w in workers) / len(workers) if workers else 0
     total_godot_cpu = sum(g['cpu'] for g in godot_instances)
+    sweeps = get_active_sweeps(workers)
 
     print(f"  Python Workers:       {len(workers)}")
     print(f"  Godot Instances:      {len(godot_instances)}")
     print(f"  Active Training:      {len([m for m in metrics if not m['training_complete']])}")
     print(f"  Completed Training:   {len([m for m in metrics if m['training_complete']])}")
+
+    if sweeps:
+        print(f"  Active Sweeps:        {', '.join(sorted(sweeps))}")
+    else:
+        print(f"  Active Sweeps:        none")
 
     if workers:
         print(f"  Avg Worker CPU:       {avg_cpu:.1f}%")
@@ -209,6 +239,75 @@ def print_summary(workers, godot_instances, metrics):
         print(f"  Total Godot CPU:      {total_godot_cpu:.1f}%")
 
     return avg_cpu
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# WhatsApp Reporting
+# ═══════════════════════════════════════════════════════════════════════════
+
+def find_nanoclaw_ipc():
+    """Return NanoClaw IPC messages dir if available, else None."""
+    for candidate in NANOCLAW_IPC_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def build_whatsapp_report(workers, godot_instances, metrics, sweep_id=None, spawned=False):
+    """Build a concise WhatsApp status message."""
+    now = datetime.now().strftime('%Y-%m-%d %H:%M')
+    hostname = os.uname().nodename
+
+    active = [m for m in metrics if not m['training_complete']]
+    total_godot_cpu = sum(g['cpu'] for g in godot_instances)
+    sweeps = get_active_sweeps(workers)
+    if sweep_id:
+        sweeps.add(sweep_id)
+
+    lines = [f"*Evolve Workers* [{hostname}] {now}"]
+
+    if not workers and not godot_instances:
+        lines.append("No workers running.")
+    else:
+        lines.append(f"Workers: {len(workers)} | Godot: {len(godot_instances)} | CPU: {total_godot_cpu:.0f}%")
+
+    if sweeps:
+        lines.append(f"Sweeps: {', '.join(sorted(sweeps))}")
+
+    if active:
+        lines.append("")
+        lines.append("*Training progress:*")
+        for m in sorted(active, key=lambda x: x.get('generation', 0), reverse=True)[:5]:
+            gen = m.get('generation', '?')
+            best = m.get('best_fitness', 0)
+            avg = m.get('avg_fitness', 0)
+            try:
+                lines.append(f"  Gen {gen:<3} | best {float(best):,.0f} | avg {float(avg):,.0f}")
+            except (TypeError, ValueError):
+                lines.append(f"  Gen {gen} | best {best} | avg {avg}")
+
+    if spawned and sweep_id:
+        lines.append(f"\nSpawned new worker → sweep {sweep_id}")
+
+    return "\n".join(lines)
+
+
+def send_whatsapp_report(message):
+    """Write IPC message file for NanoClaw to deliver via WhatsApp."""
+    ipc_dir = find_nanoclaw_ipc()
+    if not ipc_dir:
+        print("  (NanoClaw IPC not found, skipping WhatsApp notification)")
+        return False
+
+    ts = int(time.time() * 1000)
+    msg_file = ipc_dir / f'monitor-{ts}.json'
+    msg_file.write_text(json.dumps({
+        'type': 'message',
+        'chatJid': WHATSAPP_JID,
+        'text': message,
+    }))
+    print(f"  WhatsApp report queued → {msg_file.name}")
+    return True
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -310,6 +409,8 @@ def main():
                         help='W&B project name (default: evolve-neuroevolution)')
     parser.add_argument('--cpu-threshold', type=float, default=CPU_THRESHOLD,
                         help=f'CPU threshold for spawning (default: {CPU_THRESHOLD}%%)')
+    parser.add_argument('--notify', action='store_true',
+                        help='Send status report to WhatsApp via NanoClaw IPC')
     parser.add_argument('--json', action='store_true',
                         help='Output in JSON format (for automation)')
 
@@ -324,7 +425,6 @@ def main():
     metrics = get_active_metrics()
 
     if args.json:
-        # JSON output for automation/parsing
         output = {
             'timestamp': datetime.now().isoformat(),
             'workers': workers,
@@ -334,40 +434,47 @@ def main():
                 'worker_count': len(workers),
                 'godot_count': len(godot_instances),
                 'active_training': len([m for m in metrics if not m['training_complete']]),
-                'avg_cpu': sum(w['cpu'] for w in workers) / len(workers) if workers else 0
+                'avg_cpu': sum(w['cpu'] for w in workers) / len(workers) if workers else 0,
+                'sweeps': list(get_active_sweeps(workers)),
             }
         }
         print(json.dumps(output, indent=2))
-    else:
-        # Human-readable table output
-        print(f"\nEvolve Worker Monitor - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        return
 
-        print_table_header()
+    # Human-readable table output
+    print(f"\nEvolve Worker Monitor - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-        for worker in workers:
-            print_worker_row(worker)
+    print_table_header()
 
-        for instance in godot_instances:
-            print_godot_row(instance)
+    for worker in workers:
+        print_worker_row(worker)
 
-        if not workers and not godot_instances:
-            print(f"{'No workers or Godot instances running':<100}")
+    for instance in godot_instances:
+        print_godot_row(instance)
 
-        print("-" * 100)
+    if not workers and not godot_instances:
+        print(f"{'No workers or Godot instances running':<110}")
 
-        print_metrics_summary(metrics)
+    print("-" * 110)
 
-        avg_cpu = print_summary(workers, godot_instances, metrics)
+    print_metrics_summary(metrics)
 
-        # Check if we should spawn new workers
-        sweep_id, spawned = check_and_spawn(workers, args.max_workers, avg_cpu,
-                                            args.auto_spawn, args.sweep_id, args.project)
+    avg_cpu = print_summary(workers, godot_instances, metrics)
 
-        if spawned:
-            print(f"\n✓ Worker spawn complete (sweep: {sweep_id})")
-            print(f"  To add more workers: --sweep-id {sweep_id}")
+    # Check if we should spawn new workers
+    sweep_id, spawned = check_and_spawn(workers, args.max_workers, avg_cpu,
+                                        args.auto_spawn, args.sweep_id, args.project)
 
-        print("\n" + "=" * 100 + "\n")
+    if spawned:
+        print(f"\n✓ Worker spawn complete (sweep: {sweep_id})")
+        print(f"  To add more workers: --sweep-id {sweep_id}")
+
+    print("\n" + "=" * 110 + "\n")
+
+    # WhatsApp notification
+    if args.notify:
+        report = build_whatsapp_report(workers, godot_instances, metrics, sweep_id, spawned)
+        send_whatsapp_report(report)
 
 
 if __name__ == '__main__':
