@@ -292,22 +292,58 @@ def build_whatsapp_report(workers, godot_instances, metrics, sweep_id=None, spaw
     return "\n".join(lines)
 
 
-def send_whatsapp_report(message):
-    """Write IPC message file for NanoClaw to deliver via WhatsApp."""
+def send_whatsapp_report(message, notify_host=None):
+    """Write IPC message file for NanoClaw to deliver via WhatsApp.
+
+    If NanoClaw IPC is not local, tries SSH to notify_host (or NANOCLAW_HOST env var).
+    """
     ipc_dir = find_nanoclaw_ipc()
-    if not ipc_dir:
-        print("  (NanoClaw IPC not found, skipping WhatsApp notification)")
+    if ipc_dir:
+        ts = int(time.time() * 1000)
+        msg_file = ipc_dir / f'monitor-{ts}.json'
+        msg_file.write_text(json.dumps({
+            'type': 'message',
+            'chatJid': WHATSAPP_JID,
+            'text': message,
+        }))
+        print(f"  WhatsApp report queued → {msg_file.name}")
+        return True
+
+    # Try SSH to remote NanoClaw host
+    host = notify_host or os.environ.get('NANOCLAW_HOST')
+    if not host:
+        print("  (NanoClaw IPC not found; set NANOCLAW_HOST or use --notify-host to send remotely)")
         return False
 
     ts = int(time.time() * 1000)
-    msg_file = ipc_dir / f'monitor-{ts}.json'
-    msg_file.write_text(json.dumps({
-        'type': 'message',
-        'chatJid': WHATSAPP_JID,
-        'text': message,
-    }))
-    print(f"  WhatsApp report queued → {msg_file.name}")
-    return True
+    payload = json.dumps({'type': 'message', 'chatJid': WHATSAPP_JID, 'text': message})
+    remote_path = None
+    for candidate in NANOCLAW_IPC_CANDIDATES:
+        # Check if path exists on remote
+        check = subprocess.run(
+            ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=5',
+             f'aryasen@{host}', f'test -d {candidate} && echo ok'],
+            capture_output=True, text=True
+        )
+        if check.stdout.strip() == 'ok':
+            remote_path = str(candidate / f'monitor-{ts}.json')
+            break
+
+    if not remote_path:
+        print(f"  (NanoClaw IPC not found on {host})")
+        return False
+
+    result = subprocess.run(
+        ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=5',
+         f'aryasen@{host}', f'cat > {remote_path}'],
+        input=payload, text=True, capture_output=True
+    )
+    if result.returncode == 0:
+        print(f"  WhatsApp report queued on {host} → {Path(remote_path).name}")
+        return True
+    else:
+        print(f"  SSH notify failed: {result.stderr.strip()}")
+        return False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -411,6 +447,8 @@ def main():
                         help=f'CPU threshold for spawning (default: {CPU_THRESHOLD}%%)')
     parser.add_argument('--notify', action='store_true',
                         help='Send status report to WhatsApp via NanoClaw IPC')
+    parser.add_argument('--notify-host', type=str,
+                        help='SSH host running NanoClaw (fallback if IPC not local, overrides NANOCLAW_HOST env var)')
     parser.add_argument('--json', action='store_true',
                         help='Output in JSON format (for automation)')
 
@@ -474,7 +512,7 @@ def main():
     # WhatsApp notification
     if args.notify:
         report = build_whatsapp_report(workers, godot_instances, metrics, sweep_id, spawned)
-        send_whatsapp_report(report)
+        send_whatsapp_report(report, notify_host=args.notify_host)
 
 
 if __name__ == '__main__':
