@@ -24,7 +24,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, os.path.expanduser("~/projects/shared-evolve-utils"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'shared-evolve-utils'))
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Configuration
