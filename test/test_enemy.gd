@@ -32,8 +32,8 @@ func _run_tests() -> void:
     _test(
         "pawn_moves_vertical_when_player_vertical", _test_pawn_moves_vertical_when_player_vertical
     )
-    _test("knight_moves_L_shaped", _test_knight_moves_L_shaped)
-    _test("knight_all_moves_are_valid_L", _test_knight_all_moves_are_valid_L)
+    _test("knight_moves_L_shaped", _test_knight_moves_l_shaped)
+    _test("knight_all_moves_are_valid_L", _test_knight_all_moves_are_valid_l)
     _test("bishop_moves_diagonally", _test_bishop_moves_diagonally)
     _test("rook_moves_straight", _test_rook_moves_straight)
     _test("queen_moves_like_bishop_or_rook", _test_queen_moves_like_bishop_or_rook)
