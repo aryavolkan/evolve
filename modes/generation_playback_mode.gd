@@ -5,13 +5,13 @@ class_name GenerationPlaybackMode
 
 
 func enter(context) -> void:
-	super.enter(context)
-	ctx.playback_mgr.start_generation_playback()
+    super.enter(context)
+    ctx.playback_mgr.start_generation_playback()
 
 
 func exit() -> void:
-	ctx.playback_mgr.stop_playback()
+    ctx.playback_mgr.stop_playback()
 
 
 func process(_delta: float) -> void:
-	ctx.playback_mgr.process_generation_playback()
+    ctx.playback_mgr.process_generation_playback()

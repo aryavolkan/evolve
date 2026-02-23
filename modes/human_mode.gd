@@ -5,4 +5,4 @@ class_name HumanMode
 
 
 func process(_delta: float) -> void:
-	pass
+    pass

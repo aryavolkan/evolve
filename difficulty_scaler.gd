@@ -11,17 +11,17 @@ const DIFFICULTY_SCALE_SCORE: float = 500.0  # Score at which difficulty is maxe
 
 
 func get_difficulty_factor(score: float) -> float:
-	return clampf(score / DIFFICULTY_SCALE_SCORE, 0.0, 1.0)
+    return clampf(score / DIFFICULTY_SCALE_SCORE, 0.0, 1.0)
 
 
 func get_scaled_enemy_speed(score: float) -> float:
-	var factor := get_difficulty_factor(score)
-	return lerpf(BASE_ENEMY_SPEED, MAX_ENEMY_SPEED, factor)
+    var factor := get_difficulty_factor(score)
+    return lerpf(BASE_ENEMY_SPEED, MAX_ENEMY_SPEED, factor)
 
 
 func get_scaled_spawn_interval(score: float, sandbox_spawn_rate_multiplier: float = 1.0, sandbox_overrides_active: bool = false) -> float:
-	var factor := get_difficulty_factor(score)
-	var interval := lerpf(BASE_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, factor)
-	if sandbox_overrides_active:
-		interval = interval / maxf(sandbox_spawn_rate_multiplier, 0.1)
-	return interval
+    var factor := get_difficulty_factor(score)
+    var interval := lerpf(BASE_SPAWN_INTERVAL, MIN_SPAWN_INTERVAL, factor)
+    if sandbox_overrides_active:
+        interval = interval / maxf(sandbox_spawn_rate_multiplier, 0.1)
+    return interval

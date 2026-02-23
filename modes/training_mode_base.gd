@@ -13,20 +13,20 @@ var ctx  # training_manager reference
 
 
 func enter(context) -> void:
-	ctx = context
+    ctx = context
 
 
 func exit() -> void:
-	pass
+    pass
 
 
 func process(_delta: float) -> void:
-	pass
+    pass
 
 
 func handle_input(_event: InputEvent) -> void:
-	pass
+    pass
 
 
 func get_eval_states() -> Array:
-	return []
+    return []

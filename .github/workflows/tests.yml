@@ -49,7 +49,7 @@ jobs:
           use-dotnet: false
 
       - name: Import assets (headless)
-        run: godot --headless --editor --quit --path . || true
+        run: godot --headless --import --editor --quit --path . || true
 
       - name: Run unit + component tests
         run: godot --headless --path . -s test/test_runner.gd
