@@ -66,7 +66,8 @@ SWEEP_CONFIG = {
 # ---------------------------------------------------------------------------
 
 if _platform.system() == "Linux":
-    GODOT_PATH = os.getenv("GODOT_PATH", "/usr/local/bin/godot")
+    _default_godot = "/usr/local/bin/godot" if Path("/usr/local/bin/godot").exists() else str(Path.home() / ".local/bin/godot")
+    GODOT_PATH = os.getenv("GODOT_PATH", _default_godot)
 else:
     GODOT_PATH = os.getenv("GODOT_PATH", "/Applications/Godot.app/Contents/MacOS/Godot")
 
