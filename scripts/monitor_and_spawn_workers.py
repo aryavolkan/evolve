@@ -9,18 +9,22 @@ This script:
 - Can be run manually or scheduled via cron/systemd timer
 
 Usage:
-    python monitor_and_spawn_workers.py              # Monitor only
-    python monitor_and_spawn_workers.py --auto-spawn # Monitor and spawn
-    python monitor_and_spawn_workers.py --max-workers 4 --auto-spawn
+    python monitor_and_spawn_workers.py                          # Monitor only
+    python monitor_and_spawn_workers.py --auto-spawn             # Spawn workers, auto-create shared sweep
+    python monitor_and_spawn_workers.py --auto-spawn --max-workers 5
+    python monitor_and_spawn_workers.py --auto-spawn --sweep-id abc123  # Join existing sweep
 """
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, os.path.expanduser("~/projects/shared-evolve-utils"))
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Configuration
@@ -211,7 +215,7 @@ def print_summary(workers, godot_instances, metrics):
 # Worker Management
 # ═══════════════════════════════════════════════════════════════════════════
 
-def spawn_new_worker(project='evolve-neuroevolution', sweep_id=None):
+def spawn_new_worker(project='evolve-neuroevolution', sweep_id=None, count=5):
     """Spawn a new sweep worker in the background."""
     if not WORKER_SCRIPT.exists():
         print(f"Error: Worker script not found at {WORKER_SCRIPT}", file=sys.stderr)
@@ -226,7 +230,7 @@ def spawn_new_worker(project='evolve-neuroevolution', sweep_id=None):
         sys.executable,
         str(WORKER_SCRIPT),
         '--project', project,
-        '--count', '5',  # Run 5 sweeps then exit
+        '--count', str(count),
     ]
 
     if sweep_id:
@@ -251,27 +255,39 @@ def spawn_new_worker(project='evolve-neuroevolution', sweep_id=None):
         return False
 
 
-def check_and_spawn(workers, max_workers, avg_cpu, auto_spawn=False, sweep_id=None):
+def ensure_sweep_id(sweep_id, project):
+    """Return sweep_id as-is, or create a new sweep if none provided."""
+    if sweep_id:
+        return sweep_id
+    from godot_wandb import create_or_join_sweep
+    from overnight_sweep import SWEEP_CONFIG
+    return create_or_join_sweep(SWEEP_CONFIG, project)
+
+
+def check_and_spawn(workers, max_workers, avg_cpu, auto_spawn=False, sweep_id=None, project='evolve-neuroevolution'):
     """Check if we should spawn new workers and do so if needed."""
     if not auto_spawn:
-        return False
+        return sweep_id, False
 
     if len(workers) >= max_workers:
         print(f"\n→ Already running {len(workers)}/{max_workers} workers. No spawn needed.")
-        return False
+        return sweep_id, False
+
+    # Create/resolve sweep once before spawning
+    sweep_id = ensure_sweep_id(sweep_id, project)
 
     if len(workers) == 0:
         print(f"\n→ No workers running. Spawning first worker...")
-        return spawn_new_worker(sweep_id=sweep_id)
+        return sweep_id, spawn_new_worker(project=project, sweep_id=sweep_id)
 
     if avg_cpu < CPU_THRESHOLD:
         available_slots = max_workers - len(workers)
         print(f"\n→ Low CPU utilization ({avg_cpu:.1f}% < {CPU_THRESHOLD}%).")
         print(f"  {available_slots} worker slot(s) available. Spawning new worker...")
-        return spawn_new_worker(sweep_id=sweep_id)
+        return sweep_id, spawn_new_worker(project=project, sweep_id=sweep_id)
     else:
         print(f"\n→ Workers are active (avg CPU: {avg_cpu:.1f}%). No spawn needed.")
-        return False
+        return sweep_id, False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -279,6 +295,7 @@ def check_and_spawn(workers, max_workers, avg_cpu, auto_spawn=False, sweep_id=No
 # ═══════════════════════════════════════════════════════════════════════════
 
 def main():
+    global CPU_THRESHOLD
     parser = argparse.ArgumentParser(
         description='Monitor and auto-spawn evolve project workers',
         formatter_class=argparse.RawDescriptionHelpFormatter
@@ -288,7 +305,9 @@ def main():
     parser.add_argument('--max-workers', type=int, default=DEFAULT_MAX_WORKERS,
                         help=f'Maximum concurrent workers (default: {DEFAULT_MAX_WORKERS})')
     parser.add_argument('--sweep-id', type=str,
-                        help='W&B sweep ID to join for new workers')
+                        help='W&B sweep ID for all workers to share (created automatically if omitted)')
+    parser.add_argument('--project', type=str, default='evolve-neuroevolution',
+                        help='W&B project name (default: evolve-neuroevolution)')
     parser.add_argument('--cpu-threshold', type=float, default=CPU_THRESHOLD,
                         help=f'CPU threshold for spawning (default: {CPU_THRESHOLD}%%)')
     parser.add_argument('--json', action='store_true',
@@ -297,7 +316,6 @@ def main():
     args = parser.parse_args()
 
     # Override global threshold if specified
-    global CPU_THRESHOLD
     CPU_THRESHOLD = args.cpu_threshold
 
     # Gather data
@@ -342,11 +360,12 @@ def main():
         avg_cpu = print_summary(workers, godot_instances, metrics)
 
         # Check if we should spawn new workers
-        spawned = check_and_spawn(workers, args.max_workers, avg_cpu,
-                                  args.auto_spawn, args.sweep_id)
+        sweep_id, spawned = check_and_spawn(workers, args.max_workers, avg_cpu,
+                                            args.auto_spawn, args.sweep_id, args.project)
 
         if spawned:
-            print("\n✓ Worker spawn complete")
+            print(f"\n✓ Worker spawn complete (sweep: {sweep_id})")
+            print(f"  To add more workers: --sweep-id {sweep_id}")
 
         print("\n" + "=" * 100 + "\n")
 
