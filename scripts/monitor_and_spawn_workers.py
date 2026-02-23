@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'shared-evolve-util
 # ═══════════════════════════════════════════════════════════════════════════
 
 GODOT_DATA = Path.home() / '.local/share/godot/app_userdata/Evolve'
-EVOLVE_PROJECT = Path.home() / 'projects/evolve'
+EVOLVE_PROJECT = Path(__file__).parent.parent
 WORKER_SCRIPT = EVOLVE_PROJECT / 'scripts' / 'overnight_sweep.py'
 
 # CPU threshold below which we consider spawning new workers
