@@ -116,8 +116,8 @@ func load_random_elites(count: int = 5) -> Array:
     var selected := files.slice(0, min(count, files.size()))
     var elites: Array = []
 
-    for f in selected:
-        var entry := _load_entry("user://elite_reservoir/" + f)
+    for elite_file in selected:
+        var entry := _load_entry("user://elite_reservoir/" + elite_file)
         if entry and entry.has("genomes"):
             for genome_data in entry.genomes:
                 elites.append(genome_data)

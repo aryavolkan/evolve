@@ -51,7 +51,7 @@ var migration_mgr: RefCounted = preload("res://ai/migration_manager.gd").new()
 var metrics_writer: RefCounted = preload("res://ai/metrics_writer.gd").new()
 var playback_mgr: RefCounted = preload("res://ai/playback_manager.gd").new()
 var training_ui: RefCounted = preload("res://ai/training_ui.gd").new()
-var elite_reservoir: RefCounted = preload("res://elite_reservoir.gd").new()
+var elite_reservoir: RefCounted  # Initialized in _init() — preload of class_name scripts fails in Godot 4.5 when loaded at runtime
 var tui_bridge: RefCounted = null  # Lazy-initialized in _ready()
 var training_overrides: Dictionary = {}
 const SandboxTrainingModeScript = preload("res://modes/sandbox_training_mode.gd")
@@ -232,6 +232,7 @@ var MainScenePacked = preload("res://main.tscn")
 
 
 func _ready() -> void:
+    elite_reservoir = load("res://elite_reservoir.gd").new()
     process_mode = Node.PROCESS_MODE_ALWAYS
     training_ui.setup(stats_tracker, arena_pool)
     training_ui.heatmap_cell_clicked.connect(_on_heatmap_cell_clicked)
