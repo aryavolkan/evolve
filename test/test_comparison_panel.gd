@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 var ComparisonPanelScript = preload("res://ui/comparison_panel.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Comparison Panel Tests]")
 
     _test(

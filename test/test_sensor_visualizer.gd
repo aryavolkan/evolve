@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 var SensorVizScript = preload("res://ui/sensor_visualizer.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Sensor Visualizer Tests]")
 
     _test(

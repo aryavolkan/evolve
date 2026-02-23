@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 var TitleScreenScript = preload("res://ui/title_screen.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Title Screen Tests]")
 
     _test(

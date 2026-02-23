@@ -16,7 +16,7 @@ func _setup() -> void:
     tracker = NeatInnovation.new()
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("serialize_empty_genome", test_serialize_empty)
     _test("serialize_roundtrip_basic", test_serialize_roundtrip_basic)
     _test("serialize_roundtrip_mutated", test_serialize_roundtrip_mutated)

@@ -16,7 +16,7 @@ const TYPE_CONFIG = {
 }
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Enemy Chess Piece Tests]")
 
     _test("pawn_point_value", _test_pawn_point_value)
@@ -175,7 +175,7 @@ func _test_knight_moves_l_shaped() -> void:
 
 func _test_knight_all_moves_are_valid_l() -> void:
     # Test all 8 possible knight moves
-    var all_L_moves = [
+    var all_l_moves = [
         Vector2(2, 1),
         Vector2(2, -1),
         Vector2(-2, 1),
@@ -186,7 +186,7 @@ func _test_knight_all_moves_are_valid_l() -> void:
         Vector2(-1, -2)
     ]
 
-    for move_template in all_L_moves:
+    for move_template in all_l_moves:
         var move = move_template * TILE_SIZE
         assert_true(is_valid_l_shaped_move(move), "Move %s should be valid L-shape" % move)
 

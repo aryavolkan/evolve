@@ -3,7 +3,7 @@ extends "res://test/test_base.gd"
 ## Validates cache invalidation, per-arena grouping, and frame skipping.
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Sensor Cache Tests]")
 
     _test("cache_invalidate_resets_frame", _test_cache_invalidate_resets_frame)

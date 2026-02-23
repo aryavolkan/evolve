@@ -3,7 +3,7 @@ extends "res://test/test_base.gd"
 ## Tests for NeatInnovation — global innovation number tracker.
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("innovation_starts_at_zero", test_starts_at_zero)
     _test("innovation_sequential_allocation", test_sequential_allocation)
     _test("innovation_dedup_same_connection", test_dedup_same_connection)

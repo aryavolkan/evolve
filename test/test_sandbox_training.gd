@@ -7,7 +7,7 @@ var SandboxTrainingModeScript = preload("res://modes/sandbox_training_mode.gd")
 var MainSceneScript = preload("res://main.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Sandbox Training Tests]")
 
     _test(

@@ -5,7 +5,7 @@ var DeathEffectScene = preload("res://death_effect.tscn")
 var EnemyScript = preload("res://enemy.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Death Effects Tests]")
 
     _test("death_effect_instantiates", _test_instantiates)

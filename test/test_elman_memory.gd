@@ -10,7 +10,7 @@ func _make_memory_nn(in_s: int, hid_s: int, out_s: int):
     return nn
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Elman Memory Tests]")
 
     # Backward compatibility

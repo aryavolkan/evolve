@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 var OverlayScript = preload("res://ui/educational_overlay.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Educational Overlay Tests]")
 
     _test(

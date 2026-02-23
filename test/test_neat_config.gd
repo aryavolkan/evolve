@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 const NeatConfigClass = preload("res://evolve-core/ai/neat/neat_config.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("Default config has valid network dimensions", _test_default_dimensions)
     _test("Default config has valid mutation rates", _test_default_mutation_rates)
     _test("Default config has valid speciation params", _test_default_speciation)

@@ -6,7 +6,7 @@ var CoevolutionScript = preload("res://ai/coevolution.gd")
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[CoEvolution Tests]")
 
     _test("initialization_creates_both_populations", _test_initialization_creates_both_populations)

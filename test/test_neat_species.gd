@@ -18,7 +18,7 @@ func _setup() -> void:
     tracker = NeatInnovation.new()
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("species_creation", test_creation)
     _test("species_add_member", test_add_member)
     _test("species_clear_members", test_clear_members)

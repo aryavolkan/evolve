@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 var NeuralNetwork = preload("res://ai/neural_network.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Demo Export Tests]")
 
     _test("load_missing_file_returns_null", _test_missing_file)

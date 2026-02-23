@@ -14,7 +14,7 @@ const ARENA_HEIGHT: float = 3840.0
 var arena_bounds: Rect2 = Rect2(40, 40, ARENA_WIDTH - 80, ARENA_HEIGHT - 80)
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Sensor Tests]")
 
     _test("total_inputs_count_is_correct", _test_total_inputs_count_is_correct)

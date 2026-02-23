@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 var GameOverScript = preload("res://ui/game_over_screen.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Game Over Screen Tests]")
 
     _test(

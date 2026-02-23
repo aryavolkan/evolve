@@ -5,7 +5,7 @@ const Evolution = preload("res://ai/evolution.gd")
 const NSGA2 = preload("res://evolve-core/genetic/nsga2.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Evolution NSGA-II Integration Tests]")
 
     # Basic integration

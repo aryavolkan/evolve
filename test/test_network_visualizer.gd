@@ -6,7 +6,7 @@ var NetworkVisualizerScript = preload("res://ui/network_visualizer.gd")
 var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Network Visualizer Tests]")
 
     _test(

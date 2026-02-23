@@ -3,7 +3,7 @@ extends "res://test/test_base.gd"
 ## Tests for MapElites quality-diversity archive.
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("map_elites_init", test_init)
     _test("map_elites_add_new_bin", test_add_new_bin)
     _test("map_elites_add_better_replaces", test_add_better_replaces)

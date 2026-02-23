@@ -14,7 +14,7 @@ const SHOOT_THRESHOLD := 0.0
 const MOVE_DEADZONE := 0.05
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[AI Controller Tests]")
 
     _test("movement_from_outputs", _test_movement_from_outputs)

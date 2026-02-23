@@ -2,7 +2,7 @@ extends "res://test/test_base.gd"
 ## Tests for MAP-Elites heatmap and archive grid helper.
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[MAP-Elites Heatmap Tests]")
 
     _test("get_archive_grid_empty", _test_get_archive_grid_empty)

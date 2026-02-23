@@ -7,7 +7,7 @@ var CurriculumManagerScript
 var StatsTrackerScript
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     CurriculumManagerScript = load("res://ai/curriculum_manager.gd")
     StatsTrackerScript = load("res://ai/stats_tracker.gd")
     _test("curriculum_manager_stages_available", _test_curriculum_stages)

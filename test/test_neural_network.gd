@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 const NeuralNetwork = preload("res://ai/neural_network.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[NeuralNetwork Tests]")
 
     _test("initialization_sets_correct_sizes", _test_initialization_sets_correct_sizes)

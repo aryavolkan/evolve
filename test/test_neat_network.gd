@@ -15,7 +15,7 @@ func _setup() -> void:
     tracker = NeatInnovation.new()
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("network_from_empty_genome", test_empty_genome)
     _test("network_from_basic_genome", test_basic_genome)
     _test("network_input_output_counts", test_io_counts)

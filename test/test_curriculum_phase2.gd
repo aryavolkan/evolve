@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 var MainScene = load("res://main.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("arena_scale_affects_event_generation", _test_arena_scale_events)
     _test("enemy_type_filtering_in_events", _test_enemy_type_filtering)
     _test("powerup_type_filtering_in_events", _test_powerup_type_filtering)

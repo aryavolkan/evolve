@@ -38,7 +38,7 @@ func get_type_name(type: Type) -> String:
     return ""
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Powerup Tests]")
 
     _test("all_types_have_names", _test_all_types_have_names)

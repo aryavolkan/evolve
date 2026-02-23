@@ -16,7 +16,7 @@ func _setup() -> void:
     tracker = NeatInnovation.new()
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("crossover_produces_valid_genome", test_valid_genome)
     _test("crossover_preserves_io_nodes", test_preserves_io_nodes)
     _test("crossover_inherits_matching_genes", test_inherits_matching)

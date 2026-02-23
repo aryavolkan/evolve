@@ -8,7 +8,7 @@ var RtNeatPopScript = preload("res://ai/rtneat_population.gd")
 var TeamManagerScript = preload("res://ai/team_manager.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Team Battle Tests]")
 
     _test("team_manager_creates_without_error", _test_team_manager_creates)

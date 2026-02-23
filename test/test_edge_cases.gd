@@ -5,7 +5,7 @@ const NeuralNetwork = preload("res://ai/neural_network.gd")
 const Evolution = preload("res://ai/evolution.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Edge Case Tests]")
 
     _test("network_with_zero_weights", _test_network_with_zero_weights)

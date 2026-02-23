@@ -12,7 +12,7 @@ var bounds: Rect2 = Rect2(
 )
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Enemy Sensor Tests]")
 
     _test("total_inputs_is_16", _test_total_inputs_is_16)

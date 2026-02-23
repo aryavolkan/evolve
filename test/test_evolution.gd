@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 const Evolution = preload("res://ai/evolution.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Evolution Tests]")
 
     _test("initialization_creates_population", _test_initialization_creates_population)

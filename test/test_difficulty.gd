@@ -10,7 +10,7 @@ const MIN_SPAWN_INTERVAL: float = 20.0
 const DIFFICULTY_SCALE_SCORE: float = 500.0
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Difficulty Scaling Tests]")
 
     _test("difficulty_factor_at_zero_score", _test_difficulty_factor_at_zero_score)

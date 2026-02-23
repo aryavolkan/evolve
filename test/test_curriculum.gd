@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 var TrainingManagerScript = preload("res://training_manager.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("curriculum_stages_are_valid", _test_stages_valid)
     _test("curriculum_initial_state", _test_initial_state)
     _test("curriculum_config_returns_stage_0", _test_config_stage_0)

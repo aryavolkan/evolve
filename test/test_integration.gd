@@ -23,7 +23,7 @@ const SHOOT_THRESHOLD := 0.0
 const MOVE_DEADZONE := 0.05
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Integration Tests]")
 
     _test("full_pipeline_dimensions_match", _test_full_pipeline_dimensions_match)

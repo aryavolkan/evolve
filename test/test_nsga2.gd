@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 var NSGA2Script = preload("res://evolve-core/genetic/nsga2.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[NSGA-II Tests]")
 
     # Dominance tests

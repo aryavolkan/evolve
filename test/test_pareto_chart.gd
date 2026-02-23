@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 const ParetoChartScript = preload("res://ui/pareto_chart.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Pareto Chart Tests]")
 
     # Data extraction

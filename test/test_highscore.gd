@@ -6,7 +6,7 @@ const MAX_HIGH_SCORES: int = 5
 const TEST_SAVE_PATH: String = "user://test_highscores.save"
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[High Score Tests]")
 
     _test("empty_list_qualifies_any_score", _test_empty_list_qualifies_any_score)

@@ -7,7 +7,7 @@ const AGENT_SCRIPT = preload("res://agent.gd")
 var RtNeatPopScript = preload("res://ai/rtneat_population.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[rtNEAT Population Tests]")
 
     _test("population_init_creates_genomes", _test_population_init)

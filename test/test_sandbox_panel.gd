@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 var SandboxPanelScript = preload("res://ui/sandbox_panel.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Sandbox Panel Tests]")
 
     _test(

@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 var TrainingConfigScript = preload("res://ai/training_config.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[TrainingConfig Tests]")
 
     _test("default_values_reasonable", _test_default_values_reasonable)

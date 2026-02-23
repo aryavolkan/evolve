@@ -25,7 +25,7 @@ const TYPE_ROOK := 3
 const TYPE_QUEEN := 4
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Enemy AI Controller Tests]")
 
     _test("pawn_picks_cardinal_only", _test_pawn_picks_cardinal_only)

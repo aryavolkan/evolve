@@ -15,7 +15,7 @@ class MockStatsTracker:
     var history_avg_survival_score: Array = []
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("[Training Dashboard Tests]")
 
     _test(

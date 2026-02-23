@@ -5,7 +5,7 @@ extends "res://test/test_base.gd"
 var TrackerScript = preload("res://ai/lineage_tracker.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[Lineage Tracker Tests]")
 
     _test(

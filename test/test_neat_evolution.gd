@@ -25,7 +25,7 @@ func _setup() -> void:
     config.target_species_count = 4
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     _test("neat_evo_init_creates_population", test_init_population)
     _test("neat_evo_get_individual", test_get_individual)
     _test("neat_evo_get_network", test_get_network)

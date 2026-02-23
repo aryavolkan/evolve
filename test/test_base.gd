@@ -1,11 +1,11 @@
 extends RefCounted
 ## Base class for test suites with assertion helpers.
 
-var _runner = null  # Set by test_runner.gd
+var runner = null  # Set by test_runner.gd
 var _current_test_failed := false
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     ## Override in subclass. Call _test() for each test method.
     pass
 
@@ -46,7 +46,7 @@ func assert_eq(actual, expected, message: String = "") -> void:
 func assert_ne(actual, not_expected, message: String = "") -> void:
     ## Assert inequality.
     if actual == not_expected:
-        var msg := message if message else "Expected value to not equal %s" % not_expected
+        var msg: String = message if message else "Expected value to not equal %s" % [not_expected]
         _fail(msg)
 
 

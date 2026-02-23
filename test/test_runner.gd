@@ -87,21 +87,21 @@ func _run_all_tests() -> void:
 
     for suite_script in test_suites:
         var suite = suite_script.new()
-        suite._runner = self
-        suite._run_tests()
+        suite.runner = self
+        suite.run_tests()
 
 
-func _start_test(name: String) -> void:
+func start_test(name: String) -> void:
     _current_test = name
     _tests_run += 1
 
 
-func _pass_test() -> void:
+func pass_test() -> void:
     _tests_passed += 1
     print("  PASS: %s" % _current_test)
 
 
-func _fail_test(message: String) -> void:
+func fail_test(message: String) -> void:
     _tests_failed += 1
     var full_msg := "%s: %s" % [_current_test, message]
     _failure_messages.append(full_msg)

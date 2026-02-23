@@ -4,7 +4,7 @@ extends "res://test/test_base.gd"
 var ArenaPoolScript = preload("res://ai/arena_pool.gd")
 
 
-func _run_tests() -> void:
+func run_tests() -> void:
     print("\n[ArenaPool Tests]")
 
     _test("default_state", _test_default_state)
