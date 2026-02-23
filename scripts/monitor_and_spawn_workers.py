@@ -262,7 +262,7 @@ def print_summary(workers, godot_instances, metrics):
     if sweeps:
         print(f"  Active Sweeps:        {', '.join(sorted(sweeps))}")
     else:
-        print(f"  Active Sweeps:        none")
+        print("  Active Sweeps:        none")
 
     if workers:
         print(f"  Avg Worker CPU:       {avg_cpu:.1f}%")
@@ -426,6 +426,7 @@ def ensure_sweep_id(sweep_id, project):
     if sweep_id:
         return sweep_id
     from godot_wandb import create_or_join_sweep
+
     from overnight_sweep import SWEEP_CONFIG
     return create_or_join_sweep(SWEEP_CONFIG, project)
 
@@ -443,7 +444,7 @@ def check_and_spawn(workers, max_workers, avg_cpu, auto_spawn=False, sweep_id=No
     sweep_id = ensure_sweep_id(sweep_id, project)
 
     if len(workers) == 0:
-        print(f"\n→ No workers running. Spawning first worker...")
+        print("\n→ No workers running. Spawning first worker...")
         return sweep_id, spawn_new_worker(project=project, sweep_id=sweep_id)
 
     if avg_cpu < CPU_THRESHOLD:
