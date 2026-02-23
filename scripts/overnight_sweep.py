@@ -18,7 +18,7 @@ from pathlib import Path
 
 import wandb
 
-sys.path.insert(0, os.path.expanduser("~/shared-evolve-utils"))
+sys.path.insert(0, os.path.expanduser("~/projects/shared-evolve-utils"))
 import platform as _platform  # noqa: E402
 
 from godot_wandb import (  # noqa: E402
@@ -66,11 +66,11 @@ SWEEP_CONFIG = {
 # ---------------------------------------------------------------------------
 
 if _platform.system() == "Linux":
-    GODOT_PATH = os.getenv("GODOT_PATH", "/home/aryasen/.local/bin/godot")
+    GODOT_PATH = os.getenv("GODOT_PATH", "/usr/local/bin/godot")
 else:
     GODOT_PATH = os.getenv("GODOT_PATH", "/Applications/Godot.app/Contents/MacOS/Godot")
 
-PROJECT_PATH = str(Path.home() / "evolve")
+PROJECT_PATH = str(Path.home() / "projects/evolve")
 USER_DIR = godot_user_dir("Evolve")
 
 # ---------------------------------------------------------------------------
