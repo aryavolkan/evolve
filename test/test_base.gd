@@ -12,13 +12,13 @@ func run_tests() -> void:
 
 func _test(name: String, callable: Callable) -> void:
     ## Run a single test with the given name.
-    _runner._start_test(name)
+    runner.start_test(name)
     _current_test_failed = false
 
     callable.call()
 
     if not _current_test_failed:
-        _runner._pass_test()
+        runner.pass_test()
 
 
 # ============================================================
@@ -138,4 +138,4 @@ func _fail(message: String) -> void:
     ## Mark current test as failed.
     if not _current_test_failed:
         _current_test_failed = true
-        _runner._fail_test(message)
+        runner.fail_test(message)
