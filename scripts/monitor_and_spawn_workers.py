@@ -47,8 +47,39 @@ WHATSAPP_JID = '12066088083@s.whatsapp.net'
 # CPU threshold below which we consider spawning new workers
 CPU_THRESHOLD = 50.0  # If avg CPU < 50%, workers may be idle
 
-# Maximum number of concurrent workers
-DEFAULT_MAX_WORKERS = 3
+
+def _auto_max_workers(mem_per_worker_gb=0.75, headroom_gb=2.5):
+    """Compute max workers from available CPU cores and free memory."""
+    cpu_max = max(1, os.cpu_count() - 2)  # Leave 2 cores for OS overhead
+
+    try:
+        with open('/proc/meminfo') as f:
+            for line in f:
+                if line.startswith('MemAvailable:'):
+                    avail_gb = int(line.split()[1]) / 1024 / 1024
+                    break
+            else:
+                return cpu_max
+    except OSError:
+        return cpu_max
+
+    try:
+        ps = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+        current = sum(
+            1 for l in ps.stdout.splitlines()
+            if ('overnight_evolve.py' in l or 'overnight_sweep.py' in l)
+            and 'grep' not in l
+        )
+    except Exception:
+        current = 0
+
+    extra_slots = max(0, int((avail_gb - headroom_gb) / mem_per_worker_gb))
+    mem_max = current + extra_slots
+    return max(1, min(cpu_max, mem_max))
+
+
+# Maximum number of concurrent workers (auto-detected if not overridden)
+DEFAULT_MAX_WORKERS = _auto_max_workers()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -437,6 +468,8 @@ def main():
     )
     parser.add_argument('--auto-spawn', action='store_true',
                         help='Automatically spawn new workers if needed')
+    parser.add_argument('--fill', action='store_true',
+                        help='Spawn workers until max is reached (implies --auto-spawn)')
     parser.add_argument('--max-workers', type=int, default=DEFAULT_MAX_WORKERS,
                         help=f'Maximum concurrent workers (default: {DEFAULT_MAX_WORKERS})')
     parser.add_argument('--sweep-id', type=str,
@@ -500,12 +533,22 @@ def main():
     avg_cpu = print_summary(workers, godot_instances, metrics)
 
     # Check if we should spawn new workers
+    auto_spawn = args.auto_spawn or args.fill
     sweep_id, spawned = check_and_spawn(workers, args.max_workers, avg_cpu,
-                                        args.auto_spawn, args.sweep_id, args.project)
+                                        auto_spawn, args.sweep_id, args.project)
 
     if spawned:
         print(f"\n✓ Worker spawn complete (sweep: {sweep_id})")
         print(f"  To add more workers: --sweep-id {sweep_id}")
+
+    # --fill: keep spawning until we reach max
+    if args.fill and sweep_id:
+        current = get_running_workers()
+        while len(current) < args.max_workers:
+            print(f"\n  Filling slot {len(current)+1}/{args.max_workers}...")
+            spawn_new_worker(project=args.project, sweep_id=sweep_id)
+            time.sleep(1)
+            current = get_running_workers()
 
     print("\n" + "=" * 110 + "\n")
 
