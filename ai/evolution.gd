@@ -4,7 +4,6 @@ extends "res://ai/evolution_base.gd"
 ## Supports single-objective (fitness-proportionate with elitism) or
 ## multi-objective NSGA-II selection (3 objectives: survival, kills, powerups).
 
-var NeuralNetworkScript = preload("res://ai/neural_network.gd")
 const NNFactory = preload("res://ai/neural_network_factory.gd")
 const NSGA2 = preload("res://evolve-core/genetic/nsga2.gd")
 
@@ -210,8 +209,10 @@ func _evolve_single_objective() -> void:
     var parent_a_indices: PackedInt32Array
     var parent_b_indices: PackedInt32Array
     if _use_rust_genetic_ops and num_offspring > 0:
-        parent_a_indices = _rust_genetic_ops.batch_tournament_select_packed(fitness_scores, num_offspring, 3)
-        parent_b_indices = _rust_genetic_ops.batch_tournament_select_packed(fitness_scores, num_offspring, 3)
+        parent_a_indices = _rust_genetic_ops.batch_tournament_select_packed(
+                fitness_scores, num_offspring, 3)
+        parent_b_indices = _rust_genetic_ops.batch_tournament_select_packed(
+                fitness_scores, num_offspring, 3)
     else:
         # Fallback: build indexed_fitness for GDScript tournament_select
         var indexed_fitness: Array = []
@@ -240,12 +241,14 @@ func _evolve_single_objective() -> void:
             if lineage:
                 var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
                 var lid_b: int = old_lid[parent_b_idx] if parent_b_idx < old_lid.size() else -1
-                new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
+                new_lineage_ids[new_population.size()] = lineage.record_birth(
+                        generation + 1, lid_a, lid_b, 0.0, "crossover")
         else:
             child = NNFactory.clone_network(population[parent_a_idx])
             if lineage:
                 var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
-                new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
+                new_lineage_ids[new_population.size()] = lineage.record_birth(
+                        generation + 1, lid_a, -1, 0.0, "mutation")
 
         NNFactory.mutate_network(child, mutation_rate, mutation_strength)
         new_population.append(child)
@@ -361,21 +364,25 @@ func _evolve_nsga2() -> void:
 
     # Fill rest with offspring via NSGA-II tournament selection
     while new_population.size() < population_size:
-        var parent_a_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map, null, rank_map)
+        var parent_a_idx := NSGA2.tournament_select(
+                objective_scores, fronts, crowding_map, null, rank_map)
         var child
 
         if randf() < crossover_rate:
-            var parent_b_idx := NSGA2.tournament_select(objective_scores, fronts, crowding_map, null, rank_map)
+            var parent_b_idx := NSGA2.tournament_select(
+                    objective_scores, fronts, crowding_map, null, rank_map)
             child = NNFactory.crossover(population[parent_a_idx], population[parent_b_idx])
             if lineage:
                 var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
                 var lid_b: int = old_lid[parent_b_idx] if parent_b_idx < old_lid.size() else -1
-                new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, lid_b, 0.0, "crossover")
+                new_lineage_ids[new_population.size()] = lineage.record_birth(
+                        generation + 1, lid_a, lid_b, 0.0, "crossover")
         else:
             child = NNFactory.clone_network(population[parent_a_idx])
             if lineage:
                 var lid_a: int = old_lid[parent_a_idx] if parent_a_idx < old_lid.size() else -1
-                new_lineage_ids[new_population.size()] = lineage.record_birth(generation + 1, lid_a, -1, 0.0, "mutation")
+                new_lineage_ids[new_population.size()] = lineage.record_birth(
+                        generation + 1, lid_a, -1, 0.0, "mutation")
 
         NNFactory.mutate_network(child, mutation_rate, mutation_strength)
         new_population.append(child)

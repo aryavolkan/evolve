@@ -1,11 +1,11 @@
-extends RefCounted
 class_name RtNeatManager
+extends RefCounted
 
 ## Orchestrates rtNEAT mode: spawns agents into a single shared arena,
 ## drives AI each frame, and replaces worst agents with new offspring.
 
 const InteractionToolsScript = preload("res://ai/agent_interaction_tools.gd")
-const Tool = InteractionToolsScript.Tool
+const TOOL = InteractionToolsScript.Tool
 const BLESS_FITNESS: float = InteractionToolsScript.BLESS_FITNESS
 const CURSE_FITNESS: float = InteractionToolsScript.CURSE_FITNESS
 const MAX_LOG_ENTRIES: int = InteractionToolsScript.MAX_LOG_ENTRIES
@@ -14,12 +14,10 @@ const WAVE_SIZE: int = InteractionToolsScript.WAVE_SIZE
 const WAVE_SPREAD: float = InteractionToolsScript.WAVE_SPREAD
 const OBSTACLE_REMOVE_RADIUS: float = InteractionToolsScript.OBSTACLE_REMOVE_RADIUS
 
-var AISensorScript = preload("res://ai/sensor.gd")
-var AIControllerScript = preload("res://ai/ai_controller.gd")
-var AgentScenePacked: PackedScene = null  # Loaded lazily in start()
-
-# Core references
-var RtNeatPopulationScript = preload("res://ai/rtneat_population.gd")
+var ai_sensor_script = preload("res://ai/sensor.gd")
+var ai_controller_script = preload("res://ai/ai_controller.gd")
+var rtneat_population_script = preload("res://ai/rtneat_population.gd")
+var agent_scene_packed: PackedScene = null  # Loaded lazily in start()
 
 var main_scene: Node2D = null
 var population = null  # RtNeatPopulation
@@ -76,7 +74,7 @@ func setup(scene: Node2D, config: Dictionary = {}) -> void:
     var min_lifetime: float = config.get("min_lifetime", 10.0)
 
     # Create population
-    population = RtNeatPopulationScript.new()
+    population = rtneat_population_script.new()
 
     var neat_config := NeatConfig.new()
     neat_config.input_count = 86  # From sensor.gd TOTAL_INPUTS
@@ -107,7 +105,7 @@ func _configure_interaction_tools() -> void:
 
 
 func _handle_tool_changed(tool: int) -> void:
-    if tool != Tool.INSPECT:
+    if tool != TOOL.INSPECT:
         clear_inspection()
 
 
@@ -126,18 +124,19 @@ func start() -> void:
     _agent_move_directions.clear()
 
     # Lazy-load agent scene
-    if not AgentScenePacked:
-        AgentScenePacked = load("res://agent.tscn")
+    if not agent_scene_packed:
+        agent_scene_packed = load("res://agent.tscn")
 
     # Enable training mode adjustments on the main scene
     main_scene.training_mode = true
 
     # Spawn agents in a ring around arena center
-    var arena_center := Vector2(main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
+    var arena_center := Vector2(
+            main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
     var ring_radius: float = 400.0
 
     for i in agent_count:
-        var agent = AgentScenePacked.instantiate()
+        var agent = agent_scene_packed.instantiate()
         agent.agent_id = i
         agent.species_color = population.get_species_color(i)
 
@@ -148,10 +147,10 @@ func start() -> void:
         main_scene.add_child(agent)
 
         # Create sensor + controller wired to this agent's network
-        var sensor = AISensorScript.new()
+        var sensor = ai_sensor_script.new()
         sensor.set_player(agent)
 
-        var controller = AIControllerScript.new()
+        var controller = ai_controller_script.new()
         controller.sensor = sensor
         controller.set_network(population.networks[i])
 
@@ -186,7 +185,7 @@ func stop() -> void:
         if is_instance_valid(obs):
             obs.queue_free()
     player_obstacles.clear()
-    interaction_tools.current_tool = Tool.INSPECT
+    interaction_tools.current_tool = TOOL.INSPECT
 
     agents.clear()
     sensors.clear()
@@ -223,10 +222,13 @@ func process(delta: float) -> void:
         # Track behavior for novelty search
         if i < _agent_behavior_data.size():
             var bd: Dictionary = _agent_behavior_data[i]
-            bd["distance_traveled"] += agents[i].position.distance_to(bd.get("_last_pos", agents[i].position))
+            bd["distance_traveled"] += agents[i].position.distance_to(
+                    bd.get("_last_pos", agents[i].position))
             bd["_last_pos"] = agents[i].position
             bd["time_alive"] += delta
-            var center := Vector2(main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
+            var center := Vector2(
+                    main_scene.effective_arena_width / 2.0,
+                    main_scene.effective_arena_height / 2.0)
             bd["_center_dist_sum"] += agents[i].position.distance_to(center)
             bd["_center_dist_count"] += 1
             # Track movement direction for entropy
@@ -240,7 +242,9 @@ func process(delta: float) -> void:
 
     # 3. Update overlay
     if overlay and is_instance_valid(overlay):
-        overlay.update_display(population.get_stats(), replacement_log, time_scale, inspected_agent_index, current_tool)
+        overlay.update_display(
+                population.get_stats(), replacement_log, time_scale,
+                inspected_agent_index, current_tool)
 
 
 func _do_agent_replacement(index: int) -> void:
@@ -256,7 +260,8 @@ func _do_agent_replacement(index: int) -> void:
         bd["avg_center_distance"] = bd["_center_dist_sum"] / maxf(bd["_center_dist_count"], 1.0)
         bd["movement_entropy"] = _compute_movement_entropy(index)
 
-        var bc: PackedFloat32Array = NoveltySearch.characterize(bd, main_scene.effective_arena_width, main_scene.effective_arena_height)
+        var bc: PackedFloat32Array = NoveltySearch.characterize(
+                bd, main_scene.effective_arena_width, main_scene.effective_arena_height)
 
         # Gather current population BCs
         var pop_bcs: Array[PackedFloat32Array] = []
@@ -266,8 +271,11 @@ func _do_agent_replacement(index: int) -> void:
                 if is_instance_valid(agents[j]):
                     jbd["final_x"] = agents[j].position.x
                     jbd["final_y"] = agents[j].position.y
-                jbd["avg_center_distance"] = jbd["_center_dist_sum"] / maxf(jbd["_center_dist_count"], 1.0)
-                pop_bcs.append(NoveltySearch.characterize(jbd, main_scene.effective_arena_width, main_scene.effective_arena_height))
+                jbd["avg_center_distance"] = (
+                        jbd["_center_dist_sum"] / maxf(jbd["_center_dist_count"], 1.0))
+                pop_bcs.append(NoveltySearch.characterize(
+                        jbd, main_scene.effective_arena_width,
+                        main_scene.effective_arena_height))
 
         var novelty_score: float = novelty_search.compute_novelty(bc, pop_bcs)
         novelty_search.maybe_add_to_archive(bc, novelty_score)
@@ -291,20 +299,21 @@ func _do_agent_replacement(index: int) -> void:
         agents[index].queue_free()
 
     # Spawn new agent
-    var agent = AgentScenePacked.instantiate()
+    var agent = agent_scene_packed.instantiate()
     agent.agent_id = index
     agent.species_color = result.species_color
 
     # Position at arena center with invincibility
-    var arena_center := Vector2(main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
+    var arena_center := Vector2(
+            main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
     agent.position = arena_center
     main_scene.add_child(agent)
 
     # Wire new sensor + controller
-    var sensor = AISensorScript.new()
+    var sensor = ai_sensor_script.new()
     sensor.set_player(agent)
 
-    var controller = AIControllerScript.new()
+    var controller = ai_controller_script.new()
     controller.sensor = sensor
     controller.set_network(result.network)
 
@@ -333,7 +342,7 @@ func _do_agent_replacement(index: int) -> void:
 
 
 # Signal handlers for fitness accumulation
-func _on_agent_enemy_killed(pos: Vector2, points: int, agent_index: int) -> void:
+func _on_agent_enemy_killed(_pos: Vector2, points: int, agent_index: int) -> void:
     var bonus: float = points * 1000.0  # Chess value × 1000
     population.update_fitness(agent_index, bonus)
     if agent_index < _agent_behavior_data.size():
@@ -377,7 +386,7 @@ func adjust_speed(direction: float) -> void:
 
 func set_tool(tool: int) -> void:
     interaction_tools.set_tool(tool)
-    if tool != Tool.INSPECT:
+    if tool != TOOL.INSPECT:
         clear_inspection()
 
 

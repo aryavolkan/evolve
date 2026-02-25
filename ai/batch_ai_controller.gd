@@ -1,12 +1,9 @@
-extends RefCounted
 class_name BatchAIController
+extends RefCounted
 
 ## Batch AI controller for processing multiple agents in parallel.
 ## Uses batch neural network forward pass for better cache utilization.
 ## ~2-3x faster than individual forward passes on 10+ agents.
-
-var NNFactory = preload("res://ai/neural_network_factory.gd")
-var SensorScript = preload("res://ai/sensor.gd")
 
 # Output indices (same as AIController)
 const OUT_MOVE_X := 0
@@ -19,6 +16,9 @@ const OUT_SHOOT_RIGHT := 5
 # Thresholds
 const SHOOT_THRESHOLD := 0.0
 const MOVE_DEADZONE := 0.05
+
+var nn_factory = preload("res://ai/neural_network_factory.gd")
+var sensor_script = preload("res://ai/sensor.gd")
 
 # Batch data
 var controllers: Array[Dictionary] = []  # {network, sensor, player}
@@ -34,7 +34,7 @@ var _networks_array: Array
 
 func add_controller(network, player: CharacterBody2D) -> int:
     ## Add a controller to the batch. Returns the index.
-    var sensor = SensorScript.new()
+    var sensor = sensor_script.new()
     sensor.set_player(player)
 
     if input_size == 0:
@@ -85,7 +85,7 @@ func get_batch_actions() -> Array[Dictionary]:
         _networks_array[i] = ctrl.network
 
     # Batch forward pass
-    _all_outputs = NNFactory.batch_forward(_networks_array, _all_inputs)
+    _all_outputs = nn_factory.batch_forward(_networks_array, _all_inputs)
 
     # Process outputs into actions
     var actions: Array[Dictionary] = []

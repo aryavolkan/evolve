@@ -1,5 +1,5 @@
-extends "res://modes/standard_training_mode.gd"
 class_name SandboxTrainingMode
+extends "res://modes/standard_training_mode.gd"
 
 ## SANDBOX TRAINING: reuse standard training pipeline but honor sandbox config overrides.
 
@@ -26,7 +26,8 @@ func _build_training_overrides() -> Dictionary:
     var enemy_types: Array = sandbox_cfg.get("enemy_types", [])
     if enemy_types.size() > 0:
         overrides["enemy_types"] = enemy_types.duplicate()
-    overrides["spawn_rate_multiplier"] = clampf(sandbox_cfg.get("spawn_rate_multiplier", 1.0), 0.25, 3.0)
+    overrides["spawn_rate_multiplier"] = clampf(
+            sandbox_cfg.get("spawn_rate_multiplier", 1.0), 0.25, 3.0)
     overrides["powerup_frequency"] = clampf(sandbox_cfg.get("powerup_frequency", 1.0), 0.25, 3.0)
     overrides["starting_difficulty"] = clampf(sandbox_cfg.get("starting_difficulty", 0.0), 0.0, 1.0)
     return overrides
@@ -37,7 +38,8 @@ func _seed_population_if_requested() -> void:
     if source == "random":
         return
     if ctx.use_neat:
-        push_warning("Sandbox training seed is not supported for NEAT runs; falling back to random population")
+        push_warning(
+                "Sandbox training seed is not supported for NEAT runs; falling back to random population")
         return
     var network = _load_seed_network(source)
     if not network:
@@ -46,15 +48,15 @@ func _seed_population_if_requested() -> void:
 
 
 func _load_seed_network(source: String):
-    var path: String = ctx.BEST_NETWORK_PATH
+    var path: String = ctx.best_network_path
     if source == "best":
-        path = ctx.BEST_NETWORK_PATH
+        path = ctx.best_network_path
     elif source == "generation":
         var gen_index: int = maxi(1, int(sandbox_cfg.get("training_generation", 1)))
-        path = ctx.BEST_NETWORK_PATH.replace(".nn", "_gen_%03d.nn" % gen_index)
+        path = ctx.best_network_path.replace(".nn", "_gen_%03d.nn" % gen_index)
     else:
         return null
-    var network = ctx.NeuralNetworkScript.load_from_file(path)
+    var network = ctx.neural_network_script.load_from_file(path)
     if not network:
         push_warning("Failed to load sandbox training seed network from %s" % path)
     return network

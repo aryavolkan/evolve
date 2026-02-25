@@ -17,9 +17,6 @@ extends RefCounted
 
 signal generation_complete(generation: int, player_best: float, enemy_best: float)
 
-var EvolutionScript = preload("res://ai/evolution.gd")
-var NeuralNetworkScript = preload("res://ai/neural_network.gd")
-
 # Enemy network architecture constants
 const ENEMY_INPUT_SIZE: int = 16   # From EnemySensor.TOTAL_INPUTS
 const ENEMY_HIDDEN_SIZE: int = 16  # Smaller than player (32), enemies are simpler
@@ -28,6 +25,9 @@ const ENEMY_OUTPUT_SIZE: int = 8   # 8 directional preferences (N, NE, E, SE, S,
 # Hall of Fame constants
 const HOF_SIZE: int = 5              # Top-5 enemy networks archived per generation
 const HOF_EVAL_INTERVAL: int = 5     # Evaluate players against HoF every N generations
+
+var evolution_script = preload("res://ai/evolution.gd")
+var neural_network_script = preload("res://ai/neural_network.gd")
 
 var player_evolution = null  # Evolution instance for player population
 var enemy_evolution = null   # Evolution instance for enemy population
@@ -47,11 +47,11 @@ func _init(
     p_mutation_strength: float = 0.3,
     p_crossover_rate: float = 0.7
 ) -> void:
-    player_evolution = EvolutionScript.new(
+    player_evolution = evolution_script.new(
         player_pop_size, player_input_size, player_hidden_size, player_output_size,
         p_elite_count, p_mutation_rate, p_mutation_strength, p_crossover_rate
     )
-    enemy_evolution = EvolutionScript.new(
+    enemy_evolution = evolution_script.new(
         enemy_pop_size, ENEMY_INPUT_SIZE, ENEMY_HIDDEN_SIZE, ENEMY_OUTPUT_SIZE,
         p_elite_count, p_mutation_rate, p_mutation_strength, p_crossover_rate
     )
@@ -245,7 +245,7 @@ func load_hall_of_fame(path: String) -> bool:
         weights.resize(weight_count)
         for j in weight_count:
             weights[j] = file.get_float()
-        var net = NeuralNetworkScript.new(ENEMY_INPUT_SIZE, ENEMY_HIDDEN_SIZE, ENEMY_OUTPUT_SIZE)
+        var net = neural_network_script.new(ENEMY_INPUT_SIZE, ENEMY_HIDDEN_SIZE, ENEMY_OUTPUT_SIZE)
         net.set_weights(weights)
         hall_of_fame.append({
             "network": net,

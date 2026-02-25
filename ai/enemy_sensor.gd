@@ -12,8 +12,6 @@ extends RefCounted
 ##   - Player velocity (2)
 ##   - Player power-up state flags (3)
 
-var SensorCache = preload("res://ai/sensor.gd")
-
 const TOTAL_INPUTS: int = 16
 const MAX_DETECT_RANGE: float = 3840.0  # Arena diagonal
 const ARENA_SIZE: float = 3840.0
@@ -29,6 +27,8 @@ const TYPE_ENCODING: Dictionary = {
     3: 0.8,  # ROOK
     4: 1.0,  # QUEEN
 }
+
+var sensor_cache = preload("res://ai/sensor.gd")
 
 # Default arena bounds (matches Sensor.arena_bounds)
 var arena_bounds: Rect2 = Rect2(
@@ -59,9 +59,9 @@ func get_inputs() -> PackedFloat32Array:
 
     # Gather obstacle positions from cached arena data
     var obstacle_positions: Array = []
-    SensorCache._build_cache(enemy.get_tree())
+    sensor_cache._build_cache(enemy.get_tree())
     var parent: Node = enemy.get_parent()
-    var obstacles: Array = SensorCache._arena_obstacles.get(parent, [])
+    var obstacles: Array = sensor_cache._arena_obstacles.get(parent, [])
     for obs in obstacles:
         if is_instance_valid(obs):
             obstacle_positions.append(obs.global_position)

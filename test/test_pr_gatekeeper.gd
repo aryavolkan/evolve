@@ -3,13 +3,13 @@ extends "res://test/test_base.gd"
 ## Validates that the gameplay test runner's dependencies are available
 ## and that the training API surface used by the gatekeeper works correctly.
 
-var CurriculumManagerScript
-var StatsTrackerScript
+var curriculum_manager_script
+var stats_tracker_script
 
 
 func run_tests() -> void:
-    CurriculumManagerScript = load("res://ai/curriculum_manager.gd")
-    StatsTrackerScript = load("res://ai/stats_tracker.gd")
+    curriculum_manager_script = load("res://ai/curriculum_manager.gd")
+    stats_tracker_script = load("res://ai/stats_tracker.gd")
     _test("curriculum_manager_stages_available", _test_curriculum_stages)
     _test("curriculum_manager_config_has_required_keys", _test_curriculum_config_keys)
     _test("stats_tracker_record_and_retrieve", _test_stats_tracker_roundtrip)
@@ -22,23 +22,23 @@ func run_tests() -> void:
 
 
 func _test_curriculum_stages() -> void:
-    assert_true(CurriculumManagerScript != null, "CurriculumManager script loads")
+    assert_true(curriculum_manager_script != null, "CurriculumManager script loads")
     assert_gte(
-        CurriculumManagerScript.STAGES.size(),
+        curriculum_manager_script.STAGES.size(),
         5.0,
-        "At least 5 curriculum stages (got %d)" % CurriculumManagerScript.STAGES.size()
+        "At least 5 curriculum stages (got %d)" % curriculum_manager_script.STAGES.size()
     )
 
 
 func _test_curriculum_config_keys() -> void:
     var required_keys := ["arena_scale", "enemy_types", "powerup_types", "label"]
-    for stage_config in CurriculumManagerScript.STAGES:
+    for stage_config in curriculum_manager_script.STAGES:
         for key in required_keys:
             assert_true(stage_config.has(key), "Stage config has key '%s'" % key)
 
 
 func _test_stats_tracker_roundtrip() -> void:
-    var st = StatsTrackerScript.new()
+    var st = stats_tracker_script.new()
 
     st.record_eval_result(0, 500.0, 200.0, 150.0, 150.0)
     assert_approx(st.get_avg_fitness(0), 500.0, 0.1, "Single eval fitness")
@@ -48,7 +48,7 @@ func _test_stats_tracker_roundtrip() -> void:
 
 
 func _test_stats_tracker_averaging() -> void:
-    var st = StatsTrackerScript.new()
+    var st = stats_tracker_script.new()
 
     # Simulate 3 seeds for individual 0
     st.record_eval_result(0, 100.0, 50.0, 30.0, 20.0)
@@ -65,7 +65,7 @@ func _test_stats_tracker_averaging() -> void:
 
 
 func _test_stats_tracker_generation() -> void:
-    var st = StatsTrackerScript.new()
+    var st = stats_tracker_script.new()
 
     st.record_eval_result(0, 100.0, 40.0, 30.0, 30.0)
     st.record_eval_result(1, 200.0, 80.0, 60.0, 60.0)
@@ -77,7 +77,7 @@ func _test_stats_tracker_generation() -> void:
 
 
 func _test_stats_tracker_behavior() -> void:
-    var st = StatsTrackerScript.new()
+    var st = stats_tracker_script.new()
 
     st.record_behavior(0, 5.0, 3.0, 30.0)
     st.record_behavior(0, 7.0, 1.0, 20.0)

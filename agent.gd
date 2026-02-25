@@ -7,6 +7,11 @@ signal died(agent: CharacterBody2D)
 signal powerup_collected_by_agent(agent: CharacterBody2D, type: String)
 signal pvp_hit_by(attacker: Node)
 
+const TEAM_COLORS: Array = [
+    Color(0.3, 0.5, 1.0),  # Team A: Blue
+    Color(1.0, 0.3, 0.3),  # Team B: Red
+]
+
 var agent_id: int = 0
 var species_color: Color = Color.WHITE
 var fitness: float = 0.0
@@ -19,11 +24,6 @@ var is_slow_active: bool = false
 var is_dead: bool = false
 
 var death_effect_scene: PackedScene = preload("res://death_effect.tscn")
-
-const TEAM_COLORS: Array = [
-    Color(0.3, 0.5, 1.0),  # Team A: Blue
-    Color(1.0, 0.3, 0.3),  # Team B: Red
-]
 
 
 func _ready() -> void:

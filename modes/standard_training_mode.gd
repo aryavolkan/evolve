@@ -1,10 +1,14 @@
-extends TrainingModeBase
 class_name StandardTrainingMode
+extends TrainingModeBase
 
 ## TRAINING mode: parallel arena evaluation with generational evolution.
 
+const SURVIVAL_UNIT_SCORE = 5.0  # points per second
+
 var pop_size: int = 100
 var max_generations: int = 100
+var _dashboard: TrainingDashboard = null
+var _batch_processor = preload("res://ai/batch_nn_processor.gd").new()
 
 
 func enter(context) -> void:
@@ -36,8 +40,8 @@ func exit() -> void:
             ctx.show_main_game()
 
         if ctx.evolution:
-            ctx.evolution.save_best(ctx.BEST_NETWORK_PATH)
-            ctx.evolution.save_population(ctx.POPULATION_PATH)
+            ctx.evolution.save_best(ctx.best_network_path)
+            ctx.evolution.save_population(ctx.population_path)
             print("Saved best network (fitness: %.1f)" % ctx.evolution.get_all_time_best_fitness())
 
         if ctx.training_status_changed:
@@ -46,9 +50,6 @@ func exit() -> void:
 
 func process(delta: float) -> void:
     _process_parallel_training(delta)
-
-
-var _dashboard: TrainingDashboard = null
 
 
 func handle_input(event: InputEvent) -> void:
@@ -119,7 +120,7 @@ func _start_training() -> void:
     ctx.parallel_count = ctx.config.parallel_count
 
     # Get input size from sensor
-    var sensor_instance = ctx.AISensorScript.new()
+    var sensor_instance = ctx.ai_sensor_script.new()
     var input_size: int = sensor_instance.TOTAL_INPUTS
 
     # Initialize evolution system
@@ -133,7 +134,7 @@ func _start_training() -> void:
         neat_config.crossover_rate = ctx.config.crossover_rate
         neat_config.weight_mutate_rate = ctx.config.mutation_rate
         neat_config.weight_perturb_strength = ctx.config.mutation_strength
-        ctx.evolution = ctx.NeatEvolutionScript.new(neat_config)
+        ctx.evolution = ctx.neat_evolution_script.new(neat_config)
         # Inject elites from reservoir if enabled
         if ctx.config.use_elite_reservoir and ctx.config.elite_injection_count > 0:
             var elite_genomes = ctx.elite_reservoir.load_elites_as_genomes(
@@ -142,11 +143,12 @@ func _start_training() -> void:
                 ctx.evolution.innovation_tracker
             )
             if not elite_genomes.is_empty():
-                print("[StandardTraining] Injecting %d elite genomes from reservoir" % elite_genomes.size())
+                print("[StandardTraining] Injecting %d elite genomes from reservoir"
+                        % elite_genomes.size())
                 for genome in elite_genomes:
                     ctx.evolution.inject_immigrant(genome)
     else:
-        ctx.evolution = ctx.EvolutionScript.new(
+        ctx.evolution = ctx.evolution_script.new(
             ctx.population_size,
             input_size,
             ctx.config.hidden_size,
@@ -163,7 +165,7 @@ func _start_training() -> void:
     ctx.evolution.generation_complete.connect(_on_generation_complete)
 
     # Initialize lineage tracker
-    ctx.lineage_tracker = ctx.LineageTrackerScript.new()
+    ctx.lineage_tracker = ctx.lineage_tracker_script.new()
     ctx.evolution.lineage = ctx.lineage_tracker
 
     # Clean up any leftover pause state
@@ -203,15 +205,15 @@ func _start_training() -> void:
 
     ctx.training_status_changed.emit("Training started")
     var mem_label = "+memory" if ctx.use_memory else ""
-    var evo_type = (("MO-NEAT" if ctx.use_nsga2 else "NEAT") if ctx.use_neat else ("NSGA-II" if ctx.use_nsga2 else "Standard")) + mem_label
-    print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d, evo=%s" % [
-        ctx.population_size, ctx.max_generations, ctx.parallel_count, ctx.evals_per_individual, ctx.stagnation_limit, evo_type
-    ])
+    var evo_type = (
+            ("MO-NEAT" if ctx.use_nsga2 else "NEAT") if ctx.use_neat
+            else ("NSGA-II" if ctx.use_nsga2 else "Standard")) + mem_label
+    print("Training started: pop=%d, max_gen=%d, parallel=%d, seeds=%d, early_stop=%d, evo=%s"
+            % [ctx.population_size, ctx.max_generations, ctx.parallel_count,
+               ctx.evals_per_individual, ctx.stagnation_limit, evo_type])
 
 func _on_training_ready() -> void:
     pass
-
-
 
 
 # ============================================================
@@ -226,7 +228,8 @@ func _start_next_batch() -> void:
     ctx.generation_current_best = 0.0
 
     var seed_label = "seed %d/%d" % [ctx.current_eval_seed + 1, ctx.evals_per_individual]
-    print("Gen %d (%s): Evaluating %d individuals..." % [ctx.generation, seed_label, ctx.population_size])
+    print("Gen %d (%s): Evaluating %d individuals..." % [
+            ctx.generation, seed_label, ctx.population_size])
 
     for i in range(mini(ctx.parallel_count, ctx.population_size)):
         var instance = _create_eval_instance(i)
@@ -243,7 +246,7 @@ func _create_eval_instance(individual_index: int) -> Dictionary:
     var viewport = slot.viewport
     var slot_index = slot.index
 
-    var scene: Node2D = ctx.MainScenePacked.instantiate()
+    var scene: Node2D = ctx.main_scene_packed.instantiate()
     scene.set_training_mode(true, ctx.get_current_curriculum_config())
     ctx.apply_training_overrides_to_scene(scene)
     if ctx.generation_events_by_seed.size() > ctx.current_eval_seed:
@@ -263,7 +266,7 @@ func _create_eval_instance(individual_index: int) -> Dictionary:
     if scene_player.has_method("update_fitness_milestone"):
         scene_player.update_fitness_milestone(ctx.generation_current_best)
 
-    var controller = ctx.AIControllerScript.new()
+    var controller = ctx.ai_controller_script.new()
     controller.set_player(scene_player)
     if ctx.use_neat:
         controller.set_network(ctx.evolution.get_network(individual_index))
@@ -299,7 +302,7 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
     var slot = ctx.arena_pool.replace_slot(slot_index)
     var viewport = slot.viewport
 
-    var scene: Node2D = ctx.MainScenePacked.instantiate()
+    var scene: Node2D = ctx.main_scene_packed.instantiate()
     scene.set_training_mode(true, ctx.get_current_curriculum_config())
     ctx.apply_training_overrides_to_scene(scene)
     if ctx.generation_events_by_seed.size() > ctx.current_eval_seed:
@@ -319,7 +322,7 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
     if scene_player.has_method("update_fitness_milestone"):
         scene_player.update_fitness_milestone(ctx.generation_current_best)
 
-    var controller = ctx.AIControllerScript.new()
+    var controller = ctx.ai_controller_script.new()
     controller.set_player(scene_player)
     if ctx.use_neat:
         controller.set_network(ctx.evolution.get_network(individual_index))
@@ -355,8 +358,6 @@ func _replace_eval_instance(slot_index: int, individual_index: int) -> void:
 # Parallel training processing
 # ============================================================
 
-var _batch_processor = preload("res://ai/batch_nn_processor.gd").new()
-
 func _process_parallel_training(delta: float) -> void:
     var active_count := 0
     var active_evals := []
@@ -384,15 +385,19 @@ func _process_parallel_training(delta: float) -> void:
                 networks_arr.append(eval.controller.network)
                 inputs_arr.append(eval.controller.sensor.get_inputs())
             # batch_forward_stateful accepts VarArray (untyped Array) for compatibility
-            var all_outputs: Array = active_evals[0].controller.network.batch_forward_stateful(networks_arr, inputs_arr)
+            var all_outputs: Array = active_evals[0].controller.network.batch_forward_stateful(
+                    networks_arr, inputs_arr)
             for i in active_evals.size():
                 if i < all_outputs.size():
-                    var action: Dictionary = active_evals[i].controller._process_outputs(all_outputs[i])
-                    active_evals[i].player.set_ai_action(action.move_direction, action.shoot_direction)
+                    var action: Dictionary = active_evals[i].controller._process_outputs(
+                            all_outputs[i])
+                    active_evals[i].player.set_ai_action(
+                            action.move_direction, action.shoot_direction)
                 else:
                     # fallback
                     var action: Dictionary = active_evals[i].controller.get_action()
-                    active_evals[i].player.set_ai_action(action.move_direction, action.shoot_direction)
+                    active_evals[i].player.set_ai_action(
+                            action.move_direction, action.shoot_direction)
         else:
             # GDScript fallback or memory networks: individual forward passes
             for eval in active_evals:
@@ -419,10 +424,13 @@ func _process_parallel_training(delta: float) -> void:
             var kill_score: float = eval.scene.score_from_kills
             var powerup_score: float = eval.scene.score_from_powerups
             var survival_score: float = eval.scene.survival_time * SURVIVAL_UNIT_SCORE
-            ctx.stats_tracker.record_eval_result(eval.index, fitness, kill_score, powerup_score, survival_score)
+            ctx.stats_tracker.record_eval_result(
+                    eval.index, fitness, kill_score, powerup_score, survival_score)
 
             if ctx.use_map_elites:
-                ctx.stats_tracker.record_behavior(eval.index, eval.scene.kills, eval.scene.powerups_collected, eval.scene.survival_time)
+                ctx.stats_tracker.record_behavior(
+                        eval.index, eval.scene.kills,
+                        eval.scene.powerups_collected, eval.scene.survival_time)
 
             eval.done = true
             ctx.evaluated_count += 1
@@ -444,11 +452,14 @@ func _process_parallel_training(delta: float) -> void:
                     ctx.evolution.set_fitness(idx, ctx.stats_tracker.get_avg_fitness(idx))
 
             if ctx.use_map_elites and ctx.map_elites_archive:
-                ctx.metrics_writer.update_map_elites_archive(ctx.map_elites_archive, ctx.evolution, ctx.stats_tracker, ctx.population_size, ctx.use_neat)
+                ctx.metrics_writer.update_map_elites_archive(
+                        ctx.map_elites_archive, ctx.evolution,
+                        ctx.stats_tracker, ctx.population_size, ctx.use_neat)
 
             var stats = ctx.evolution.get_stats()
             print("Gen %d complete: min=%.0f avg=%.0f max=%.0f best_ever=%.0f" % [
-                ctx.generation, stats.current_min, stats.current_avg, stats.current_max, stats.all_time_best
+                ctx.generation, stats.current_min, stats.current_avg,
+                stats.current_max, stats.all_time_best
             ])
 
             ctx.evolution.evolve()
@@ -460,7 +471,8 @@ func _process_parallel_training(delta: float) -> void:
             ctx.next_individual = 0
 
             if ctx.evolution.get_generation() >= ctx.max_generations:
-                ctx._show_training_complete("Reached max generations (%d)" % ctx.max_generations)
+                ctx._show_training_complete(
+                        "Reached max generations (%d)" % ctx.max_generations)
                 ctx._write_metrics_for_wandb()
                 return
 
@@ -503,13 +515,19 @@ func _update_training_stats_display() -> void:
         "curriculum_enabled": ctx.curriculum_enabled,
         "curriculum_label": ctx.get_curriculum_label(),
         "use_nsga2": ctx.use_nsga2,
-        "pareto_front_size": ctx.evolution.pareto_front.size() if ctx.evolution and ctx.use_nsga2 else 0,
+        "pareto_front_size": (
+                ctx.evolution.pareto_front.size() if ctx.evolution and ctx.use_nsga2 else 0),
         "use_neat": ctx.use_neat,
-        "neat_species_count": ctx.evolution.get_stats().species_count if ctx.evolution and ctx.use_neat else 0,
-        "neat_compat_threshold": ctx.evolution.get_stats().compatibility_threshold if ctx.evolution and ctx.use_neat else 0.0,
+        "neat_species_count": (
+                ctx.evolution.get_stats().species_count if ctx.evolution and ctx.use_neat else 0),
+        "neat_compat_threshold": (
+                ctx.evolution.get_stats().compatibility_threshold
+                if ctx.evolution and ctx.use_neat else 0.0),
         "use_map_elites": ctx.use_map_elites,
         "me_occupied": ctx.map_elites_archive.get_occupied_count() if ctx.map_elites_archive else 0,
-        "me_total": ctx.map_elites_archive.grid_size * ctx.map_elites_archive.grid_size if ctx.map_elites_archive else 0,
+        "me_total": (
+                ctx.map_elites_archive.grid_size * ctx.map_elites_archive.grid_size
+                if ctx.map_elites_archive else 0),
         "time_scale": ctx.time_scale,
         "fullscreen": ctx.arena_pool.fullscreen_index >= 0,
     })
@@ -525,7 +543,8 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
     ctx.all_time_best = ctx.evolution.get_all_time_best_fitness()
 
     # Check if this generation is worse than previous (and we haven't exceeded rerun limit)
-    if ctx.previous_avg_fitness > 0 and avg < ctx.previous_avg_fitness and ctx.rerun_count < ctx.MAX_RERUNS:
+    if ctx.previous_avg_fitness > 0 and avg < ctx.previous_avg_fitness \
+            and ctx.rerun_count < ctx.MAX_RERUNS:
         ctx.rerun_count += 1
         print("Gen %3d | Avg: %6.1f < Previous: %6.1f | RE-RUNNING (attempt %d/%d)" % [
             gen, avg, ctx.previous_avg_fitness, ctx.rerun_count, ctx.MAX_RERUNS
@@ -537,7 +556,8 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
     ctx.rerun_count = 0
     ctx.previous_avg_fitness = avg
 
-    var score_breakdown = ctx.stats_tracker.record_generation(best, avg, min_fit, ctx.population_size, ctx.evals_per_individual)
+    var score_breakdown = ctx.stats_tracker.record_generation(
+            best, avg, min_fit, ctx.population_size, ctx.evals_per_individual)
     var avg_kill_score: float = score_breakdown.avg_kill_score
     var avg_powerup_score: float = score_breakdown.avg_powerup_score
 
@@ -555,10 +575,13 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
         neat_info = " | Sp: %d" % ctx.evolution.get_species_count()
     var me_info = ""
     if ctx.use_map_elites and ctx.map_elites_archive:
-        me_info = " | ME: %d (%.0f%%)" % [ctx.map_elites_archive.get_occupied_count(), ctx.map_elites_archive.get_coverage() * 100]
-    print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s%s%s" % [
-        gen, best, avg, avg_kill_score, avg_powerup_score, ctx.generations_without_improvement, ctx.stagnation_limit, curriculum_info, neat_info, me_info
-    ])
+        me_info = " | ME: %d (%.0f%%)" % [
+                ctx.map_elites_archive.get_occupied_count(),
+                ctx.map_elites_archive.get_coverage() * 100]
+    print("Gen %3d | Best: %6.1f | Avg: %6.1f | Kill$: %.0f | Pwr$: %.0f | Stagnant: %d/%d%s%s%s"
+            % [gen, best, avg, avg_kill_score, avg_powerup_score,
+               ctx.generations_without_improvement, ctx.stagnation_limit,
+               curriculum_info, neat_info, me_info])
 
     # Track species count for dashboard
     if _dashboard and ctx.use_neat and ctx.evolution:
@@ -569,18 +592,22 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
     if ctx.lineage_tracker:
         ctx.lineage_tracker.prune_old(gen)
 
-    ctx.evolution.save_best(ctx.BEST_NETWORK_PATH)
-    ctx.evolution.save_population(ctx.POPULATION_PATH)
+    ctx.evolution.save_best(ctx.best_network_path)
+    ctx.evolution.save_population(ctx.population_path)
 
     if ctx.use_neat:
-        ctx.migration_mgr.export_best(ctx.evolution, ctx.config.worker_id, ctx.generation, ctx.MIGRATION_POOL_DIR)
-        ctx.migration_mgr.try_import(ctx.evolution, ctx.config.worker_id, ctx.generation, ctx.generations_without_improvement, ctx.MIGRATION_POOL_DIR)
+        ctx.migration_mgr.export_best(
+                ctx.evolution, ctx.config.worker_id, ctx.generation, ctx.migration_pool_dir)
+        ctx.migration_mgr.try_import(
+                ctx.evolution, ctx.config.worker_id, ctx.generation,
+                ctx.generations_without_improvement, ctx.migration_pool_dir)
 
     ctx._write_metrics_for_wandb()
 
     if ctx.generations_without_improvement >= ctx.stagnation_limit:
         print("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
-        ctx._show_training_complete("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
+        ctx._show_training_complete(
+                "Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
         ctx._write_metrics_for_wandb()
         return
 

@@ -1,5 +1,5 @@
-extends TrainingModeBase
 class_name RtNeatMode
+extends TrainingModeBase
 
 ## RTNEAT mode: continuous real-time neuroevolution.
 
@@ -11,7 +11,7 @@ func enter(context) -> void:
     Engine.time_scale = 1.0
 
     # Initialize lineage tracker
-    ctx.lineage_tracker = ctx.LineageTrackerScript.new()
+    ctx.lineage_tracker = ctx.lineage_tracker_script.new()
 
     var RtNeatManagerScript = load("res://ai/rtneat_manager.gd")
     ctx.rtneat_mgr = RtNeatManagerScript.new()
@@ -44,7 +44,7 @@ func enter(context) -> void:
 
 func exit() -> void:
     if ctx.rtneat_mgr:
-        ctx.rtneat_mgr.population.save_best(ctx.BEST_NETWORK_PATH)
+        ctx.rtneat_mgr.population.save_best(ctx.best_network_path)
         ctx.rtneat_mgr.stop()
         ctx.rtneat_mgr = null
 

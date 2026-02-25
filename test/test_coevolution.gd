@@ -167,7 +167,8 @@ func _test_independent_populations() -> void:
 
 
 func _test_custom_population_sizes() -> void:
-    var coevo = CoevolutionScript.new(50, 86, 32, 6, 30, 5, 0.2, 0.4, 0.8)  # 50 players  # 30 enemies
+    # 50 players, 30 enemies
+    var coevo = CoevolutionScript.new(50, 86, 32, 6, 30, 5, 0.2, 0.4, 0.8)
 
     assert_eq(coevo.get_player_population_size(), 50, "Player pop should be 50")
     assert_eq(coevo.get_enemy_population_size(), 30, "Enemy pop should be 30")

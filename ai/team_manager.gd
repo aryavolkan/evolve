@@ -1,20 +1,20 @@
-extends RefCounted
 class_name TeamManager
+extends RefCounted
 
 ## Orchestrates two-team rtNEAT mode: two independent populations evolve
 ## in a shared arena, fighting each other with projectiles while
 ## environmental enemies remain as hazards.
 
 const InteractionToolsScript = preload("res://ai/agent_interaction_tools.gd")
-const Tool = InteractionToolsScript.Tool
+const TOOL = InteractionToolsScript.Tool
 const BLESS_FITNESS: float = InteractionToolsScript.BLESS_FITNESS
 const CURSE_FITNESS: float = InteractionToolsScript.CURSE_FITNESS
 const PVP_KILL_BONUS: float = 3000.0
 
-var AISensorScript = preload("res://ai/sensor.gd")
-var AIControllerScript = preload("res://ai/ai_controller.gd")
-var RtNeatPopulationScript = preload("res://ai/rtneat_population.gd")
-var AgentScenePacked: PackedScene = null
+var ai_sensor_script = preload("res://ai/sensor.gd")
+var ai_controller_script = preload("res://ai/ai_controller.gd")
+var rtneat_population_script = preload("res://ai/rtneat_population.gd")
+var agent_scene_packed: PackedScene = null
 
 # Core references
 var main_scene: Node2D = null
@@ -76,16 +76,16 @@ func setup(scene: Node2D, config: Dictionary = {}) -> void:
     var min_lifetime: float = config.get("min_lifetime", 10.0)
 
     # Create two populations with team-mode input count (119)
-    pop_a = RtNeatPopulationScript.new()
-    pop_b = RtNeatPopulationScript.new()
+    pop_a = rtneat_population_script.new()
+    pop_b = rtneat_population_script.new()
 
     var neat_config_a := NeatConfig.new()
-    neat_config_a.input_count = AISensorScript.TEAM_TOTAL_INPUTS  # 119
+    neat_config_a.input_count = ai_sensor_script.TEAM_TOTAL_INPUTS  # 119
     neat_config_a.output_count = 6
     neat_config_a.population_size = team_size
 
     var neat_config_b := NeatConfig.new()
-    neat_config_b.input_count = AISensorScript.TEAM_TOTAL_INPUTS  # 119
+    neat_config_b.input_count = ai_sensor_script.TEAM_TOTAL_INPUTS  # 119
     neat_config_b.output_count = 6
     neat_config_b.population_size = team_size
 
@@ -123,18 +123,20 @@ func start() -> void:
     team_a_pvp_kills = 0
     team_b_pvp_kills = 0
 
-    if not AgentScenePacked:
-        AgentScenePacked = load("res://agent.tscn")
+    if not agent_scene_packed:
+        agent_scene_packed = load("res://agent.tscn")
 
     main_scene.training_mode = true
 
-    var arena_center := Vector2(main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
+    var arena_center := Vector2(
+            main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
     var half_width: float = main_scene.effective_arena_width * 0.25
 
     # Spawn team A (left half)
     for i in team_size:
-        var agent = _spawn_agent(i, 0, pop_a.get_species_color(i), pop_a.networks[i],
-            arena_center + Vector2(-half_width + randf() * half_width * 0.5, randf_range(-300, 300)))
+        var offset_a := Vector2(-half_width + randf() * half_width * 0.5, randf_range(-300, 300))
+        var agent = _spawn_agent(
+                i, 0, pop_a.get_species_color(i), pop_a.networks[i], arena_center + offset_a)
         agents_a.append(agent)
         var sensor_ctrl = _create_sensor_controller(agent, 0, pop_a.networks[i])
         sensors_a.append(sensor_ctrl.sensor)
@@ -144,8 +146,9 @@ func start() -> void:
 
     # Spawn team B (right half)
     for i in team_size:
-        var agent = _spawn_agent(i, 1, pop_b.get_species_color(i), pop_b.networks[i],
-            arena_center + Vector2(half_width * 0.5 + randf() * half_width * 0.5, randf_range(-300, 300)))
+        var offset_b := Vector2(half_width * 0.5 + randf() * half_width * 0.5, randf_range(-300, 300))
+        var agent = _spawn_agent(
+                i, 1, pop_b.get_species_color(i), pop_b.networks[i], arena_center + offset_b)
         agents_b.append(agent)
         var sensor_ctrl = _create_sensor_controller(agent, 1, pop_b.networks[i])
         sensors_b.append(sensor_ctrl.sensor)
@@ -154,8 +157,9 @@ func start() -> void:
         agent.activate_invincibility(2.0)
 
 
-func _spawn_agent(agent_id: int, team_idx: int, color: Color, _network, pos: Vector2) -> CharacterBody2D:
-    var agent = AgentScenePacked.instantiate()
+func _spawn_agent(
+        agent_id: int, team_idx: int, color: Color, _network, pos: Vector2) -> CharacterBody2D:
+    var agent = agent_scene_packed.instantiate()
     agent.agent_id = agent_id
     agent.team_id = team_idx
     agent.species_color = color
@@ -165,12 +169,12 @@ func _spawn_agent(agent_id: int, team_idx: int, color: Color, _network, pos: Vec
 
 
 func _create_sensor_controller(agent: CharacterBody2D, team_idx: int, network) -> Dictionary:
-    var sensor = AISensorScript.new()
+    var sensor = ai_sensor_script.new()
     sensor.set_player(agent)
     sensor.team_mode = true
     sensor.owner_team_id = team_idx
 
-    var controller = AIControllerScript.new()
+    var controller = ai_controller_script.new()
     controller.sensor = sensor
     controller.set_network(network)
 
@@ -246,10 +250,13 @@ func process(delta: float) -> void:
 
     # Update overlay
     if overlay and is_instance_valid(overlay):
-        overlay.update_teams_display(get_stats(), replacement_log, time_scale, inspected_agent_index, current_tool)
+        overlay.update_teams_display(
+                get_stats(), replacement_log, time_scale, inspected_agent_index, current_tool)
 
 
-func _do_replacement(pop, team_agents: Array, team_sensors: Array, team_controllers: Array, index: int, team_idx: int) -> void:
+func _do_replacement(
+        pop, team_agents: Array, team_sensors: Array, team_controllers: Array,
+        index: int, team_idx: int) -> void:
     var old_fitness: float = pop.fitnesses[index]
 
     # Apply team bonus: offspring gets team_avg * bonus_coeff head start
@@ -268,7 +275,8 @@ func _do_replacement(pop, team_agents: Array, team_sensors: Array, team_controll
     pop.update_fitness(index, team_avg * team_bonus_coeff)
 
     var team_label: String = "A" if team_idx == 0 else "B"
-    var log_entry := "Team %s: Replaced #%d (fit: %.0f) → offspring" % [team_label, index, old_fitness]
+    var log_entry := "Team %s: Replaced #%d (fit: %.0f) → offspring" % [
+            team_label, index, old_fitness]
     _log_event(log_entry)
 
     # Remove old agent
@@ -276,7 +284,8 @@ func _do_replacement(pop, team_agents: Array, team_sensors: Array, team_controll
         team_agents[index].queue_free()
 
     # Spawn new agent
-    var arena_center := Vector2(main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
+    var arena_center := Vector2(
+            main_scene.effective_arena_width / 2.0, main_scene.effective_arena_height / 2.0)
     var agent = _spawn_agent(index, team_idx, result.species_color, result.network, arena_center)
 
     var sensor_ctrl = _create_sensor_controller(agent, team_idx, result.network)
@@ -296,7 +305,7 @@ func _do_replacement(pop, team_agents: Array, team_sensors: Array, team_controll
 # Signal handlers
 # ============================================================
 
-func _on_agent_enemy_killed(pos: Vector2, points: int, team_idx: int, agent_idx: int) -> void:
+func _on_agent_enemy_killed(_pos: Vector2, points: int, team_idx: int, agent_idx: int) -> void:
     var pop = pop_a if team_idx == 0 else pop_b
     pop.update_fitness(agent_idx, points * 1000.0)
 
@@ -306,7 +315,8 @@ func _on_agent_died(_agent: CharacterBody2D, team_idx: int, agent_idx: int) -> v
     pop.mark_dead(agent_idx)
 
 
-func _on_agent_powerup(_agent: CharacterBody2D, _type: String, team_idx: int, agent_idx: int) -> void:
+func _on_agent_powerup(
+        _agent: CharacterBody2D, _type: String, team_idx: int, agent_idx: int) -> void:
     var pop = pop_a if team_idx == 0 else pop_b
     pop.update_fitness(agent_idx, 5000.0)
 
@@ -469,7 +479,7 @@ func _log_event(text: String) -> void:
 
 func _handle_tool_changed(tool: int) -> void:
     current_tool = tool
-    if tool != Tool.INSPECT:
+    if tool != TOOL.INSPECT:
         clear_inspection()
 
 

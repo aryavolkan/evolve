@@ -3,13 +3,6 @@ extends RefCounted
 ## Controls the player using a neural network.
 ## Replaces human input with network-driven decisions.
 
-var SensorScript = preload("res://ai/sensor.gd")
-var NNFactory = preload("res://ai/neural_network_factory.gd")
-
-var network = null
-var sensor = null
-var player: CharacterBody2D
-
 # Output indices
 const OUT_MOVE_X := 0
 const OUT_MOVE_Y := 1
@@ -22,19 +15,26 @@ const OUT_SHOOT_RIGHT := 5
 const SHOOT_THRESHOLD := 0.0  # Let networks learn shooting from generation 1
 const MOVE_DEADZONE := 0.05   # Small deadzone to filter noise
 
+var sensor_script = preload("res://ai/sensor.gd")
+var nn_factory = preload("res://ai/neural_network_factory.gd")
+
+var network = null
+var sensor = null
+var player: CharacterBody2D
+
 # Cache outputs array to avoid allocations
 var _cached_outputs: PackedFloat32Array
 
 
 func _init(p_network = null) -> void:
-    sensor = SensorScript.new()
+    sensor = sensor_script.new()
     _cached_outputs.resize(6)
 
     if p_network:
         network = p_network
     else:
         # Use factory to get Rust backend when available (5-15x faster)
-        network = NNFactory.create(sensor.TOTAL_INPUTS, 32, 6)
+        network = nn_factory.create(sensor.TOTAL_INPUTS, 32, 6)
 
 
 func set_player(p: CharacterBody2D) -> void:

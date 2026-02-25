@@ -1,5 +1,5 @@
-extends TrainingModeBase
 class_name TeamsMode
+extends TrainingModeBase
 
 ## TEAMS mode: two rtNEAT populations compete in team battle.
 
@@ -11,11 +11,11 @@ func enter(context) -> void:
     Engine.time_scale = 1.0
 
     # Initialize lineage tracker
-    ctx.lineage_tracker = ctx.LineageTrackerScript.new()
+    ctx.lineage_tracker = ctx.lineage_tracker_script.new()
 
-    if not ctx.TeamManagerScript:
-        ctx.TeamManagerScript = load("res://ai/team_manager.gd")
-    ctx.team_mgr = ctx.TeamManagerScript.new()
+    if not ctx.team_manager_script:
+        ctx.team_manager_script = load("res://ai/team_manager.gd")
+    ctx.team_mgr = ctx.team_manager_script.new()
     ctx.team_mgr.setup(ctx.main_scene, teams_config)
 
     if ctx.team_mgr.pop_a:
@@ -48,9 +48,9 @@ func enter(context) -> void:
 func exit() -> void:
     if ctx.team_mgr:
         if ctx.team_mgr.pop_a:
-            ctx.team_mgr.pop_a.save_best(ctx.BEST_NETWORK_PATH.replace(".nn", "_team_a.nn"))
+            ctx.team_mgr.pop_a.save_best(ctx.best_network_path.replace(".nn", "_team_a.nn"))
         if ctx.team_mgr.pop_b:
-            ctx.team_mgr.pop_b.save_best(ctx.BEST_NETWORK_PATH.replace(".nn", "_team_b.nn"))
+            ctx.team_mgr.pop_b.save_best(ctx.best_network_path.replace(".nn", "_team_b.nn"))
         ctx.team_mgr.stop()
         ctx.team_mgr = null
 

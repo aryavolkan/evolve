@@ -9,15 +9,14 @@ Run: python3 ~/evolve/tui/evolve_tui.py
 """
 
 import json
-import time
 from datetime import datetime
 from pathlib import Path
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import DataTable, Footer, Header, RichLog, Static
-from rich.text import Text
+from textual.widgets import DataTable, Footer, RichLog, Static
 
 # ── paths ────────────────────────────────────────────────────────────────────
 GODOT_USER = Path.home() / ".local/share/godot/app_userdata/Evolve"

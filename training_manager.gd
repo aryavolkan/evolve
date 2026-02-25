@@ -5,11 +5,17 @@ extends Node
 signal training_status_changed(status: String)
 signal stats_updated(stats: Dictionary)
 
-enum Mode { HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK, COEVOLUTION, SANDBOX, COMPARISON, RTNEAT, TEAMS }
+enum Mode {
+    HUMAN, TRAINING, PLAYBACK, GENERATION_PLAYBACK, ARCHIVE_PLAYBACK,
+    COEVOLUTION, SANDBOX, COMPARISON, RTNEAT, TEAMS
+}
 
+const SandboxTrainingModeScript = preload("res://modes/sandbox_training_mode.gd")
+const ConstantsScript = preload("res://constants.gd")
+const SPEED_STEPS: Array[float] = ConstantsScript.TIME_SCALE_STEPS
+const MAX_RERUNS: int = 0
 
 var current_mode: Mode = Mode.HUMAN
-var _active_mode: TrainingModeBase = null
 
 # Training components
 var evolution = null
@@ -54,7 +60,6 @@ var training_ui: RefCounted = preload("res://ai/training_ui.gd").new()
 var elite_reservoir: RefCounted  # Initialized in _init() — preload of class_name scripts fails in Godot 4.5 when loaded at runtime
 var tui_bridge: RefCounted = null  # Lazy-initialized in _ready()
 var training_overrides: Dictionary = {}
-const SandboxTrainingModeScript = preload("res://modes/sandbox_training_mode.gd")
 
 # Multi-objective tracking (NSGA-II)
 var use_nsga2: bool:
@@ -79,8 +84,8 @@ var map_elites_archive: MapElites = null
 
 # Co-evolution (Track A)
 var coevolution = null
-var CoevolutionScript = preload("res://ai/coevolution.gd")
-var EnemyAIControllerScript = preload("res://ai/enemy_ai_controller.gd")
+var coevolution_script = preload("res://ai/coevolution.gd")
+var enemy_ai_controller_script = preload("res://ai/enemy_ai_controller.gd")
 var coevo_enemy_fitness: Dictionary = {}
 var coevo_enemy_stats: Dictionary = {}
 var coevo_is_hof_generation: bool = false
@@ -89,28 +94,28 @@ var coevo_is_hof_generation: bool = false
 var rtneat_mgr = null
 
 # Team battle mode
-var TeamManagerScript = null  # Lazy-loaded to avoid headless parse issues
+var team_manager_script = null  # Lazy-loaded to avoid headless parse issues
 var team_mgr = null
 
 # Lineage tracking
 var lineage_tracker: RefCounted = null
-var LineageTrackerScript = preload("res://ai/lineage_tracker.gd")
+var lineage_tracker_script = preload("res://ai/lineage_tracker.gd")
 
 # Co-evolution paths (aliases from config)
-var ENEMY_POPULATION_PATH: String:
+var enemy_population_path: String:
     get: return config.ENEMY_POPULATION_PATH
-var ENEMY_HOF_PATH: String:
+var enemy_hof_path: String:
     get: return config.ENEMY_HOF_PATH
 
 # Pre-generated events for each seed
 var generation_events_by_seed: Array = []
 
 # Path aliases
-var BEST_NETWORK_PATH: String:
+var best_network_path: String:
     get: return config.get_best_network_path()
-var POPULATION_PATH: String:
+var population_path: String:
     get: return config.get_population_path()
-var MIGRATION_POOL_DIR: String:
+var migration_pool_dir: String:
     get: return config.MIGRATION_POOL_DIR
 
 # Stats
@@ -124,8 +129,8 @@ var generations_without_improvement: int = 0
 var best_avg_fitness: float = 0.0
 
 # Curriculum learning
-var CurriculumManagerScript = preload("res://ai/curriculum_manager.gd")
-var curriculum: RefCounted = CurriculumManagerScript.new()
+var curriculum_manager_script = preload("res://ai/curriculum_manager.gd")
+var curriculum: RefCounted = curriculum_manager_script.new()
 
 # Backward-compatible curriculum accessors
 var curriculum_enabled: bool:
@@ -143,14 +148,13 @@ var curriculum_generations_at_stage: int:
     set(v):
         if curriculum:
             curriculum.generations_at_stage = v
-var CURRICULUM_STAGES: Array[Dictionary]:
-    get: return CurriculumManagerScript.STAGES
+var curriculum_stages: Array[Dictionary]:
+    get: return curriculum_manager_script.STAGES
 
 # Generation rollback
 var previous_avg_fitness: float = 0.0
 var rerun_count: int = 0
 var generation_current_best: float = 0.0
-const MAX_RERUNS: int = 0
 
 # Backward-compatible playback accessors
 var playback_generation: int:
@@ -222,13 +226,15 @@ var training_container: Control:
     get: return arena_pool.container if arena_pool else null
 
 # Preloaded scripts
-var NeuralNetworkScript = preload("res://ai/neural_network.gd")
-var AISensorScript = preload("res://ai/sensor.gd")
-var AIControllerScript = preload("res://ai/ai_controller.gd")
-var EvolutionScript = preload("res://ai/evolution.gd")
-var NeatEvolutionScript = preload("res://evolve-core/ai/neat/neat_evolution.gd")
-var NeatNetworkScript = preload("res://evolve-core/ai/neat/neat_network.gd")
-var MainScenePacked = preload("res://main.tscn")
+var neural_network_script = preload("res://ai/neural_network.gd")
+var ai_sensor_script = preload("res://ai/sensor.gd")
+var ai_controller_script = preload("res://ai/ai_controller.gd")
+var evolution_script = preload("res://ai/evolution.gd")
+var neat_evolution_script = preload("res://evolve-core/ai/neat/neat_evolution.gd")
+var neat_network_script = preload("res://evolve-core/ai/neat/neat_network.gd")
+var main_scene_packed = preload("res://main.tscn")
+
+var _active_mode: TrainingModeBase = null
 
 
 func _ready() -> void:
@@ -254,7 +260,7 @@ func initialize(scene: Node2D) -> void:
     main_scene = scene
     player = scene.get_node("Player")
 
-    ai_controller = AIControllerScript.new()
+    ai_controller = ai_controller_script.new()
     ai_controller.set_player(player)
 
     playback_mgr.setup({
@@ -262,10 +268,10 @@ func initialize(scene: Node2D) -> void:
         "player": player,
         "ai_controller": ai_controller,
         "arena_pool": arena_pool,
-        "NeuralNetworkScript": NeuralNetworkScript,
-        "AIControllerScript": AIControllerScript,
-        "MainScenePacked": MainScenePacked,
-        "BEST_NETWORK_PATH": BEST_NETWORK_PATH,
+        "NeuralNetworkScript": neural_network_script,
+        "AIControllerScript": ai_controller_script,
+        "MainScenePacked": main_scene_packed,
+        "BEST_NETWORK_PATH": best_network_path,
         "hide_main_game": hide_main_game,
         "show_main_game": show_main_game,
     })
@@ -574,16 +580,18 @@ func toggle_pause() -> void:
 
 func _show_training_complete(reason: String) -> void:
     if evolution:
-        evolution.save_best(BEST_NETWORK_PATH)
-        evolution.save_population(POPULATION_PATH)
+        evolution.save_best(best_network_path)
+        evolution.save_population(population_path)
         # Save elites to global reservoir
         elite_reservoir.save_elites(evolution.population, evolution.best_fitness, _get_run_id())
     if coevolution:
-        coevolution.player_evolution.save_best(BEST_NETWORK_PATH)
-        coevolution.save_populations(POPULATION_PATH, ENEMY_POPULATION_PATH)
-        coevolution.save_hall_of_fame(ENEMY_HOF_PATH)
+        coevolution.player_evolution.save_best(best_network_path)
+        coevolution.save_populations(population_path, enemy_population_path)
+        coevolution.save_hall_of_fame(enemy_hof_path)
         # Save elites to global reservoir
-        elite_reservoir.save_elites(coevolution.player_evolution.population, coevolution.player_evolution.best_fitness, _get_run_id())
+        elite_reservoir.save_elites(
+                coevolution.player_evolution.population,
+                coevolution.player_evolution.best_fitness, _get_run_id())
     training_ui.show_complete(reason, _build_pause_state(), eval_instances)
 
 
@@ -683,9 +691,9 @@ func _start_best_replay() -> void:
     var genome = null
     if use_neat and evolution and evolution.all_time_best_genome:
         genome = evolution.all_time_best_genome
-        network = NeatNetworkScript.from_genome(genome)
+        network = neat_network_script.from_genome(genome)
     else:
-        network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+        network = neural_network_script.load_from_file(best_network_path)
 
     if not network:
         push_error("No best network available for replay")
@@ -721,9 +729,12 @@ func _build_wandb_state() -> Dictionary:
         "best_fitness": best_fitness,
         "avg_fitness": history_avg_fitness[-1] if history_avg_fitness.size() > 0 else 0.0,
         "min_fitness": history_min_fitness[-1] if history_min_fitness.size() > 0 else 0.0,
-        "avg_kill_score": history_avg_kill_score[-1] if history_avg_kill_score.size() > 0 else 0.0,
-        "avg_powerup_score": history_avg_powerup_score[-1] if history_avg_powerup_score.size() > 0 else 0.0,
-        "avg_survival_score": history_avg_survival_score[-1] if history_avg_survival_score.size() > 0 else 0.0,
+        "avg_kill_score": (
+                history_avg_kill_score[-1] if history_avg_kill_score.size() > 0 else 0.0),
+        "avg_powerup_score": (
+                history_avg_powerup_score[-1] if history_avg_powerup_score.size() > 0 else 0.0),
+        "avg_survival_score": (
+                history_avg_survival_score[-1] if history_avg_survival_score.size() > 0 else 0.0),
         "all_time_best": all_time_best,
         "generations_without_improvement": generations_without_improvement,
         "population_size": population_size,
@@ -737,8 +748,10 @@ func _build_wandb_state() -> Dictionary:
         "pareto_front_size": evolution.pareto_front.size() if evolution and use_nsga2 else 0,
         "hypervolume": evolution.last_hypervolume if evolution and use_nsga2 else 0.0,
         "use_neat": use_neat,
-        "neat_species_count": evolution.get_stats().species_count if evolution and use_neat else 0,
-        "neat_compatibility_threshold": evolution.get_stats().compatibility_threshold if evolution and use_neat else 0.0,
+        "neat_species_count": (
+                evolution.get_stats().species_count if evolution and use_neat else 0),
+        "neat_compatibility_threshold": (
+                evolution.get_stats().compatibility_threshold if evolution and use_neat else 0.0),
         "use_memory": use_memory,
         "use_map_elites": use_map_elites,
         "map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
@@ -801,9 +814,6 @@ func get_mode() -> Mode:
 func is_ai_active() -> bool:
     return current_mode != Mode.HUMAN
 
-
-const _ConstantsScript = preload("res://constants.gd")
-const SPEED_STEPS: Array[float] = _ConstantsScript.TIME_SCALE_STEPS
 
 func adjust_speed(delta: float) -> void:
     var current_idx := SPEED_STEPS.find(time_scale)

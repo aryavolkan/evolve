@@ -41,9 +41,9 @@ func _test_setup_color() -> void:
 
 func _test_setup_texture() -> void:
     var effect = DeathEffectScene.instantiate()
-    var tex = preload("res://assets/pawn_icon.svg")
-    effect.setup(Vector2.ZERO, 28.0, Color.WHITE, tex)
-    assert_eq(effect.get_node("Sprite2D").texture, tex, "Texture should be set when provided")
+    var Tex = preload("res://assets/pawn_icon.svg")
+    effect.setup(Vector2.ZERO, 28.0, Color.WHITE, Tex)
+    assert_eq(effect.get_node("Sprite2D").texture, Tex, "Texture should be set when provided")
     effect.free()
 
 

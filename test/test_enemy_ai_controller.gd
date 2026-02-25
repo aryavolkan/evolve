@@ -2,8 +2,6 @@ extends "res://test/test_base.gd"
 ## Tests for enemy AI controller logic.
 ## Tests move selection from network outputs without requiring scene instantiation.
 
-var EnemyAIControllerScript = preload("res://ai/enemy_ai_controller.gd")
-
 const TILE_SIZE := 50.0
 const NUM_OUTPUTS := 8
 
@@ -23,6 +21,8 @@ const TYPE_KNIGHT := 1
 const TYPE_BISHOP := 2
 const TYPE_ROOK := 3
 const TYPE_QUEEN := 4
+
+var EnemyAIControllerScript = preload("res://ai/enemy_ai_controller.gd")
 
 
 func run_tests() -> void:

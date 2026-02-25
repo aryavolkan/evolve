@@ -10,10 +10,10 @@ var main_scene: Node2D
 var player: CharacterBody2D
 var ai_controller  # AIController instance
 var arena_pool: RefCounted
-var NeuralNetworkScript  # preloaded script
-var AIControllerScript   # preloaded script
-var MainScenePacked      # preloaded PackedScene
-var BEST_NETWORK_PATH: String
+var neural_network_script  # preloaded script
+var ai_controller_script   # preloaded script
+var main_scene_packed      # preloaded PackedScene
+var best_network_path: String
 var map_elites_archive: MapElites  # set externally before archive playback
 var hide_main_game_fn: Callable
 var show_main_game_fn: Callable
@@ -44,10 +44,10 @@ func setup(deps: Dictionary) -> void:
     player = deps.player
     ai_controller = deps.ai_controller
     arena_pool = deps.arena_pool
-    NeuralNetworkScript = deps.NeuralNetworkScript
-    AIControllerScript = deps.AIControllerScript
-    MainScenePacked = deps.MainScenePacked
-    BEST_NETWORK_PATH = deps.BEST_NETWORK_PATH
+    neural_network_script = deps.NeuralNetworkScript
+    ai_controller_script = deps.AIControllerScript
+    main_scene_packed = deps.MainScenePacked
+    best_network_path = deps.BEST_NETWORK_PATH
     hide_main_game_fn = deps.hide_main_game
     show_main_game_fn = deps.show_main_game
 
@@ -62,9 +62,9 @@ func start_playback() -> void:
         push_error("Training manager not initialized")
         return
 
-    var network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+    var network = neural_network_script.load_from_file(best_network_path)
     if not network:
-        push_error("No saved network found at " + BEST_NETWORK_PATH)
+        push_error("No saved network found at " + best_network_path)
         status_changed.emit("No trained network found")
         return
 
@@ -96,7 +96,9 @@ func process_playback() -> void:
     player.set_ai_action(action.move_direction, action.shoot_direction)
 
     if main_scene.game_over:
-        main_scene.game_over_label.text = "GAME OVER\nFinal Score: %d\n\nPress [P] to replay\nPress [H] for human mode" % int(main_scene.score)
+        main_scene.game_over_label.text = (
+                "GAME OVER\nFinal Score: %d\n\nPress [P] to replay\nPress [H] for human mode"
+                % int(main_scene.score))
         main_scene.game_over_label.visible = true
         player.enable_ai_control(false)
 
@@ -114,8 +116,8 @@ func start_generation_playback() -> void:
     generation_networks.clear()
     var gen := 1
     while true:
-        var path := BEST_NETWORK_PATH.replace(".nn", "_gen_%03d.nn" % gen)
-        var network = NeuralNetworkScript.load_from_file(path)
+        var path := best_network_path.replace(".nn", "_gen_%03d.nn" % gen)
+        var network = neural_network_script.load_from_file(path)
         if not network:
             break
         generation_networks.append(network)
@@ -141,7 +143,8 @@ func start_generation_playback() -> void:
 func advance_generation_playback() -> void:
     ## Move to the next generation in playback.
     if playback_generation >= max_playback_generation:
-        main_scene.game_over_label.text = "ALL GENERATIONS COMPLETE\n\nPress [G] to restart\nPress [H] for human mode"
+        main_scene.game_over_label.text = (
+                "ALL GENERATIONS COMPLETE\n\nPress [G] to restart\nPress [H] for human mode")
         main_scene.game_over_label.visible = true
         player.enable_ai_control(false)
         return
@@ -158,7 +161,9 @@ func process_generation_playback() -> void:
     player.set_ai_action(action.move_direction, action.shoot_direction)
 
     if main_scene.game_over:
-        main_scene.game_over_label.text = "GENERATION %d\nScore: %d\n\nPress [SPACE] for next gen\nPress [H] for human mode" % [playback_generation, int(main_scene.score)]
+        main_scene.game_over_label.text = (
+                "GENERATION %d\nScore: %d\n\nPress [SPACE] for next gen\nPress [H] for human mode"
+                % [playback_generation, int(main_scene.score)])
         main_scene.game_over_label.visible = true
         player.enable_ai_control(false)
 
@@ -190,7 +195,8 @@ func start_archive_playback(cell: Vector2i) -> void:
     player.enable_ai_control(true)
 
     reset_game()
-    status_changed.emit("Archive playback: cell (%d, %d), fitness %.0f" % [cell.x, cell.y, elite.fitness])
+    status_changed.emit(
+            "Archive playback: cell (%d, %d), fitness %.0f" % [cell.x, cell.y, elite.fitness])
     print("Archive playback: cell (%d, %d), fitness %.0f" % [cell.x, cell.y, elite.fitness])
 
 
@@ -206,7 +212,9 @@ func process_archive_playback() -> void:
     player.set_ai_action(action.move_direction, action.shoot_direction)
 
     if main_scene.game_over:
-        main_scene.game_over_label.text = "ARCHIVE CELL (%d, %d)\nArchive Fitness: %.0f\nGame Score: %d\n\nPress [P] to replay\nPress [H] for human mode" % [
+        main_scene.game_over_label.text = (
+                "ARCHIVE CELL (%d, %d)\nArchive Fitness: %.0f\nGame Score: %d"
+                + "\n\nPress [P] to replay\nPress [H] for human mode") % [
             archive_playback_cell.x, archive_playback_cell.y,
             archive_playback_fitness, int(main_scene.score)
         ]
@@ -235,7 +243,7 @@ func start_sandbox(config: Dictionary) -> void:
     var net_source: String = config.get("network_source", "best")
 
     if net_source == "best":
-        var network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+        var network = neural_network_script.load_from_file(best_network_path)
         if network:
             ai_controller.set_network(network)
             player.enable_ai_control(true)
@@ -247,9 +255,8 @@ func start_sandbox(config: Dictionary) -> void:
     reset_game()
     main_scene.apply_sandbox_overrides(config)
     status_changed.emit("Sandbox mode started")
-    print("Sandbox started: enemies=%s, spawn=%.1fx, powerups=%.1fx, difficulty=%.1f, network=%s" % [
-        enemy_types, spawn_mult, powerup_freq, difficulty, net_source
-    ])
+    print("Sandbox started: enemies=%s, spawn=%.1fx, powerups=%.1fx, difficulty=%.1f, network=%s"
+            % [enemy_types, spawn_mult, powerup_freq, difficulty, net_source])
 
 
 func stop_sandbox() -> void:
@@ -298,7 +305,7 @@ func start_comparison(strategies: Array) -> void:
         var slot = arena_pool.create_slot()
         var viewport = slot.viewport
 
-        var scene: Node2D = MainScenePacked.instantiate()
+        var scene: Node2D = main_scene_packed.instantiate()
         scene.set_game_seed(shared_seed)
         var enemy_copy = events.enemy_spawns.duplicate(true)
         var powerup_copy = events.powerup_spawns.duplicate(true)
@@ -310,10 +317,10 @@ func start_comparison(strategies: Array) -> void:
 
         var strategy = strategies[i]
         if strategy.source == "best":
-            var network = NeuralNetworkScript.load_from_file(BEST_NETWORK_PATH)
+            var network = neural_network_script.load_from_file(best_network_path)
             if network:
                 scene_player.enable_ai_control(true)
-                controller = AIControllerScript.new()
+                controller = ai_controller_script.new()
                 controller.set_player(scene_player)
                 controller.set_network(network)
         if not controller and i == 0:
@@ -356,7 +363,7 @@ func stop_comparison() -> void:
     status_changed.emit("Comparison stopped")
 
 
-func process_comparison(delta: float) -> void:
+func process_comparison(_delta: float) -> void:
     ## Drive AI controllers and update stats for comparison arenas.
     var all_done := true
 
@@ -409,7 +416,8 @@ func reset_game() -> void:
     main_scene.name_entry.visible = false
     main_scene.name_prompt.visible = false
 
-    var arena_center = Vector2(main_scene.effective_arena_width / 2, main_scene.effective_arena_height / 2)
+    var arena_center = Vector2(
+            main_scene.effective_arena_width / 2, main_scene.effective_arena_height / 2)
     player.position = arena_center
     player.is_hit = false
     player.is_speed_boosted = false

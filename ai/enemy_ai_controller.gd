@@ -6,12 +6,6 @@ extends RefCounted
 ## type. Each piece type has restricted legal directions matching its movement
 ## pattern from enemy.gd.
 
-var EnemySensorScript = preload("res://ai/enemy_sensor.gd")
-
-var network = null
-var sensor = null
-var enemy = null  # CharacterBody2D (enemy.gd)
-
 # Direction indices matching network output positions
 const DIR_N := 0
 const DIR_NE := 1
@@ -31,6 +25,12 @@ const CARDINAL_DIRS: Array = [DIR_N, DIR_E, DIR_S, DIR_W]
 # Diagonal direction indices (used by bishop)
 const DIAGONAL_DIRS: Array = [DIR_NE, DIR_SE, DIR_SW, DIR_NW]
 
+var enemy_sensor_script = preload("res://ai/enemy_sensor.gd")
+
+var network = null
+var sensor = null
+var enemy = null  # CharacterBody2D (enemy.gd)
+
 # Direction unit vectors (Y-down coordinate system)
 # Indexed by DIR_N..DIR_NW
 var _dir_vectors: Array = []
@@ -41,7 +41,7 @@ var _knight_moves: Array = []
 
 
 func _init(p_network = null) -> void:
-    sensor = EnemySensorScript.new()
+    sensor = enemy_sensor_script.new()
     network = p_network
 
     # Pre-compute direction vectors
@@ -93,7 +93,8 @@ func get_move() -> Vector2:
     return select_move_from_outputs(outputs, enemy.type, enemy.rng)
 
 
-func select_move_from_outputs(outputs: PackedFloat32Array, piece_type: int, rng_instance = null) -> Vector2:
+func select_move_from_outputs(
+        outputs: PackedFloat32Array, piece_type: int, rng_instance = null) -> Vector2:
     ## Select the best legal move based on network outputs and piece type.
     ## Exposed for testing without scene tree.
     ##
@@ -156,8 +157,7 @@ func _select_queen_move(outputs: PackedFloat32Array, rng_instance = null) -> Vec
     if is_diagonal:
         # Use integer signs for tile-based diagonal movement
         return Vector2(signf(dir.x), signf(dir.y)) * TILE_SIZE * tiles
-    else:
-        return dir * TILE_SIZE * tiles
+    return dir * TILE_SIZE * tiles
 
 
 func _best_direction(outputs: PackedFloat32Array, legal_dirs: Array) -> int:

@@ -1,5 +1,5 @@
-extends TrainingModeBase
 class_name CoevolutionMode
+extends TrainingModeBase
 
 ## COEVOLUTION mode: dual-population co-evolutionary training.
 
@@ -25,9 +25,9 @@ func exit() -> void:
     ctx.show_main_game()
 
     if ctx.coevolution:
-        ctx.coevolution.save_populations(ctx.POPULATION_PATH, ctx.ENEMY_POPULATION_PATH)
-        ctx.coevolution.save_hall_of_fame(ctx.ENEMY_HOF_PATH)
-        ctx.coevolution.player_evolution.save_best(ctx.BEST_NETWORK_PATH)
+        ctx.coevolution.save_populations(ctx.population_path, ctx.enemy_population_path)
+        ctx.coevolution.save_hall_of_fame(ctx.enemy_hof_path)
+        ctx.coevolution.player_evolution.save_best(ctx.best_network_path)
         var stats = ctx.coevolution.get_stats()
         print("Saved co-evolution (player best: %.1f, enemy best: %.1f)" % [
             stats.player.best_fitness, stats.enemy.best_fitness
@@ -79,16 +79,17 @@ func _start_coevolution() -> void:
     ctx.time_scale = ctx.config.time_scale
     ctx.parallel_count = ctx.config.parallel_count
 
-    var sensor_instance = ctx.AISensorScript.new()
+    var sensor_instance = ctx.ai_sensor_script.new()
     var input_size: int = sensor_instance.TOTAL_INPUTS
 
-    ctx.coevolution = ctx.CoevolutionScript.new(
+    ctx.coevolution = ctx.coevolution_script.new(
         ctx.population_size, input_size, ctx.config.hidden_size, 6,
         ctx.population_size,
-        ctx.config.elite_count, ctx.config.mutation_rate, ctx.config.mutation_strength, ctx.config.crossover_rate
+        ctx.config.elite_count, ctx.config.mutation_rate,
+        ctx.config.mutation_strength, ctx.config.crossover_rate
     )
 
-    ctx.lineage_tracker = ctx.LineageTrackerScript.new()
+    ctx.lineage_tracker = ctx.lineage_tracker_script.new()
     ctx.coevolution.player_evolution.lineage = ctx.lineage_tracker
 
     if ctx.training_ui.pause_overlay:
@@ -110,7 +111,7 @@ func _start_coevolution() -> void:
     ctx.coevo_is_hof_generation = false
     Engine.time_scale = ctx.time_scale
 
-    ctx.coevolution.load_hall_of_fame(ctx.ENEMY_HOF_PATH)
+    ctx.coevolution.load_hall_of_fame(ctx.enemy_hof_path)
 
     ctx.hide_main_game()
     ctx.create_training_container()
@@ -137,7 +138,8 @@ func _start_next_batch() -> void:
     ctx.coevo_enemy_stats.clear()
 
     var seed_label = "seed %d/%d" % [ctx.current_eval_seed + 1, ctx.evals_per_individual]
-    print("Gen %d (%s): Co-evolving %d player-enemy pairs..." % [ctx.generation, seed_label, ctx.population_size])
+    print("Gen %d (%s): Co-evolving %d player-enemy pairs..." % [
+            ctx.generation, seed_label, ctx.population_size])
 
     for i in range(mini(ctx.parallel_count, ctx.population_size)):
         var enemy_idx: int = _pick_enemy_index(i)
@@ -159,7 +161,7 @@ func _create_eval_instance(player_index: int, enemy_index: int) -> Dictionary:
     var viewport = slot.viewport
     var slot_index = slot.index
 
-    var scene: Node2D = ctx.MainScenePacked.instantiate()
+    var scene: Node2D = ctx.main_scene_packed.instantiate()
     scene.set_training_mode(true, ctx.get_current_curriculum_config())
     if ctx.generation_events_by_seed.size() > ctx.current_eval_seed:
         var events = ctx.generation_events_by_seed[ctx.current_eval_seed]
@@ -170,7 +172,7 @@ func _create_eval_instance(player_index: int, enemy_index: int) -> Dictionary:
 
     var scene_player: CharacterBody2D = scene.get_node("Player")
     scene_player.enable_ai_control(true)
-    var controller = ctx.AIControllerScript.new()
+    var controller = ctx.ai_controller_script.new()
     controller.set_player(scene_player)
     controller.set_network(ctx.coevolution.get_player_network(player_index))
     controller.network.reset_memory()
@@ -178,7 +180,8 @@ func _create_eval_instance(player_index: int, enemy_index: int) -> Dictionary:
     var enemy_network
     if ctx.coevo_is_hof_generation:
         var hof_nets = ctx.coevolution.get_hof_networks()
-        enemy_network = hof_nets[enemy_index % hof_nets.size()] if not hof_nets.is_empty() else ctx.coevolution.get_enemy_network(enemy_index)
+        enemy_network = (hof_nets[enemy_index % hof_nets.size()] if not hof_nets.is_empty()
+                else ctx.coevolution.get_enemy_network(enemy_index))
     else:
         enemy_network = ctx.coevolution.get_enemy_network(enemy_index)
 
@@ -219,7 +222,7 @@ func _replace_eval_instance(slot_index: int, player_index: int) -> void:
 
     var enemy_idx: int = _pick_enemy_index(player_index)
 
-    var scene: Node2D = ctx.MainScenePacked.instantiate()
+    var scene: Node2D = ctx.main_scene_packed.instantiate()
     scene.set_training_mode(true, ctx.get_current_curriculum_config())
     if ctx.generation_events_by_seed.size() > ctx.current_eval_seed:
         var events = ctx.generation_events_by_seed[ctx.current_eval_seed]
@@ -230,7 +233,7 @@ func _replace_eval_instance(slot_index: int, player_index: int) -> void:
 
     var scene_player: CharacterBody2D = scene.get_node("Player")
     scene_player.enable_ai_control(true)
-    var controller = ctx.AIControllerScript.new()
+    var controller = ctx.ai_controller_script.new()
     controller.set_player(scene_player)
     controller.set_network(ctx.coevolution.get_player_network(player_index))
     controller.network.reset_memory()
@@ -238,7 +241,8 @@ func _replace_eval_instance(slot_index: int, player_index: int) -> void:
     var enemy_network
     if ctx.coevo_is_hof_generation:
         var hof_nets = ctx.coevolution.get_hof_networks()
-        enemy_network = hof_nets[enemy_idx % hof_nets.size()] if not hof_nets.is_empty() else ctx.coevolution.get_enemy_network(enemy_idx)
+        enemy_network = (hof_nets[enemy_idx % hof_nets.size()] if not hof_nets.is_empty()
+                else ctx.coevolution.get_enemy_network(enemy_idx))
     else:
         enemy_network = ctx.coevolution.get_enemy_network(enemy_idx)
     scene.enemy_ai_network = enemy_network
@@ -325,14 +329,15 @@ func _process_coevolution_training(delta: float) -> void:
             var kill_score: float = eval.scene.score_from_kills
             var powerup_score: float = eval.scene.score_from_powerups
             var survival_score: float = eval.scene.survival_time * SURVIVAL_UNIT_SCORE
-            ctx.stats_tracker.record_eval_result(eval.index, player_fitness, kill_score, powerup_score, survival_score)
+            ctx.stats_tracker.record_eval_result(
+                    eval.index, player_fitness, kill_score, powerup_score, survival_score)
 
             var damage_dealt: float = 3.0 - eval.scene.lives
             var avg_proximity: float = eval.proximity_sum / maxf(eval.proximity_samples, 1)
             var survival_time: float = eval.scene.survival_time
             var dir_changes: float = eval.direction_changes
 
-            var enemy_fitness: float = ctx.CoevolutionScript.compute_enemy_fitness(
+            var enemy_fitness: float = ctx.coevolution_script.compute_enemy_fitness(
                 damage_dealt, avg_proximity, survival_time, dir_changes
             )
 
@@ -373,8 +378,8 @@ func _process_coevolution_training(delta: float) -> void:
             var p_stats = ctx.coevolution.player_evolution.get_stats()
             var e_stats = ctx.coevolution.enemy_evolution.get_stats()
             var hof_tag = " [HoF eval]" if ctx.coevo_is_hof_generation else ""
-            print("Gen %d complete%s: P(min=%.0f avg=%.0f max=%.0f) E(min=%.0f avg=%.0f max=%.0f)" % [
-                ctx.generation, hof_tag,
+            print("Gen %d complete%s: P(min=%.0f avg=%.0f max=%.0f) E(min=%.0f avg=%.0f max=%.0f)"
+                    % [ctx.generation, hof_tag,
                 p_stats.current_min, p_stats.current_avg, p_stats.current_max,
                 e_stats.current_min, e_stats.current_avg, e_stats.current_max
             ])
@@ -391,18 +396,21 @@ func _process_coevolution_training(delta: float) -> void:
             else:
                 ctx.generations_without_improvement += 1
 
-            ctx.stats_tracker.record_generation(p_stats.current_max, avg, p_stats.current_min, ctx.population_size, ctx.evals_per_individual)
+            ctx.stats_tracker.record_generation(
+                    p_stats.current_max, avg, p_stats.current_min,
+                    ctx.population_size, ctx.evals_per_individual)
 
             ctx.check_curriculum_advancement()
 
-            ctx.coevolution.player_evolution.save_best(ctx.BEST_NETWORK_PATH)
-            ctx.coevolution.save_populations(ctx.POPULATION_PATH, ctx.ENEMY_POPULATION_PATH)
-            ctx.coevolution.save_hall_of_fame(ctx.ENEMY_HOF_PATH)
+            ctx.coevolution.player_evolution.save_best(ctx.best_network_path)
+            ctx.coevolution.save_populations(ctx.population_path, ctx.enemy_population_path)
+            ctx.coevolution.save_hall_of_fame(ctx.enemy_hof_path)
             ctx._write_metrics_for_wandb()
 
             if ctx.generations_without_improvement >= ctx.stagnation_limit:
                 print("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
-                ctx._show_training_complete("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
+                ctx._show_training_complete(
+                        "Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
                 ctx._write_metrics_for_wandb()
                 return
 

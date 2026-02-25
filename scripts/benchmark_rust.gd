@@ -89,6 +89,7 @@ func _init() -> void:
     else:
         print("❌ Outputs diverge! Check implementation.")
         for i in OUTPUT_SIZE:
-            print("  [%d] GD=%.8f  Rust=%.8f  diff=%.8f" % [i, gd_out[i], rust_out[i], absf(gd_out[i] - rust_out[i])])
+            var diff := absf(gd_out[i] - rust_out[i])
+            print("  [%d] GD=%.8f  Rust=%.8f  diff=%.8f" % [i, gd_out[i], rust_out[i], diff])
 
     quit()
