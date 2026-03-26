@@ -23,10 +23,13 @@ A 2D arcade survival game built with Godot 4.5+ where you dodge chess-piece enem
 - **Play as human** or watch evolved AI agents compete
 - **Chess-themed enemies** with unique movement patterns (pawns, knights, bishops, rooks, queens)
 - **Power-ups** for speed boosts, invincibility, screen clears, and more
-- **Multiple evolution algorithms**: Standard evolution, NEAT, NSGA-II, MAP-Elites, Co-evolution
-- **6 game modes**: Human, Training, Playback, Sandbox, Comparison, Archive Playback
+- **Multiple evolution algorithms**: Standard GA, NEAT, NSGA-II, MAP-Elites, Co-evolution, rtNEAT
+- **12 game modes**: Human, Training, Sandbox Training, NEAT, Co-evolution, rtNEAT, Teams, Playback, Generation/Archive Playback, Comparison, Sandbox
 - **Network visualizer** showing NEAT topologies and live neural activations
-- **Curriculum learning** with progressive difficulty stages
+- **Educational overlay** (E key) narrating AI decision-making in real time
+- **Phylogenetic tree** (Y key) visualizing species lineage across evolution
+- **Curriculum learning** with 5 progressive difficulty stages
+- **Multi-agent team battles** — two AI teams evolve and fight with projectiles
 - **W&B integration** for hyperparameter sweeps and metrics tracking
 - **Parallel neural network inference** via Rust backend for efficient batch processing
 
@@ -126,14 +129,19 @@ Neural networks learn to play through neuroevolution — a population of agents 
 
 | Key | Action |
 |-----|--------|
-| T | Start/stop training (48 parallel arenas) |
+| T | Start/stop training (20 parallel arenas) |
 | P | Watch the best AI play |
 | S | Open sandbox mode |
 | C | Compare strategies side-by-side |
+| H | Return to human control |
 | M | View MAP-Elites heatmap |
 | V | Toggle sensor visualization |
 | N | Show neural network topology |
-| [ / ] | Adjust training speed (1x-16x) |
+| E | Toggle educational overlay (AI decision narration) |
+| Y | Toggle phylogenetic lineage tree |
+| [ / ] | Adjust training speed (0.25x-16x) |
+| 8 | Team Battle mode (from title screen) |
+| 0-5 | rtNEAT interaction tools (inspect, obstacles, waves, bless/curse) |
 
 ### Headless Training
 
@@ -173,10 +181,12 @@ For detailed setup and webhook configuration, see [WANDB.md](WANDB.md).
 
 ## Testing
 
-Run the headless test suite:
-
 ```bash
+# Unit tests (50+ test files)
 godot --headless --script test/test_runner.gd
+
+# Integration tests
+godot --headless --path . -s test/integration/gameplay_test_runner.gd -- --scenario=all
 ```
 
 ## Project Structure
