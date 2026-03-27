@@ -405,18 +405,18 @@ func _process_coevolution_training(delta: float) -> void:
             ctx.coevolution.player_evolution.save_best(ctx.best_network_path)
             ctx.coevolution.save_populations(ctx.population_path, ctx.enemy_population_path)
             ctx.coevolution.save_hall_of_fame(ctx.enemy_hof_path)
-            ctx._write_metrics_for_wandb()
+            write_metrics_for_wandb()
 
             if ctx.generations_without_improvement >= ctx.stagnation_limit:
                 print("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
                 ctx._show_training_complete(
                         "Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
-                ctx._write_metrics_for_wandb()
+                write_metrics_for_wandb()
                 return
 
             if ctx.generation >= ctx.max_generations:
                 ctx._show_training_complete("Reached max generations (%d)" % ctx.max_generations)
-                ctx._write_metrics_for_wandb()
+                write_metrics_for_wandb()
                 return
 
             ctx.current_eval_seed = 0

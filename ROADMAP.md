@@ -25,7 +25,7 @@ This roadmap consolidates recommendations from multiple AI agents (Alfred, Grok,
 - **Comprehensive UI:** Title screen, game over, sandbox panel, comparison panel, network visualizer, MAP-Elites heatmap
 
 ### ⚠️ Key Risks
-1. **`training_manager.gd` is still large** (2,292 LOC) — extraction succeeded but co-evolution, sandbox, and comparison modes added bulk
+1. **`training_manager.gd` is still above target** (838 LOC, target <500) — extraction succeeded but co-evolution, sandbox, and comparison modes added bulk
 2. **Duplicate training flows** — `ai/trainer.gd` marked @deprecated but retained for test compatibility
 
 ### 🎯 Strategic Priorities
@@ -216,7 +216,7 @@ Phase 2C (B1 → B2) ───────────────────�
 ### Phase 1 Success
 - [x] README has architecture section
 - [x] RESULTS.md documents x0cst76l sweep findings
-- [ ] `training_manager.gd` < 500 LOC — *2,292 LOC: extraction succeeded but new modes (co-evolution, sandbox, comparison) added bulk. Target deferred.*
+- [ ] `training_manager.gd` < 500 LOC — *838 LOC (2026-03-27): already reduced from 2,292 via module extraction; further reduction deferred pending metrics state refactor.*
 - [x] Sensor queries profiled, optimized
 - [x] Godot path configurable via env var
 

@@ -24,7 +24,7 @@ Fundamental incompatibility between Godot 4.5's rendering pipeline and Cinnamon'
 5. Mutter compositor disable — broke desktop
 6. Xvfb virtual display — game invisible in Xvfb
 7. Xvfb + x11vnc passthrough — VNC showed blank window
-8. `xdotool windowraise` + focus forcing — no change
+8. `xdotool windowraise` + focus forcing — no change (`launch_force_visible.sh` removed as confirmed non-working)
 
 ### Investigation Findings (2026-02-16)
 
