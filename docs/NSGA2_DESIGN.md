@@ -1,8 +1,8 @@
 # NSGA-II Multi-Objective Optimization Design
 
-**Status:** 🟡 Planned — waiting for `feature/curriculum-learning` to merge to main  
-**Branch:** `feature/nsga2-multi-objective` (to be created off main after merge)  
-**Date:** 2026-02-06
+**Status:** ✅ Complete — merged to main
+**Branch:** `main`
+**Date:** 2026-02-06 | **Completed:** 2026-03-27
 
 ---
 
@@ -153,30 +153,23 @@ Add a scatter plot to the pause overlay showing:
 
 ## Implementation Phases
 
-### Phase A: Core NSGA-II (ask for approval)
-- [ ] `non_dominated_sort()` 
-- [ ] `crowding_distance()`
-- [ ] `nsga2_select()`
-- [ ] Unit tests for all three
+### Phase A: Core NSGA-II ✅
+- [x] `non_dominated_sort()` — `evolve-core/genetic/nsga2.gd` + Rust backend (`rust/evolve-native/src/nsga2.rs`)
+- [x] `crowding_distance()` — `evolve-core/genetic/nsga2.gd`
+- [x] `nsga2_select()` — integrated in `ai/evolution.gd::_evolve_nsga2()`
+- [x] Unit tests for all three — `test/test_evolution_nsga2.gd` (265 lines)
 
-### Phase B: Integration (ask for approval)  
-- [ ] Modify `evolve()` to use NSGA-II
-- [ ] Update `training_manager.gd` objective tracking
-- [ ] Update stats display
-- [ ] Integration tests
+### Phase B: Integration ✅
+- [x] Modify `evolve()` to use NSGA-II — `ai/evolution.gd::_evolve_nsga2()` with Rust acceleration
+- [x] Update `training_manager.gd` objective tracking — `objective_accumulator` in `StatsTracker`, `set_objectives()` called per eval
+- [x] Update stats display — W&B metrics include `pareto_front_size`, `hypervolume`
+- [x] Integration tests — covered by `test/test_evolution_nsga2.gd`
 
-### Phase C: Visualization (ask for approval)
-- [ ] Pareto front scatter plot on pause screen
-- [ ] Objective breakdown in stats
-- [ ] Save/load compatibility
+### Phase C: Visualization ✅
+- [x] Pareto front scatter plot on pause screen — `ui/pareto_chart.gd`, shown in pause overlay
+- [x] Objective breakdown in stats — survival/kills/powerups tracked separately in `StatsTracker`
+- [x] Save/load compatibility — `evolution.gd::save_population()` includes `objective_scores`; old format detected and falls back to scalar fitness
 
-### Phase D: PR
-- [ ] Create PR with full description
-- [ ] Performance comparison data
-
----
-
-## Blockers
-
-- **`feature/curriculum-learning` must be merged to main first** — NSGA-II branch will be based on main after that merge
-- Curriculum advancement logic needs updating for multi-objective (Phase B)
+### Phase D: Shipped ✅
+- [x] All phases merged to main
+- [x] Rust NSGA-II backend for O(MN²) acceleration at population scale

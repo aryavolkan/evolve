@@ -720,61 +720,6 @@ func _start_best_replay() -> void:
 
 
 # ============================================================
-# Metrics (thin delegation to metrics_writer)
-# ============================================================
-
-func _build_wandb_state() -> Dictionary:
-    var state = {
-        "generation": generation,
-        "best_fitness": best_fitness,
-        "avg_fitness": history_avg_fitness[-1] if history_avg_fitness.size() > 0 else 0.0,
-        "min_fitness": history_min_fitness[-1] if history_min_fitness.size() > 0 else 0.0,
-        "avg_kill_score": (
-                history_avg_kill_score[-1] if history_avg_kill_score.size() > 0 else 0.0),
-        "avg_powerup_score": (
-                history_avg_powerup_score[-1] if history_avg_powerup_score.size() > 0 else 0.0),
-        "avg_survival_score": (
-                history_avg_survival_score[-1] if history_avg_survival_score.size() > 0 else 0.0),
-        "all_time_best": all_time_best,
-        "generations_without_improvement": generations_without_improvement,
-        "population_size": population_size,
-        "evals_per_individual": evals_per_individual,
-        "time_scale": time_scale,
-        "training_complete": training_ui.training_complete,
-        "curriculum_stage": curriculum_stage,
-        "curriculum_enabled": config.curriculum_enabled,
-        "curriculum_label": get_curriculum_label(),
-        "use_nsga2": use_nsga2,
-        "pareto_front_size": evolution.pareto_front.size() if evolution and use_nsga2 else 0,
-        "hypervolume": evolution.last_hypervolume if evolution and use_nsga2 else 0.0,
-        "use_neat": use_neat,
-        "neat_species_count": (
-                evolution.get_stats().species_count if evolution and use_neat else 0),
-        "neat_compatibility_threshold": (
-                evolution.get_stats().compatibility_threshold if evolution and use_neat else 0.0),
-        "use_memory": use_memory,
-        "use_map_elites": use_map_elites,
-        "map_elites_occupied": map_elites_archive.get_occupied_count() if map_elites_archive else 0,
-        "map_elites_coverage": map_elites_archive.get_coverage() if map_elites_archive else 0.0,
-        "map_elites_best": map_elites_archive.get_best_fitness() if map_elites_archive else 0.0,
-    }
-    if coevolution:
-        var e_stats = coevolution.enemy_evolution.get_stats()
-        state["coevolution"] = true
-        state["enemy_best_fitness"] = e_stats.best_fitness
-        state["enemy_all_time_best"] = e_stats.all_time_best
-        state["enemy_avg_fitness"] = e_stats.current_avg
-        state["enemy_min_fitness"] = e_stats.current_min
-        state["hof_size"] = coevolution.get_hof_size()
-        state["is_hof_generation"] = coevo_is_hof_generation
-    return state
-
-
-func _write_metrics_for_wandb() -> void:
-    metrics_writer.write_wandb_metrics(_build_wandb_state(), config.get_metrics_path())
-
-
-# ============================================================
 # Public API — stats and state
 # ============================================================
 

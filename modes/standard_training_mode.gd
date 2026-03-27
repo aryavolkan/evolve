@@ -473,7 +473,7 @@ func _process_parallel_training(delta: float) -> void:
             if ctx.evolution.get_generation() >= ctx.max_generations:
                 ctx._show_training_complete(
                         "Reached max generations (%d)" % ctx.max_generations)
-                ctx._write_metrics_for_wandb()
+                write_metrics_for_wandb()
                 return
 
             # Guard: early stop may have fired inside generation_complete signal handler
@@ -602,13 +602,13 @@ func _on_generation_complete(gen: int, best: float, avg: float, min_fit: float) 
                 ctx.evolution, ctx.config.worker_id, ctx.generation,
                 ctx.generations_without_improvement, ctx.migration_pool_dir)
 
-    ctx._write_metrics_for_wandb()
+    write_metrics_for_wandb()
 
     if ctx.generations_without_improvement >= ctx.stagnation_limit:
         print("Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
         ctx._show_training_complete(
                 "Early stopping: No improvement for %d generations" % ctx.stagnation_limit)
-        ctx._write_metrics_for_wandb()
+        write_metrics_for_wandb()
         return
 
 

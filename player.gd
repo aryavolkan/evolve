@@ -405,8 +405,12 @@ func _on_milestone_tier_changed(new_tier: int, tier_name: String) -> void:
     # Update visual color
     update_sprite_color()
 
-    # TODO: Add particle trail effects for higher tiers
-    # This would require checking if GPUParticles2D nodes exist first
+    # Enable trail particles for tier 2+ if the node exists in the scene
+    var trail = get_node_or_null("TrailParticles")
+    if trail:
+        trail.emitting = new_tier >= 2
+        if new_tier >= 2:
+            trail.modulate = milestone_rewards.get_tier_color()
 
 
 func set_training_mode(enabled: bool) -> void:
